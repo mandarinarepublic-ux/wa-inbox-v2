@@ -250,7 +250,10 @@ export default function App() {
   const demo        = isDemo()
 
   const hasVenta  = (tel) => { const c = contacts[tel] || {}; return String(c.idVenta || '').trim() !== '' || c.estado === 'venta' }
-  const getStatus = (tel) => hasVenta(tel) ? 'venta' : (contacts[tel]?.estado || 'pendiente')
+  // El estado de flujo (pendiente/atendido/…) es INDEPENDIENTE de tener venta.
+  // Así un cliente con venta que vuelve a escribir aparece en PENDIENTE (para atenderlo)
+  // y a la vez sigue en la pestaña 💰 Ventas (que filtra por idVenta, ver abajo).
+  const getStatus = (tel) => contacts[tel]?.estado || 'pendiente'
 
   const searched = convs.filter(c => {
     const alias = contacts[c.telefono]?.alias || ''
@@ -258,13 +261,18 @@ export default function App() {
            alias.toLowerCase().includes(search.toLowerCase()) ||
            c.telefono.includes(search)
   })
-  const filtered = searched.filter(c => getStatus(c.telefono) === filter)
+  // Pestaña "Ventas": muestra TODO el que tenga venta (idVenta), sin importar su estado
+  // de flujo. Las demás pestañas filtran por el estado real → un contacto con venta puede
+  // aparecer a la vez en Pendiente (si te escribió) y en Ventas.
+  const filtered = searched.filter(c =>
+    filter === 'venta' ? hasVenta(c.telefono) : getStatus(c.telefono) === filter
+  )
   const counts = {
     pendiente:     searched.filter(c => getStatus(c.telefono) === 'pendiente').length,
     atendido:      searched.filter(c => getStatus(c.telefono) === 'atendido').length,
     archivado:     searched.filter(c => getStatus(c.telefono) === 'archivado').length,
     ventaproceso:  searched.filter(c => getStatus(c.telefono) === 'ventaproceso').length,
-    venta:         searched.filter(c => getStatus(c.telefono) === 'venta').length,
+    venta:         searched.filter(c => hasVenta(c.telefono)).length,
     soporte:       searched.filter(c => getStatus(c.telefono) === 'soporte').length,
   }
 
