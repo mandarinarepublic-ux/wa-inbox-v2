@@ -156,12 +156,15 @@ export function QuickReplies({ onSelect }) {
 }
 
 // ── MEDIA CONTENT ────────────────────────────────────────────────
-function MediaContent({ tipo, mediaUrl }) {
+function MediaContent({ tipo, mediaUrl, mediaId }) {
   const url = mediaUrl || ''
 
-  const previewUrl = url.includes('drive.google.com/uc')
-    ? url.replace('export=download', 'export=view')
-    : url
+  // Las URLs de Meta exigen token → pasan por el proxy /api/media. Preferimos el
+  // MediaID (no caduca); si no hay, mandamos la URL. El resto de fuentes van directas.
+  const isMeta = /lookaside\.fbsbx\.com|graph\.facebook\.com/i.test(url)
+  const src = isMeta
+    ? (mediaId ? `/api/media?id=${encodeURIComponent(mediaId)}` : `/api/media?url=${encodeURIComponent(url)}`)
+    : (url.includes('drive.google.com/uc') ? url.replace('export=download', 'export=view') : url)
 
   const isImage    = ['image', 'sticker'].includes(tipo) || !!url.match(/\.(jpg|jpeg|png|webp|gif)(\?|$)/i)
   const isAudio    = tipo === 'audio' || !!url.match(/\.(ogg|mp3|aac|m4a|opus)(\?|$)/i)
@@ -169,9 +172,9 @@ function MediaContent({ tipo, mediaUrl }) {
   const isDocument = tipo === 'document' || !!url.match(/\.(pdf|doc|docx|xls|xlsx)(\?|$)/i)
 
   if (url && isImage) return (
-    <a href={previewUrl} target="_blank" rel="noreferrer" style={{ display: 'block', marginBottom: 6 }}>
+    <a href={src} target="_blank" rel="noreferrer" style={{ display: 'block', marginBottom: 6 }}>
       <img
-        src={previewUrl}
+        src={src}
         alt="imagen"
         style={{
           maxWidth: '100%', maxHeight: 260, borderRadius: 10,
@@ -186,7 +189,7 @@ function MediaContent({ tipo, mediaUrl }) {
   if (url && isAudio) {
     const isDrive = url.includes('drive.google.com')
     if (isDrive) return (
-      <a href={url} target="_blank" rel="noreferrer" style={{
+      <a href={src} target="_blank" rel="noreferrer" style={{
         display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6,
         background: 'rgba(37,211,102,.08)', border: '1px solid rgba(37,211,102,.15)',
         borderRadius: 10, padding: '10px 14px', textDecoration: 'none',
@@ -197,13 +200,13 @@ function MediaContent({ tipo, mediaUrl }) {
     )
     return (
       <div style={{ marginBottom: 6, minWidth: 280 }}>
-        <audio controls src={url} style={{ width: '100%', minWidth: 280, height: 40, display: 'block', borderRadius: 10, outline: 'none', accentColor: '#25d366' }} />
+        <audio controls src={src} style={{ width: '100%', minWidth: 280, height: 40, display: 'block', borderRadius: 10, outline: 'none', accentColor: '#25d366' }} />
       </div>
     )
   }
 
   if (url && isVideo) return (
-    <a href={url} target="_blank" rel="noreferrer" style={{
+    <a href={src} target="_blank" rel="noreferrer" style={{
       display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6,
       background: 'rgba(99,102,241,.1)', border: '1px solid rgba(99,102,241,.2)',
       borderRadius: 10, padding: '10px 14px', textDecoration: 'none',
@@ -214,7 +217,7 @@ function MediaContent({ tipo, mediaUrl }) {
   )
 
   if (url && isDocument) return (
-    <a href={url} target="_blank" rel="noreferrer" style={{
+    <a href={src} target="_blank" rel="noreferrer" style={{
       display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6,
       background: 'rgba(99,102,241,.1)', border: '1px solid rgba(99,102,241,.2)',
       borderRadius: 10, padding: '10px 14px', textDecoration: 'none',
@@ -225,7 +228,7 @@ function MediaContent({ tipo, mediaUrl }) {
   )
 
   if (url && tipo && !['text', 'texto', 'reaction'].includes(tipo)) return (
-    <a href={url} target="_blank" rel="noreferrer" style={{
+    <a href={src} target="_blank" rel="noreferrer" style={{
       display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6,
       background: 'rgba(37,211,102,.08)', border: '1px solid rgba(37,211,102,.15)',
       borderRadius: 10, padding: '10px 14px', textDecoration: 'none',
@@ -292,7 +295,9 @@ function QuotedMessage({ contextoId, allMsgs }) {
       {isImage && cited.mediaUrl ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <img
-            src={cited.mediaUrl}
+            src={/lookaside\.fbsbx\.com|graph\.facebook\.com/i.test(cited.mediaUrl)
+              ? (cited.mediaId ? `/api/media?id=${encodeURIComponent(cited.mediaId)}` : `/api/media?url=${encodeURIComponent(cited.mediaUrl)}`)
+              : cited.mediaUrl}
             alt="img citada"
             style={{ width: 36, height: 36, borderRadius: 5, objectFit: 'cover', flexShrink: 0 }}
             onError={e => { e.currentTarget.style.display = 'none' }}
@@ -341,7 +346,7 @@ export function MessageBubble({ msg, allMsgs }) {
         )}
 
         {hasMedia && (
-          <MediaContent tipo={msg.tipo} mediaUrl={msg.mediaUrl} />
+          <MediaContent tipo={msg.tipo} mediaUrl={msg.mediaUrl} mediaId={msg.mediaId} />
         )}
 
         {hasText && (

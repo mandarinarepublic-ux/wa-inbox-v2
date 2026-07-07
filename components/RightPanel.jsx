@@ -142,7 +142,6 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
   const [repliesOpen,   setRepliesOpen]   = useState(true)
   const [nuevaOpen,     setNuevaOpen]     = useState(false)
   const [notasOpen,     setNotasOpen]     = useState(false)
-  const [iaOpen,        setIaOpen]        = useState(true)
   const [editingIdx,    setEditingIdx]    = useState(null)
   const [editText,      setEditText]      = useState('')
   const [editImgUrls,   setEditImgUrls]   = useState([])
@@ -151,26 +150,12 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
   const [sending,       setSending]       = useState(null)
   const [editAlias,     setEditAlias]     = useState(false)
   const [aliasInput,    setAliasInput]    = useState('')
-  const [aiText,        setAiText]        = useState('')
-  const [aiSending,     setAiSending]     = useState(false)
-  const [aiSent,        setAiSent]        = useState(false)
-  const [lastAiMsg,     setLastAiMsg]     = useState('')
-
-  // ── Estado imagen IA ─────────────────────────────────────────
-  const [aiImgUrl,      setAiImgUrl]      = useState('')   // URL activa (Shopify o reemplazada)
-  const [aiImgPrev,     setAiImgPrev]     = useState('')   // preview visual
-  const [aiImgUploading,setAiImgUploading]= useState(false)
-  const [aiImgSending,  setAiImgSending]  = useState(false)
-  const [aiImgSent,     setAiImgSent]     = useState(false)
-  const [lastAiImgSrc,  setLastAiImgSrc]  = useState('')
 
   // ── Notas del vendedor ───────────────────────────────────────
   const [notasInput,  setNotasInput]  = useState('')
   const [notasSaving, setNotasSaving] = useState(false)
   const [notasSaved,  setNotasSaved]  = useState(false)
   const notasLoadedRef = useRef(null)
-
-  const aiImgFileRef = useRef(null)
 
   // ── Leer respuestas directamente desde Google Sheets ─────────
   useEffect(() => {
@@ -195,26 +180,6 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
 
   const lastMsg = activeConv?.last
   // windowOpen viene como prop desde App.jsx (calculado con último msg ENTRANTE)
-
-  const lastIncoming  = [...activeConv.msgs].reverse().find(m => m.direccion === 'ENTRANTE')
-  const aiSuggestion  = lastIncoming?.respuestaIA || ''
-  // columna K — imagen sugerida por Shopify
-  const aiImgShopify  = lastIncoming?.imagenProducto || ''
-
-  // Sincronizar texto IA cuando cambia el mensaje entrante
-  if (aiSuggestion && aiSuggestion !== lastAiMsg) {
-    setLastAiMsg(aiSuggestion)
-    setAiText(aiSuggestion)
-    setAiSent(false)
-  }
-
-  // Sincronizar imagen IA cuando llega nueva imagen de Shopify
-  if (aiImgShopify && aiImgShopify !== lastAiImgSrc) {
-    setLastAiImgSrc(aiImgShopify)
-    setAiImgUrl(aiImgShopify)
-    setAiImgPrev(aiImgShopify)
-    setAiImgSent(false)
-  }
 
   const startEdit = (idx) => {
     setEditingIdx(idx); setEditText(replies[idx].text)
@@ -247,35 +212,6 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
     setSending(idx)
     await onQuickReply(replies[idx])
     setSending(null)
-  }
-
-  const handleSendAI = async () => {
-    if (!aiText.trim() || aiSending) return
-    setAiSending(true)
-    await onSendText(aiText.trim())
-    setAiSending(false)
-    setAiSent(true)
-  }
-
-  // Enviar imagen IA por WhatsApp
-  const handleSendAIImage = async () => {
-    if (!aiImgUrl || aiImgSending) return
-    setAiImgSending(true)
-    try {
-      if (onSendImage) await onSendImage(aiImgUrl)
-      setAiImgSent(true)
-    } finally {
-      setAiImgSending(false)
-    }
-  }
-
-  // Reemplazar imagen IA con upload manual
-  const handleAiImgReplace = async (e) => {
-    const f = e.target.files[0]
-    if (!f) return
-    setAiImgPrev(URL.createObjectURL(f))
-    setAiImgSent(false)
-    await uploadImg(f, setAiImgUrl, setAiImgPrev, setAiImgUploading)
   }
 
   // Guardar nota del vendedor (col I vía webhook)
@@ -329,105 +265,7 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
 
       </div>
 
-      {/* ── SUGERENCIA IA — fija ── */}
-      <div style={{ flexShrink:0, borderBottom:'1px solid #111c2a' }}>
-        <div
-          onClick={() => setIaOpen(o => !o)}
-          style={{ padding:'10px 12px 6px', cursor:'pointer', userSelect:'none', display:'flex', alignItems:'center', gap:5 }}
-        >
-          <span style={{ fontSize:9, color:'#475569', transition:'transform .2s', display:'inline-block', transform: iaOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
-          <p style={{ fontSize:10, color:'#6366f1', fontWeight:700, letterSpacing:'.08em', margin:0, display:'flex', alignItems:'center', gap:5 }}>
-            🤖 SUGERENCIA IA
-            {aiSuggestion && <span style={{ fontSize:8, background:'rgba(99,102,241,.15)', color:'#818cf8', borderRadius:10, padding:'1px 6px' }}>Gemini</span>}
-          </p>
-        </div>
-        {iaOpen && <div style={{ padding:'0 12px 10px' }}>
-        {aiSuggestion ? (
-          <>
-            {/* ── Imagen del producto Shopify ── */}
-            {(aiImgPrev || aiImgShopify) && (
-              <div style={{ marginBottom:7, position:'relative', borderRadius:8, overflow:'hidden', border:'1px solid #1a2d40' }}>
-                <img
-                  src={aiImgPrev || aiImgShopify}
-                  alt="Producto"
-                  style={{ width:'100%', height:160, objectFit:'contain', background:'#0a0f1a', display:'block' }}
-                  onError={e => e.currentTarget.style.display='none'}
-                />
-                {aiImgUploading && (
-                  <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,.6)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, color:'#fff' }}>
-                    Subiendo...
-                  </div>
-                )}
-                {/* Controles imagen */}
-                <div style={{ position:'absolute', bottom:4, right:4, display:'flex', gap:3 }}>
-                  <button
-                    onClick={() => aiImgFileRef.current?.click()}
-                    title="Cambiar imagen"
-                    style={{ background:'rgba(0,0,0,.7)', border:'1px solid rgba(255,255,255,.2)', color:'#fff', borderRadius:5, padding:'2px 6px', fontSize:9, cursor:'pointer', fontFamily:'inherit' }}>
-                    🔄 Cambiar
-                  </button>
-                  <button
-                    onClick={() => { setAiImgUrl(''); setAiImgPrev(''); setAiImgSent(false) }}
-                    title="Quitar imagen"
-                    style={{ background:'rgba(0,0,0,.7)', border:'1px solid rgba(255,255,255,.2)', color:'#f87171', borderRadius:5, padding:'2px 6px', fontSize:9, cursor:'pointer', fontFamily:'inherit' }}>
-                    ✕
-                  </button>
-                </div>
-                <input ref={aiImgFileRef} type="file" accept="image/*" style={{ display:'none' }} onChange={handleAiImgReplace} />
-              </div>
-            )}
-
-            {/* Botón enviar imagen */}
-            {aiImgUrl && (
-              <button
-                onClick={handleSendAIImage}
-                disabled={aiImgSending || aiImgSent || !windowOpen}
-                style={{
-                  width:'100%', marginBottom:5, padding:'5px',
-                  background: aiImgSent ? 'rgba(37,211,102,.15)' : aiImgSending ? '#111c2a' : 'rgba(99,102,241,.12)',
-                  border: `1px solid ${aiImgSent ? 'rgba(37,211,102,.3)' : 'rgba(99,102,241,.3)'}`,
-                  color: aiImgSent ? '#25d366' : '#818cf8',
-                  borderRadius:7, fontSize:10, fontWeight:700, cursor: aiImgSent || aiImgSending ? 'default' : 'pointer',
-                  fontFamily:'inherit', transition:'all .15s'
-                }}>
-                {aiImgSent ? '✓ Foto enviada' : aiImgSending ? '⏳ Enviando...' : '🖼 Enviar foto del producto'}
-              </button>
-            )}
-
-            {/* Texto editable — con soporte whitespace */}
-            <textarea
-              value={aiText}
-              onChange={e => { setAiText(e.target.value); setAiSent(false) }}
-              rows={4}
-              style={{
-                width:'100%',
-                background:'rgba(99,102,241,.06)',
-                border:`1px solid ${aiSent?'rgba(37,211,102,.3)':'rgba(99,102,241,.25)'}`,
-                borderRadius:8, color:'#c7d2fe', fontSize:12,
-                padding:'7px 9px', resize:'none', outline:'none',
-                fontFamily:'inherit', lineHeight:1.5,
-                whiteSpace:'pre-wrap'   // ← FIX saltos de línea
-              }}
-            />
-            <div style={{ display:'flex', gap:5, marginTop:5 }}>
-              <button onClick={handleSendAI} disabled={aiSending||aiSent||!aiText.trim()||!windowOpen} style={{
-                flex:2, padding:'6px',
-                background:aiSent?'rgba(37,211,102,.15)':aiSending?'#111c2a':'linear-gradient(135deg,#6366f1,#4f46e5)',
-                border:`1px solid ${aiSent?'rgba(37,211,102,.3)':'rgba(99,102,241,.4)'}`,
-                color:aiSent?'#25d366':'#fff',
-                borderRadius:7, fontSize:11, fontWeight:700,
-                cursor:aiSent||aiSending?'default':'pointer', fontFamily:'inherit',
-              }}>{aiSent?'✓ Enviado':aiSending?'⏳...':'📤 Enviar texto'}</button>
-              <button onClick={() => onSendText && onSendText(null, aiText)} style={{ flex:1, padding:'6px', background:'rgba(255,255,255,.04)', border:'1px solid #2a3f55', color:'#94a3b8', borderRadius:7, fontSize:11, cursor:'pointer', fontFamily:'inherit' }}>✏️ Editar</button>
-            </div>
-          </>
-        ) : (
-          <div style={{ padding:'12px', textAlign:'center', color:'#94a3b8', fontSize:11, background:'rgba(255,255,255,.02)', borderRadius:8, border:'1px dashed #2a3f55' }}>
-            Esperando mensaje...
-          </div>
-        )}
-        </div>}
-      </div>
+      {/* SUGERENCIA IA eliminada — respuestas rápidas suben para optimizar espacio */}
 
       {/* ── RESPUESTAS RÁPIDAS — scroll independiente ── */}
       <div style={{ flex:1, overflowY:'auto', minHeight:0 }}>
