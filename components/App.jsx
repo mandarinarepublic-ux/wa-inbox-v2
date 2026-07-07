@@ -126,17 +126,22 @@ export default function App() {
   // ── Cargar datos ──────────────────────────────────────────────
   const load = useCallback(async () => {
     const [rows, ctList] = await Promise.all([fetchRows(), fetchContacts()])
-    setConvs(buildConvs(rows))
-    const ctMap = {}
-    ctList.forEach(c => { ctMap[c.telefono] = c })
-    // Respetar cambios locales recientes (evitar que el polling los pise)
-    const now = Date.now()
-    Object.entries(localStatusRef.current).forEach(([tel, override]) => {
-      if (override.expiresAt > now && ctMap[tel]) {
-        ctMap[tel] = { ...ctMap[tel], estado: override.estado }
-      }
-    })
-    setContacts(ctMap)
+    // Si un poll falla (null) o viene vacío por glitch, NO pisamos los datos
+    // previos: evita que el panel parpadee a blanco y bloquee responder. Los
+    // mensajes son append-only, así que un resultado vacío es un error transitorio.
+    if (Array.isArray(rows) && rows.length > 0) setConvs(buildConvs(rows))
+    if (Array.isArray(ctList) && ctList.length > 0) {
+      const ctMap = {}
+      ctList.forEach(c => { ctMap[c.telefono] = c })
+      // Respetar cambios locales recientes (evitar que el polling los pise)
+      const now = Date.now()
+      Object.entries(localStatusRef.current).forEach(([tel, override]) => {
+        if (override.expiresAt > now && ctMap[tel]) {
+          ctMap[tel] = { ...ctMap[tel], estado: override.estado }
+        }
+      })
+      setContacts(ctMap)
+    }
     setLastSync(new Date())
     setLoading(false)
   }, [])
@@ -148,7 +153,7 @@ export default function App() {
 
   useEffect(() => {
     load()
-    pollRef.current = setInterval(load, 4000)
+    pollRef.current = setInterval(load, 8000)
     return () => clearInterval(pollRef.current)
   }, [load])
 
