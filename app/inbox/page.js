@@ -1,6 +1,7 @@
 'use client'
-export const dynamic = 'force-dynamic'
-import App from '@/components/App'
+import dynamic from 'next/dynamic'
+
+const App = dynamic(() => import('@/components/App'), { ssr: false })
 
 export default function InboxPage() {
   return <App />

@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { colorFor, initialsFor, fmtTime } from '@/lib/utils'
 
 // ── SPINNER ──────────────────────────────────────────────────────
@@ -240,11 +240,39 @@ function MediaContent({ tipo, mediaUrl }) {
 
 // ── QUOTED MESSAGE (cita) ────────────────────────────────────────
 function QuotedMessage({ contextoId, allMsgs }) {
-  if (!contextoId || !allMsgs) return null
-  // Solo procesar IDs válidos de WhatsApp
-  if (!contextoId.startsWith('wamid.')) return null
-  const cited = allMsgs.find(m => m.id === contextoId)
-  if (!cited) return null
+  const [fetched, setFetched] = useState(null)
+  const valid    = !!contextoId && contextoId.startsWith('wamid.')
+  const inWindow = valid && allMsgs ? allMsgs.find(m => m.id === contextoId) : null
+  const cited    = inWindow || fetched
+  // Si el mensaje citado quedó fuera de la ventana reciente, lo buscamos por API.
+  const needFetch = valid && !inWindow && !fetched
+
+  useEffect(() => {
+    if (!needFetch) return
+    let cancel = false
+    fetch(`/api/mensaje?id=${encodeURIComponent(contextoId)}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (!cancel && d && d.id) setFetched(d) })
+      .catch(() => {})
+    return () => { cancel = true }
+  }, [contextoId, needFetch])
+
+  if (!valid) return null
+
+  // Fallback mientras resuelve, o si el mensaje citado ya no existe
+  if (!cited) {
+    return (
+      <div style={{
+        borderLeft: '3px solid rgba(37,211,102,.5)',
+        background: 'rgba(0,0,0,.25)',
+        borderRadius: '0 8px 8px 0',
+        padding: '5px 10px', marginBottom: 6,
+        fontSize: 11, color: '#64748b', fontStyle: 'italic',
+      }}>
+        ↩️ Respondió a un mensaje anterior
+      </div>
+    )
+  }
 
   const isImage = ['image','sticker'].includes(cited.tipo) || !!cited.mediaUrl?.match(/\.(jpg|jpeg|png|webp|gif)(\?|$)/i)
 

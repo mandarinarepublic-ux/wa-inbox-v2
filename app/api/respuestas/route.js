@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getRespuestas, addRespuesta, editRespuesta, deleteRespuesta } from '@/lib/respuestas'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET() {
   try {
     const respuestas = await getRespuestas()

@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getContactos } from '@/lib/contactos'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET() {
   try {
     const contactos = await getContactos()
