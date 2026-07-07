@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Avatar } from '@/components/Components'
 import { fetchRepliesFromSheet, writeReply, saveNotes } from '@/lib/api-client'
+import { parseDate } from '@/lib/utils'
 
 const IMGBB_KEY = '2307574d43689522feabd27cff3443df'
 const MAX_IMGS  = 10
@@ -126,7 +127,7 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
     if (!lastIncoming) return
 
     const tick = () => {
-      const diff = new Date(lastIncoming.timestamp).getTime() + 24 * 60 * 60 * 1000 - Date.now()
+      const diff = parseDate(lastIncoming.timestamp).getTime() + 24 * 60 * 60 * 1000 - Date.now()
       if (diff <= 0) { setCountdown('00:00:00'); return }
       const h = Math.floor(diff / 3600000)
       const m = Math.floor((diff % 3600000) / 60000)

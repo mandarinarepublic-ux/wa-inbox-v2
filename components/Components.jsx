@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { colorFor, initialsFor, fmtTime } from '@/lib/utils'
+import { colorFor, initialsFor, fmtTime, parseDate } from '@/lib/utils'
 
 // ── SPINNER ──────────────────────────────────────────────────────
 export function Spinner({ size = 24 }) {
@@ -388,7 +388,7 @@ export function MessageBubble({ msg, allMsgs }) {
         }}>
           <span style={{ fontSize: 10, color: '#94a3b8' }}>
             {(() => {
-              const d = new Date(msg.timestamp)
+              const d = parseDate(msg.timestamp)
               const today = new Date()
               const yesterday = new Date(today); yesterday.setDate(today.getDate()-1)
               const isToday = d.toDateString() === today.toDateString()

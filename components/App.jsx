@@ -1,7 +1,7 @@
 'use client'
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { fetchRows, fetchContacts, sendReply, updateContact, isDemo, sendInteractiveButtons, toggleIAMode, sendVideo } from '@/lib/api-client'
-import { buildConvs, fmtDate } from '@/lib/utils'
+import { buildConvs, fmtDate, parseDate } from '@/lib/utils'
 import { Spinner, Avatar, ContactRow, MessageBubble, Toast } from '@/components/Components'
 import RightPanel from '@/components/RightPanel'
 import SetupModal from '@/components/SetupModal'
@@ -271,7 +271,7 @@ export default function App() {
   const lastMsg      = activeConv?.last
   const lastIncoming = activeConv ? [...activeConv.msgs].reverse().find(m => m.direccion === 'ENTRANTE') : null
   const windowOpen = lastIncoming
-    ? (Date.now() - new Date(lastIncoming.timestamp).getTime()) < 24 * 60 * 60 * 1000
+    ? (Date.now() - parseDate(lastIncoming.timestamp).getTime()) < 24 * 60 * 60 * 1000
     : false
 
   // ── Cambiar estado ────────────────────────────────────────────
@@ -708,7 +708,7 @@ export default function App() {
 
             <div ref={msgsRef} className="msgs-scroll" onScroll={handleMsgsScroll} style={{ background:'radial-gradient(ellipse at 20% 10%, rgba(37,211,102,.015) 0%, transparent 60%)' }}>
               {activeConv.msgs.map((msg, idx) => {
-                const showDate = idx===0 || new Date(msg.timestamp).toDateString() !== new Date(activeConv.msgs[idx-1].timestamp).toDateString()
+                const showDate = idx===0 || parseDate(msg.timestamp).toDateString() !== parseDate(activeConv.msgs[idx-1].timestamp).toDateString()
                 return (
                   <div key={msg.id}>
                     {showDate && (
