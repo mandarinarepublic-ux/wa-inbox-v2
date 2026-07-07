@@ -249,7 +249,8 @@ export default function App() {
   const totalUnread = convs.reduce((s, c) => s + c.unread, 0)
   const demo        = isDemo()
 
-  const hasVenta  = (tel) => { const c = contacts[tel] || {}; return String(c.idVenta || '').trim() !== '' || c.estado === 'venta' }
+  // "Venta" = tiene un PEDIDO CREADO (idVenta en col H, lo setea CREAR PEDIDO).
+  const hasVenta  = (tel) => String(contacts[tel]?.idVenta || '').trim() !== ''
   // El estado de flujo (pendiente/atendido/…) es INDEPENDIENTE de tener venta.
   // Así un cliente con venta que vuelve a escribir aparece en PENDIENTE (para atenderlo)
   // y a la vez sigue en la pestaña 💰 Ventas (que filtra por idVenta, ver abajo).
