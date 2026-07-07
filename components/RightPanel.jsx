@@ -158,6 +158,10 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
   const [notasSaved,  setNotasSaved]  = useState(false)
   const notasLoadedRef = useRef(null)
 
+  // ── Crear pedido (botón que lee la conversación y crea el pedido en el CRM) ──
+  const [pedidoLoading, setPedidoLoading] = useState(false)
+  const [pedidoRes,     setPedidoRes]     = useState(null)
+
   // ── Leer respuestas directamente desde Google Sheets ─────────
   useEffect(() => {
     if (repliesLoaded) return
@@ -174,6 +178,7 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
       notasLoadedRef.current = activeConv.telefono
       setNotasInput(contactInfo?.notas || '')
       setNotasSaved(false)
+      setPedidoRes(null)
     }
   }, [activeConv, contactInfo])
 
@@ -216,6 +221,30 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
   }
 
   // Guardar nota del vendedor (col I vía webhook)
+  const crearPedido = async () => {
+    if (pedidoLoading || !activeConv) return
+    // Armamos el transcript desde la conversación que el inbox ya tiene en memoria
+    const transcript = (activeConv.msgs || [])
+      .map(m => String(m.mensaje || '').trim())
+      .filter(Boolean).length
+      ? (activeConv.msgs || [])
+          .filter(m => String(m.mensaje || '').trim())
+          .map(m => `${m.direccion === 'SALIENTE' ? 'VENDEDOR' : 'CLIENTE'}: ${m.mensaje}`)
+          .join('\n')
+      : ''
+    if (!transcript) { setPedidoRes({ ok: false, error: 'La conversación está vacía' }); return }
+    setPedidoLoading(true); setPedidoRes(null)
+    try {
+      const r = await fetch('https://mandi-agent.vercel.app/api/crear-pedido', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: activeConv.telefono, transcript }),
+      })
+      setPedidoRes(await r.json())
+    } catch {
+      setPedidoRes({ ok: false, error: 'No se pudo conectar con MANDI' })
+    } finally { setPedidoLoading(false) }
+  }
+
   const handleSaveNotas = async () => {
     if (notasSaving) return
     setNotasSaving(true)
@@ -264,6 +293,42 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
           )}
         </div>
 
+      </div>
+
+      {/* ── CREAR PEDIDO ── */}
+      <div style={{ flexShrink:0, padding:'10px 12px', borderBottom:'1px solid #111c2a' }}>
+        <button onClick={crearPedido} disabled={pedidoLoading}
+          style={{ width:'100%', padding:'9px', background: pedidoLoading?'#111c2a':'linear-gradient(135deg,#10b981,#059669)', border:'1px solid rgba(16,185,129,.4)', color:'#fff', borderRadius:8, fontSize:12, fontWeight:800, cursor: pedidoLoading?'default':'pointer', fontFamily:'inherit', letterSpacing:'.03em' }}>
+          {pedidoLoading ? '⏳ Leyendo conversación y creando…' : '🧾 CREAR PEDIDO'}
+        </button>
+
+        {pedidoRes?.ok && (
+          <div style={{ marginTop:8, padding:'9px 10px', background:'rgba(16,185,129,.1)', border:'1px solid rgba(16,185,129,.3)', borderRadius:8 }}>
+            <div style={{ fontSize:12, fontWeight:800, color:'#10b981' }}>✅ Pedido creado: {pedidoRes.pedidoId}</div>
+            <div style={{ fontSize:11, color:'#94a3b8', marginTop:2 }}>Total ${pedidoRes.montoTotal} · {pedidoRes.diasCalculado} días</div>
+            <a href={pedidoRes.url} target="_blank" rel="noreferrer" style={{ display:'inline-block', marginTop:6, padding:'5px 10px', background:'rgba(16,185,129,.15)', border:'1px solid rgba(16,185,129,.35)', color:'#10b981', borderRadius:6, fontSize:11, fontWeight:700, textDecoration:'none' }}>📄 Ver pedido</a>
+          </div>
+        )}
+
+        {pedidoRes && !pedidoRes.ok && pedidoRes.faltan && (
+          <div style={{ marginTop:8, padding:'9px 10px', background:'rgba(245,158,11,.08)', border:'1px solid rgba(245,158,11,.3)', borderRadius:8 }}>
+            <div style={{ fontSize:11, fontWeight:800, color:'#f59e0b' }}>⚠️ Faltan datos: {pedidoRes.faltan.join(', ')}</div>
+            <textarea readOnly value={pedidoRes.sugerencia || ''} rows={3}
+              style={{ width:'100%', marginTop:6, background:'#111c2a', border:'1px solid #1e2d3d', borderRadius:6, color:'#e2e8f0', fontSize:11, padding:'6px 8px', resize:'vertical', outline:'none', fontFamily:'inherit', whiteSpace:'pre-wrap' }} />
+            <div style={{ display:'flex', gap:5, marginTop:5 }}>
+              <button onClick={() => onSendText && onSendText(pedidoRes.sugerencia)} disabled={!windowOpen}
+                style={{ flex:1, padding:'6px', background:'rgba(37,211,102,.12)', border:'1px solid rgba(37,211,102,.3)', color:'#25d366', borderRadius:6, fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>📤 Enviar al cliente</button>
+              <button onClick={() => onSendText && onSendText(null, pedidoRes.sugerencia)}
+                style={{ flex:1, padding:'6px', background:'rgba(255,255,255,.04)', border:'1px solid #2a3f55', color:'#94a3b8', borderRadius:6, fontSize:11, cursor:'pointer', fontFamily:'inherit' }}>✏️ Editar</button>
+            </div>
+          </div>
+        )}
+
+        {pedidoRes && !pedidoRes.ok && !pedidoRes.faltan && (
+          <div style={{ marginTop:8, padding:'8px 10px', background:'rgba(248,113,113,.08)', border:'1px solid rgba(248,113,113,.3)', borderRadius:8, fontSize:11, color:'#f87171' }}>
+            ❌ {pedidoRes.error || 'No se pudo crear el pedido'}
+          </div>
+        )}
       </div>
 
       {/* SUGERENCIA IA eliminada — respuestas rápidas suben para optimizar espacio */}
