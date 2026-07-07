@@ -123,13 +123,39 @@ export default function App() {
   const [refreshKey, setRefreshKey] = useState(0)
   const localStatusRef = useRef({}) // { telefono: { estado, expiresAt } }
 
+  // Mensajes optimistas pendientes (por teléfono) hasta que Make los registre en la hoja
+  const pendingRef = useRef({})
+
   // ── Cargar datos ──────────────────────────────────────────────
   const load = useCallback(async () => {
     const [rows, ctList] = await Promise.all([fetchRows(), fetchContacts()])
     // Si un poll falla (null) o viene vacío por glitch, NO pisamos los datos
     // previos: evita que el panel parpadee a blanco y bloquee responder. Los
     // mensajes son append-only, así que un resultado vacío es un error transitorio.
-    if (Array.isArray(rows) && rows.length > 0) setConvs(buildConvs(rows))
+    if (Array.isArray(rows) && rows.length > 0) {
+      const convsData = buildConvs(rows)
+      // Conservar los mensajes optimistas que Make aún no registró en la hoja, para
+      // que no "desaparezcan" entre el envío y el logueo (sensación de "no se envió").
+      const pend = pendingRef.current
+      Object.keys(pend).forEach(tel => {
+        const conv = convsData.find(c => c.telefono === tel)
+        const enHoja = (p) => (conv?.msgs || []).some(
+          m => m.direccion === 'SALIENTE' && String(m.mensaje).trim() === String(p.mensaje).trim()
+        )
+        pend[tel] = pend[tel].filter(p => {
+          const ts = Number(String(p.id).replace('tmp_', '')) || 0
+          return !enHoja(p) && (Date.now() - ts < 90000) // dropear cuando se confirma o tras 90s
+        })
+        if (!pend[tel].length) { delete pend[tel]; return }
+        if (conv) {
+          conv.msgs = [...conv.msgs, ...pend[tel]]
+          conv.last = pend[tel][pend[tel].length - 1]
+        } else {
+          convsData.unshift({ telefono: tel, nombre: pend[tel][0].nombre, msgs: [...pend[tel]], last: pend[tel][pend[tel].length - 1], unread: 0 })
+        }
+      })
+      setConvs(convsData)
+    }
     if (Array.isArray(ctList) && ctList.length > 0) {
       const ctMap = {}
       ctList.forEach(c => { ctMap[c.telefono] = c })
@@ -294,6 +320,8 @@ export default function App() {
     setConvs(prev => prev.map(c =>
       c.telefono === activeConv.telefono ? { ...c, msgs: [...c.msgs, tmpMsg], last: tmpMsg } : c
     ))
+    // Registrar como pendiente para que sobreviva a los polls hasta que Make lo registre
+    pendingRef.current[activeConv.telefono] = [...(pendingRef.current[activeConv.telefono] || []), tmpMsg]
     // Dar tiempo a React para renderizar el tmpMsg antes de hacer el fetch
     await new Promise(r => setTimeout(r, 0))
     const [result] = await Promise.all([
@@ -428,6 +456,7 @@ export default function App() {
       direccion:'SALIENTE', timestamp:new Date().toISOString(), estado:'enviado',
     }
     setConvs(prev=>prev.map(c=>c.telefono===activeConv.telefono?{...c,msgs:[...c.msgs,tmpMsg],last:tmpMsg}:c))
+    pendingRef.current[activeConv.telefono] = [...(pendingRef.current[activeConv.telefono] || []), tmpMsg]
     const result = await sendInteractiveButtons(activeConv.telefono, activeConv.nombre, input.trim(), validBtns)
     setSendingBtns(false)
     setToast(result)
