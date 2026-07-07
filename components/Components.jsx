@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { colorFor, initialsFor, fmtTime, parseDate } from '@/lib/utils'
+import { colorFor, initialsFor, fmtTime, parseDate, hashWamid } from '@/lib/utils'
 
 // ── SPINNER ──────────────────────────────────────────────────────
 export function Spinner({ size = 24 }) {
@@ -245,7 +245,7 @@ function MediaContent({ tipo, mediaUrl, mediaId }) {
 function QuotedMessage({ contextoId, allMsgs }) {
   const [fetched, setFetched] = useState(null)
   const valid    = !!contextoId && contextoId.startsWith('wamid.')
-  const inWindow = valid && allMsgs ? allMsgs.find(m => m.id === contextoId) : null
+  const inWindow = valid && allMsgs ? allMsgs.find(m => hashWamid(m.id) === hashWamid(contextoId)) : null
   const cited    = inWindow || fetched
   // Si el mensaje citado quedó fuera de la ventana reciente, lo buscamos por API.
   const needFetch = valid && !inWindow && !fetched
