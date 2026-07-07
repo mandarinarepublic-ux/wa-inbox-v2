@@ -14,11 +14,11 @@ export async function GET() {
 
 export async function POST(req) {
   try {
-    const { accion, id, texto, imagenUrl } = await req.json()
+    const { accion, id, texto, imagenUrl, ...extras } = await req.json()
     if (accion === 'add' || accion === 'agregar') {
-      await addRespuesta(id, texto, imagenUrl)
+      await addRespuesta(id, texto, imagenUrl, extras)
     } else if (accion === 'edit' || accion === 'actualizar') {
-      await editRespuesta(id, texto, imagenUrl)
+      await editRespuesta(id, texto, imagenUrl, extras)
     } else if (accion === 'delete' || accion === 'eliminar') {
       await deleteRespuesta(id)
     } else {

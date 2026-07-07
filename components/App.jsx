@@ -411,7 +411,14 @@ export default function App() {
   const handleQuickReply = async (reply) => {
     if (!activeConv) return
     if (reply.text) await handleSend(reply.text)
-    if (reply.imageUrl) await sendImageUrl(reply.imageUrl)
+    // Envía hasta 10 imágenes de la respuesta rápida, en orden, con pausa entre cada una
+    const imgs = Array.from({ length: 10 }, (_, i) =>
+      i === 0 ? reply.imageUrl : reply[`imageUrl${i + 1}`]
+    ).filter(Boolean)
+    for (let i = 0; i < imgs.length; i++) {
+      await sendImageUrl(imgs[i])
+      if (i < imgs.length - 1) await new Promise(r => setTimeout(r, 800))
+    }
   }
 
   // ── Enviar imagen IA (Shopify) por WhatsApp ──────────────────

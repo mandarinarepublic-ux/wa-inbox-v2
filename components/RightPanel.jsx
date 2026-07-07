@@ -4,6 +4,23 @@ import { Avatar } from '@/components/Components'
 import { fetchRepliesFromSheet, writeReply, saveNotes } from '@/lib/api-client'
 
 const IMGBB_KEY = '2307574d43689522feabd27cff3443df'
+const MAX_IMGS  = 10
+
+// Extrae todas las urls de imagen de un reply (imageUrl, imageUrl2..imageUrl10)
+function getImgUrls(reply) {
+  return Array.from({ length: MAX_IMGS }, (_, i) =>
+    i === 0 ? (reply.imageUrl || '') : (reply[`imageUrl${i + 1}`] || '')
+  ).filter(Boolean)
+}
+
+// Convierte array de urls → objeto reply { imageUrl, imageUrl2, ... }
+function urlsToReply(urls) {
+  const obj = {}
+  for (let i = 0; i < MAX_IMGS; i++) {
+    obj[i === 0 ? 'imageUrl' : `imageUrl${i + 1}`] = urls[i] || ''
+  }
+  return obj
+}
 
 async function toJpeg(file) {
   return new Promise((resolve) => {
@@ -30,6 +47,73 @@ const uploadImg = async (file, setUrl, setPrev, setLoading) => {
     const data = await res.json()
     if (data.success) { setUrl(data.data.url); setPrev(data.data.url) }
   } finally { setLoading(false) }
+}
+
+// Sube un archivo a imgbb y devuelve la url (para el editor multi-foto)
+async function uploadToImgbb(file) {
+  const converted = await toJpeg(file)
+  const fd = new FormData(); fd.append('image', converted)
+  const res  = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`, { method: 'POST', body: fd })
+  const data = await res.json()
+  return data.success ? data.data.url : ''
+}
+
+// ── MultiImgEditor — editor de hasta 10 fotos ────────────────────
+function MultiImgEditor({ urls, onChange }) {
+  const [uploading, setUploading] = useState({})
+  const refs = Array.from({ length: MAX_IMGS }, () => useRef(null))
+
+  const handleFile = async (e, idx) => {
+    const f = e.target.files[0]; if (!f) return
+    setUploading(p => ({ ...p, [idx]: true }))
+    try {
+      const url = await uploadToImgbb(f)
+      if (url) {
+        const next = [...urls]
+        next[idx] = url
+        onChange(next.filter(Boolean)) // compactar — quitar huecos
+      }
+    } finally {
+      setUploading(p => ({ ...p, [idx]: false }))
+      if (refs[idx].current) refs[idx].current.value = ''
+    }
+  }
+
+  const removeImg = (idx) => onChange(urls.filter((_, i) => i !== idx))
+
+  // Fotos existentes + 1 slot vacío (si hay espacio)
+  const slots = urls.length < MAX_IMGS ? [...urls, null] : urls
+
+  return (
+    <div style={{ display:'flex', flexWrap:'wrap', gap:4, marginTop:4 }}>
+      {slots.map((url, idx) => (
+        <div key={idx} style={{ position:'relative', width:44, height:44 }}>
+          {url ? (
+            <>
+              <img src={url} style={{ width:44, height:44, borderRadius:6, objectFit:'cover', display:'block' }} alt=""
+                onError={e => e.currentTarget.style.display='none'} />
+              {uploading[idx] && (
+                <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,.55)', borderRadius:6, display:'flex', alignItems:'center', justifyContent:'center', fontSize:9, color:'#e2e8f0' }}>↑</div>
+              )}
+              <button onClick={() => removeImg(idx)}
+                style={{ position:'absolute', top:-4, right:-4, width:14, height:14, borderRadius:'50%', background:'#f87171', border:'none', color:'#fff', fontSize:8, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', lineHeight:1 }}>✕</button>
+            </>
+          ) : (
+            <>
+              <button onClick={() => refs[idx].current?.click()}
+                style={{ width:44, height:44, border:'1px dashed #2a3f55', borderRadius:6, background:'transparent', cursor:'pointer', color:'#475569', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:'inherit' }}>
+                {uploading[idx] ? '↑' : '+'}
+              </button>
+              <input ref={refs[idx]} type="file" accept="image/*" style={{ display:'none' }} onChange={e => handleFile(e, idx)} />
+            </>
+          )}
+        </div>
+      ))}
+      {urls.length > 0 && (
+        <div style={{ width:'100%', fontSize:9, color:'#475569', marginTop:2 }}>{urls.length}/{MAX_IMGS} fotos</div>
+      )}
+    </div>
+  )
 }
 
 export default function RightPanel({ activeConv, onQuickReply, onSendText, onSendImage, contactInfo, onUpdateContact, windowOpen }) {
@@ -61,13 +145,9 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
   const [iaOpen,        setIaOpen]        = useState(true)
   const [editingIdx,    setEditingIdx]    = useState(null)
   const [editText,      setEditText]      = useState('')
-  const [editImgUrl,    setEditImgUrl]    = useState('')
-  const [editImgPrev,   setEditImgPrev]   = useState('')
-  const [editUploading, setEditUploading] = useState(false)
+  const [editImgUrls,   setEditImgUrls]   = useState([])
   const [newText,       setNewText]       = useState('')
-  const [newImgUrl,     setNewImgUrl]     = useState('')
-  const [newImgPrev,    setNewImgPrev]    = useState('')
-  const [newUploading,  setNewUploading]  = useState(false)
+  const [newImgUrls,    setNewImgUrls]    = useState([])
   const [sending,       setSending]       = useState(null)
   const [editAlias,     setEditAlias]     = useState(false)
   const [aliasInput,    setAliasInput]    = useState('')
@@ -90,8 +170,6 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
   const [notasSaved,  setNotasSaved]  = useState(false)
   const notasLoadedRef = useRef(null)
 
-  const editFileRef  = useRef(null)
-  const newFileRef   = useRef(null)
   const aiImgFileRef = useRef(null)
 
   // ── Leer respuestas directamente desde Google Sheets ─────────
@@ -140,14 +218,14 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
 
   const startEdit = (idx) => {
     setEditingIdx(idx); setEditText(replies[idx].text)
-    setEditImgUrl(replies[idx].imageUrl); setEditImgPrev(replies[idx].imageUrl)
+    setEditImgUrls(getImgUrls(replies[idx]))
   }
 
   const saveEdit = async () => {
     if (!editText.trim()) return
-    const updated = { ...replies[editingIdx], text: editText.trim(), imageUrl: editImgUrl }
+    const updated = { ...replies[editingIdx], text: editText.trim(), ...urlsToReply(editImgUrls) }
     setReplies(prev => prev.map((r, i) => i === editingIdx ? updated : r))
-    setEditingIdx(null); setEditText(''); setEditImgUrl(''); setEditImgPrev('')
+    setEditingIdx(null); setEditText(''); setEditImgUrls([])
     await writeReply('actualizar', updated)
   }
 
@@ -159,10 +237,9 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
 
   const addReply = async () => {
     if (!newText.trim()) return
-    const newReply = { id: crypto.randomUUID(), text: newText.trim(), imageUrl: newImgUrl }
+    const newReply = { id: crypto.randomUUID(), text: newText.trim(), ...urlsToReply(newImgUrls) }
     setReplies(prev => [...prev, newReply])
-    setNewText(''); setNewImgUrl(''); setNewImgPrev('')
-    if (newFileRef.current) newFileRef.current.value = ''
+    setNewText(''); setNewImgUrls([])
     await writeReply('agregar', newReply)
   }
 
@@ -367,46 +444,38 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
         </div>
 
         {repliesOpen && <div style={{ padding:'0 12px', display:'flex', flexDirection:'column', gap:5 }}>
-          {replies.map((reply, idx) => (
+          {replies.map((reply, idx) => { const imgs = getImgUrls(reply); return (
             <div key={reply.id || idx}>
               {editingIdx === idx ? (
                 <div style={{ background:'rgba(255,255,255,.03)', border:'1px solid #25d366', borderRadius:9, padding:'7px', marginBottom:2 }}>
                   <textarea value={editText} onChange={e => setEditText(e.target.value)} rows={5} placeholder="Texto..."
                     style={{ width:'100%', background:'#111c2a', border:'1px solid #25d366', borderRadius:6, color:'#e2e8f0', fontSize:12, padding:'8px 10px', resize:'vertical', outline:'none', fontFamily:'inherit', marginBottom:5, whiteSpace:'pre-wrap', minHeight:100 }} />
-                  <div style={{ marginBottom:5 }}>
-                    {editImgPrev ? (
-                      <div style={{ position:'relative' }}>
-                        <img src={editImgPrev} style={{ width:'100%', height:52, objectFit:'cover', borderRadius:5 }} alt="" />
-                        {editUploading && <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,.5)', borderRadius:5, display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, color:'#fff' }}>Subiendo...</div>}
-                        <button onClick={() => { setEditImgUrl(''); setEditImgPrev(''); if(editFileRef.current) editFileRef.current.value='' }} style={{ position:'absolute', top:2, right:2, background:'rgba(0,0,0,.6)', border:'none', color:'#fff', borderRadius:'50%', width:16, height:16, cursor:'pointer', fontSize:8, display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
-                      </div>
-                    ) : (
-                      <button onClick={() => editFileRef.current?.click()} style={{ width:'100%', padding:'4px', background:'transparent', border:'1px dashed #2a3f55', borderRadius:6, color:'#94a3b8', fontSize:10, cursor:'pointer', fontFamily:'inherit' }}>📷 Imagen</button>
-                    )}
-                    <input ref={editFileRef} type="file" accept="image/*" style={{ display:'none' }} onChange={async e => { const f=e.target.files[0]; if(!f)return; setEditImgPrev(URL.createObjectURL(f)); await uploadImg(f,setEditImgUrl,setEditImgPrev,setEditUploading) }} />
-                  </div>
-                  <div style={{ display:'flex', gap:3 }}>
-                    <button onClick={saveEdit} disabled={editUploading} style={{ flex:1, padding:'4px', background:'rgba(37,211,102,.15)', border:'1px solid rgba(37,211,102,.3)', color:'#25d366', borderRadius:6, fontSize:10, cursor:'pointer', fontFamily:'inherit' }}>✓ Guardar</button>
-                    <button onClick={() => { setEditingIdx(null); setEditText(''); setEditImgUrl(''); setEditImgPrev('') }} style={{ flex:1, padding:'4px', background:'transparent', border:'1px solid #2a3f55', color:'#94a3b8', borderRadius:6, fontSize:10, cursor:'pointer', fontFamily:'inherit' }}>✕</button>
+                  <p style={{ fontSize:9, color:'#475569', marginBottom:3 }}>Fotos ({editImgUrls.length}/{MAX_IMGS})</p>
+                  <MultiImgEditor urls={editImgUrls} onChange={setEditImgUrls} />
+                  <div style={{ display:'flex', gap:3, marginTop:7 }}>
+                    <button onClick={saveEdit} style={{ flex:1, padding:'4px', background:'rgba(37,211,102,.15)', border:'1px solid rgba(37,211,102,.3)', color:'#25d366', borderRadius:6, fontSize:10, cursor:'pointer', fontFamily:'inherit' }}>✓ Guardar</button>
+                    <button onClick={() => { setEditingIdx(null); setEditText(''); setEditImgUrls([]) }} style={{ flex:1, padding:'4px', background:'transparent', border:'1px solid #2a3f55', color:'#94a3b8', borderRadius:6, fontSize:10, cursor:'pointer', fontFamily:'inherit' }}>✕</button>
                   </div>
                 </div>
               ) : (
-                <div style={{ background:'rgba(255,255,255,.02)', border:'1px solid #111c2a', borderRadius:8, overflow:'hidden', transition:'background .1s', display:'flex', alignItems:'stretch' }}
+                <div style={{ background:'rgba(255,255,255,.02)', border:'1px solid #111c2a', borderRadius:8, overflow:'hidden', transition:'background .1s' }}
                   onMouseEnter={e => e.currentTarget.style.background='rgba(255,255,255,.04)'}
                   onMouseLeave={e => e.currentTarget.style.background='rgba(255,255,255,.02)'}
                 >
-                  {/* Imagen izquierda */}
-                  {reply.imageUrl && (
-                    <div style={{ width:90, flexShrink:0 }}>
-                      <img src={reply.imageUrl} style={{ width:90, height:'100%', minHeight:72, objectFit:'cover', display:'block' }} alt="" onError={e => e.currentTarget.style.display='none'} />
+                  {/* Strip de fotos (hasta 10) */}
+                  {imgs.length > 0 && (
+                    <div style={{ display:'flex', gap:1, height:44 }}>
+                      {imgs.map((u, i) => (
+                        <img key={i} src={u} style={{ flex:1, objectFit:'cover', display:'block', maxWidth:`${100/imgs.length}%` }} alt="" onError={e => e.currentTarget.style.display='none'} />
+                      ))}
                     </div>
                   )}
-                  {/* Texto + botones derecha */}
-                  <div style={{ flex:1, padding:'7px 8px', display:'flex', flexDirection:'column', justifyContent:'space-between', gap:4, minWidth:0 }}>
-                    <span style={{ fontSize:12, color:'#94a3b8', lineHeight:1.4, overflow:'hidden', textOverflow:'ellipsis', display:'-webkit-box', WebkitLineClamp:3, WebkitBoxOrient:'vertical' }}>
-                      {reply.text}
+                  {/* Texto + botones */}
+                  <div style={{ padding:'7px 8px', display:'flex', alignItems:'flex-start', gap:4 }}>
+                    <span style={{ flex:1, fontSize:12, color:'#94a3b8', lineHeight:1.4, overflow:'hidden', textOverflow:'ellipsis', display:'-webkit-box', WebkitLineClamp:3, WebkitBoxOrient:'vertical', minWidth:0 }}>
+                      {imgs.length > 0 && `🖼×${imgs.length} `}{reply.text}
                     </span>
-                    <div style={{ display:'flex', gap:4, justifyContent:'flex-end' }}>
+                    <div style={{ display:'flex', gap:4, flexShrink:0 }}>
                       <button onClick={() => handleSendQuick(idx)} disabled={sending===idx||!windowOpen} title="Enviar" style={{ background:'rgba(37,211,102,.12)', border:'1px solid rgba(37,211,102,.2)', color:'#25d366', borderRadius:5, padding:'3px 8px', fontSize:10, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>{sending===idx?'⏳':'▶ Enviar'}</button>
                       <button onClick={() => startEdit(idx)} style={{ background:'transparent', border:'1px solid #1e2d3d', color:'#64748b', borderRadius:5, padding:'3px 6px', fontSize:10, cursor:'pointer', fontFamily:'inherit' }}>✏️</button>
                       <button onClick={() => deleteReply(idx)} style={{ background:'transparent', border:'1px solid #1e2d3d', color:'#64748b', borderRadius:5, padding:'3px 6px', fontSize:10, cursor:'pointer', fontFamily:'inherit' }}>🗑</button>
@@ -415,7 +484,7 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                 </div>
               )}
             </div>
-          ))}
+          ) })}
         </div>
 
         }
@@ -433,20 +502,10 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
           <textarea value={newText} onChange={e => setNewText(e.target.value)} placeholder="Texto..." rows={2}
             style={{ width:'100%', background:'#111c2a', border:'1px solid #1e2d3d', borderRadius:6, color:'#ffffff', fontSize:11, padding:'5px 7px', resize:'none', outline:'none', fontFamily:'inherit', marginBottom:5, whiteSpace:'pre-wrap' }}
             onFocus={e => e.target.style.borderColor='#25d366'} onBlur={e => e.target.style.borderColor='#1e2d3d'} />
-          <div style={{ marginBottom:5 }}>
-            {newImgPrev ? (
-              <div style={{ position:'relative' }}>
-                <img src={newImgPrev} style={{ width:'100%', height:52, objectFit:'cover', borderRadius:5 }} alt="" />
-                {newUploading && <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,.5)', borderRadius:5, display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, color:'#fff' }}>Subiendo...</div>}
-                <button onClick={() => { setNewImgUrl(''); setNewImgPrev(''); if(newFileRef.current) newFileRef.current.value='' }} style={{ position:'absolute', top:2, right:2, background:'rgba(0,0,0,.6)', border:'none', color:'#fff', borderRadius:'50%', width:16, height:16, cursor:'pointer', fontSize:8, display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
-              </div>
-            ) : (
-              <button onClick={() => newFileRef.current?.click()} style={{ width:'100%', padding:'4px', background:'transparent', border:'1px dashed #475569', borderRadius:6, color:'#ffffff', fontSize:10, cursor:'pointer', fontFamily:'inherit' }}>📷 Imagen (opcional)</button>
-            )}
-            <input ref={newFileRef} type="file" accept="image/*" style={{ display:'none' }} onChange={async e => { const f=e.target.files[0]; if(!f)return; setNewImgPrev(URL.createObjectURL(f)); await uploadImg(f,setNewImgUrl,setNewImgPrev,setNewUploading) }} />
-          </div>
-            <button onClick={addReply} disabled={!newText.trim()||newUploading} style={{ width:'100%', padding:'6px', background:newText.trim()&&!newUploading?'rgba(37,211,102,.1)':'transparent', border:`1px solid ${newText.trim()&&!newUploading?'rgba(37,211,102,.3)':'#475569'}`, color:newText.trim()&&!newUploading?'#25d366':'#ffffff', borderRadius:7, fontSize:11, fontWeight:600, cursor:newText.trim()&&!newUploading?'pointer':'default', fontFamily:'inherit', transition:'all .15s' }}>
-              {newUploading?'Subiendo...':'+ Agregar'}
+          <p style={{ fontSize:9, color:'#475569', margin:'0 0 3px' }}>Fotos ({newImgUrls.length}/{MAX_IMGS})</p>
+          <MultiImgEditor urls={newImgUrls} onChange={setNewImgUrls} />
+            <button onClick={addReply} disabled={!newText.trim()} style={{ width:'100%', marginTop:7, padding:'6px', background:newText.trim()?'rgba(37,211,102,.1)':'transparent', border:`1px solid ${newText.trim()?'rgba(37,211,102,.3)':'#475569'}`, color:newText.trim()?'#25d366':'#ffffff', borderRadius:7, fontSize:11, fontWeight:600, cursor:newText.trim()?'pointer':'default', fontFamily:'inherit', transition:'all .15s' }}>
+              + Agregar
             </button>
           </div>}
         </div>
