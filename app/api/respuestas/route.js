@@ -15,11 +15,11 @@ export async function GET() {
 export async function POST(req) {
   try {
     const { accion, id, texto, imagenUrl } = await req.json()
-    if (accion === 'add') {
+    if (accion === 'add' || accion === 'agregar') {
       await addRespuesta(id, texto, imagenUrl)
-    } else if (accion === 'edit') {
+    } else if (accion === 'edit' || accion === 'actualizar') {
       await editRespuesta(id, texto, imagenUrl)
-    } else if (accion === 'delete') {
+    } else if (accion === 'delete' || accion === 'eliminar') {
       await deleteRespuesta(id)
     } else {
       return NextResponse.json({ error: `Accion desconocida: ${accion}` }, { status: 400 })
