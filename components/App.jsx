@@ -515,6 +515,11 @@ export default function App() {
         .right-col  { width:340px; flex-shrink:0; background:#0a0f1a; border-left:1px solid #111c2a; display:flex; flex-direction:column; overflow-y:auto; }
         .msgs-scroll{ flex:1; overflow-y:auto; padding:16px 20px; }
         .input-bar  { flex-shrink:0; padding:10px 16px 14px; background:#0a0f1a; border-top:1px solid #111c2a; }
+        .chat-header{ padding:8px 10px; background:#0a0f1a; border-bottom:1px solid #111c2a; display:flex; align-items:center; flex-wrap:wrap; flex-shrink:0; gap:6px; }
+        .chat-header-left{ display:flex; align-items:center; gap:7px; min-width:0; flex:0 0 auto; }
+        .chat-actions{ display:flex; align-items:center; gap:4px; flex-wrap:wrap; flex:1; justify-content:flex-end; }
+        .msg-bubble { max-width:68%; }
+        .order-btn-mob{ display:none !important; }
         .mob-ham    { display:none !important; }
         .hide-mobile{ display:inline !important; }
         .show-mobile{ display:none !important; }
@@ -530,6 +535,12 @@ export default function App() {
           .overlay{ display:block; position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:90; }
           .msgs-scroll{ padding:12px 14px !important; }
           .input-bar{ padding-bottom:env(safe-area-inset-bottom,12px) !important; }
+          /* Header en 2 filas: info arriba, acciones en tira scrollable abajo */
+          .chat-header-left{ flex:1 1 100% !important; }
+          .chat-actions{ flex:1 1 100% !important; flex-wrap:nowrap !important; overflow-x:auto; justify-content:flex-start !important; padding-bottom:2px; scrollbar-width:none; -webkit-overflow-scrolling:touch; }
+          .chat-actions::-webkit-scrollbar{ display:none; }
+          .msg-bubble{ max-width:86% !important; }
+          .order-btn-mob{ display:flex !important; }
         }
       `}</style>
 
@@ -654,16 +665,21 @@ export default function App() {
         {/* ══════ CHAT ══════ */}
         {activeConv ? (
           <div className="chat-col">
-            <div style={{ padding:'8px 10px', background:'#0a0f1a', borderBottom:'1px solid #111c2a', display:'flex', alignItems:'center', flexWrap:'wrap', flexShrink:0, gap:6 }}>
-              <div style={{ display:'flex', alignItems:'center', gap:7, minWidth:0, flex:'0 0 auto' }}>
+            <div className="chat-header">
+              <div className="chat-header-left">
                 <button className="mob-ham" onClick={() => setShowSidebar(s=>!s)} style={{ background:'transparent', border:'none', color:'#25d366', cursor:'pointer', fontSize:20, padding:'0 2px', lineHeight:1, flexShrink:0 }}>☰</button>
                 <Avatar name={displayName(activeConv.telefono)} phone={activeConv.telefono} size={34} />
-                <div style={{ minWidth:0 }}>
+                <div style={{ minWidth:0, flex:1 }}>
                   <div style={{ fontWeight:800, color:'#f1f5f9', fontSize:13, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:160 }}>{displayName(activeConv.telefono)}</div>
                   <div style={{ fontSize:9, color:'#475569' }}>+{activeConv.telefono}</div>
                 </div>
+                {/* Acceso directo a Crear pedido / herramientas (solo móvil) */}
+                <button onClick={() => setShowRight(true)} className="order-btn-mob" title="Crear pedido y herramientas"
+                  style={{ alignItems:'center', gap:5, padding:'6px 12px', borderRadius:20, border:'1px solid rgba(16,185,129,.5)', background:'linear-gradient(135deg,#10b981,#059669)', color:'#fff', fontSize:11, fontWeight:800, cursor:'pointer', whiteSpace:'nowrap', flexShrink:0, boxShadow:'0 2px 10px rgba(16,185,129,.3)', marginLeft:'auto' }}>
+                  🧾 Pedido
+                </button>
               </div>
-              <div style={{ display:'flex', alignItems:'center', gap:4, flexWrap:'wrap', flex:1, justifyContent:'flex-end' }}>
+              <div className="chat-actions">
                 {[
                   { s:'pendiente',    icon:'🔴', label:'Pendiente',  shortLabel:'🔴', activeColor:'#f87171' },
                   { s:'ventaproceso', icon:'🟡', label:'En proceso', shortLabel:'🟡', activeColor:'#f59e0b' },
@@ -673,7 +689,7 @@ export default function App() {
                   { s:'archivado',    icon:'⚫', label:'Archivar',   shortLabel:'⚫', activeColor:'#94a3b8' },
                 ].map(({ s, icon, label, shortLabel, activeColor }) => (
                   <button key={s} onClick={() => changeStatus(activeConv.telefono, s)} title={label} style={{
-                    padding:'4px 6px', fontWeight: currentStatusView===s ? 800 : 600,
+                    padding:'4px 6px', fontWeight: currentStatusView===s ? 800 : 600, flexShrink:0,
                     background: currentStatusView===s ? `${activeColor}22` : 'transparent',
                     border: `${currentStatusView===s ? 2 : 1}px solid ${currentStatusView===s ? activeColor : '#1e2d3d'}`,
                     color: currentStatusView===s ? activeColor : '#475569',
@@ -684,7 +700,6 @@ export default function App() {
                     <span className="show-mobile" style={{ fontSize:14 }}>{shortLabel}</span>
                   </button>
                 ))}
-                <button onClick={() => setShowRight(r=>!r)} className="mob-ham" style={{ background:showRight?'rgba(37,211,102,.15)':'rgba(255,255,255,.04)', border:`1px solid ${showRight?'rgba(37,211,102,.3)':'#1e2d3d'}`, color:showRight?'#25d366':'#64748b', borderRadius:8, width:30, height:28, cursor:'pointer', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center' }}>⚡</button>
 
                 {/* ── TOGGLE AGENTE IA ── */}
                 {(() => {
@@ -703,7 +718,7 @@ export default function App() {
                         color: iaOn ? '#f59e0b' : '#334155',
                         boxShadow: iaOn ? '0 0 10px rgba(245,158,11,.25)' : 'none',
                         transition:'all .2s',
-                        minWidth: 80,
+                        minWidth: 80, flexShrink:0,
                       }}
                     >
                       <span style={{
