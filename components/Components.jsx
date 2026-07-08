@@ -332,7 +332,7 @@ export function MessageBubble({ msg, allMsgs }) {
       display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start',
       marginBottom: 4, animation: 'up .2s ease',
     }}>
-      <div style={{
+      <div className="msg-bubble" style={{
         maxWidth: '68%',
         background: isMe ? '#0d4f3c' : '#111c2a',
         borderRadius: isMe ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
