@@ -265,15 +265,18 @@ export default function App() {
   // Pestaña "Ventas": muestra TODO el que tenga venta (idVenta), sin importar su estado
   // de flujo. Las demás pestañas filtran por el estado real → un contacto con venta puede
   // aparecer a la vez en Pendiente (si te escribió) y en Ventas.
+  // Venta ACTIVA = tiene pedido (idVenta) y NO está archivada. Así, al archivar una
+  // venta, sale de la pestaña 💰 Ventas y pasa a Archivados (las ventas en curso siguen).
+  const esVentaActiva = (tel) => hasVenta(tel) && getStatus(tel) !== 'archivado'
   const filtered = searched.filter(c =>
-    filter === 'venta' ? hasVenta(c.telefono) : getStatus(c.telefono) === filter
+    filter === 'venta' ? esVentaActiva(c.telefono) : getStatus(c.telefono) === filter
   )
   const counts = {
     pendiente:     searched.filter(c => getStatus(c.telefono) === 'pendiente').length,
     atendido:      searched.filter(c => getStatus(c.telefono) === 'atendido').length,
     archivado:     searched.filter(c => getStatus(c.telefono) === 'archivado').length,
     ventaproceso:  searched.filter(c => getStatus(c.telefono) === 'ventaproceso').length,
-    venta:         searched.filter(c => hasVenta(c.telefono)).length,
+    venta:         searched.filter(c => esVentaActiva(c.telefono)).length,
     soporte:       searched.filter(c => getStatus(c.telefono) === 'soporte').length,
   }
 
