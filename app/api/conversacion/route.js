@@ -1,4 +1,4 @@
-import { readSheetTail } from '@/lib/sheets'
+import { readMensajesTail } from '@/lib/cache'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,7 +16,7 @@ export async function GET(req) {
     const objetivo = soloDigitos(phone)
     if (!objetivo) return Response.json([])
 
-    const rows = await readSheetTail('MENSAJES', 3000)
+    const rows = await readMensajesTail(3000)
     const msgs = []
     for (const r of rows) {
       const tel = soloDigitos(r[1])
