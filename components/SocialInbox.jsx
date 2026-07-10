@@ -228,6 +228,8 @@ export default function SocialInbox({ active: isVisible }) {
   const [input, setInput]       = useState('')
   const [sending, setSending]   = useState(false)
   const [lastSync, setLastSync] = useState(null)
+  const [quickReplies, setQuickReplies] = useState([]) // mismas respuestas que WhatsApp (RESPUESTAS_RAPIDAS)
+  const [showQR, setShowQR]     = useState(false)
   const bottomRef = useRef(null)
   const pollRef   = useRef(null)
 
@@ -252,6 +254,16 @@ export default function SocialInbox({ active: isVisible }) {
     pollRef.current = setInterval(load, 8000)
     return () => clearInterval(pollRef.current)
   }, [isVisible, load])
+
+  // Respuestas rápidas: las MISMAS que WhatsApp (hoja RESPUESTAS_RAPIDAS vía /api/respuestas).
+  // Cambian poco → se cargan una vez al abrir el Social Inbox.
+  useEffect(() => {
+    if (!isVisible) return
+    fetch('/api/respuestas')
+      .then(r => (r.ok ? r.json() : []))
+      .then(data => { if (Array.isArray(data)) setQuickReplies(data) })
+      .catch(() => {})
+  }, [isVisible])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -393,7 +405,27 @@ export default function SocialInbox({ active: isVisible }) {
 
           {/* Input */}
           <div style={{ padding:'10px 16px 14px', background:'#0a0f1a', borderTop:'1px solid #111c2a', flexShrink:0 }}>
+            {/* Respuestas rápidas (mismas que WhatsApp) */}
+            {showQR && (
+              quickReplies.length > 0 ? (
+                <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:8, maxHeight:130, overflowY:'auto' }}>
+                  {quickReplies.map(qr => (
+                    <button key={qr.id} onClick={() => { setInput(qr.text || ''); setShowQR(false) }}
+                      style={{ padding:'5px 12px', borderRadius:20, background:'#111c2a', border:'1px solid #1e2d3d', color:'#94a3b8', fontSize:12, cursor:'pointer', display:'flex', alignItems:'center', gap:6, fontFamily:'Outfit,sans-serif' }}>
+                      {qr.imageUrl && <img src={qr.imageUrl} alt="" style={{ width:18, height:18, borderRadius:3, objectFit:'cover' }} />}
+                      {(qr.text || '').substring(0, 40)}{(qr.text || '').length > 40 ? '…' : ''}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ marginBottom:8, fontSize:11, color:'#334155' }}>Sin respuestas rápidas. Agrégalas en MANDI (hoja RESPUESTAS_RAPIDAS).</div>
+              )
+            )}
             <div style={{ display:'flex', gap:8, alignItems:'flex-end' }}>
+              <button onClick={() => setShowQR(s => !s)} title="Respuestas rápidas"
+                style={{ width:42, height:42, flexShrink:0, borderRadius:11, background: showQR ? '#f59e0b' : '#111c2a', border:`1px solid ${showQR ? '#f59e0b' : '#1e2d3d'}`, color: showQR ? '#fff' : '#64748b', fontSize:17, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                ⚡
+              </button>
               <div style={{ flex:1, background:'#111c2a', border:'1px solid #1e2d3d', borderRadius:13, padding:'9px 13px' }}>
                 <textarea
                   value={input}
