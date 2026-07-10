@@ -285,23 +285,35 @@ export default function SocialInbox({ active: isVisible }) {
     setInput('')
     setSending(true)
     try {
-      await fetch(SOCIAL_SALIENTE_WEBHOOK, {
+      // IG: los chats son comentarios → respondemos con DM privado al comentario más
+      // reciente del cliente (recipient.comment_id). FB: DM normal por PSID.
+      const lastUser = [...selectedConv.messages].reverse().find(m => m.from === 'user')
+      const res = await fetch('/api/social/saliente', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sender_id: selectedConv.sender_id,
           message: text,
-          canal: selectedConv.canal
+          canal: selectedConv.canal,
+          comment_id: selectedConv.canal === 'IG' ? (lastUser?.id || '') : '',
         })
       })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || data.error) {
+        console.error('Send error:', data.error || res.status)
+        setInput(text) // devolver el texto para reintentar
+        alert('❌ No se pudo enviar: ' + (data.error || `HTTP ${res.status}`))
+        return
+      }
       // Optimistic update
       setConvs(prev => prev.map(c =>
         c.sender_id === selected && c.canal === selectedConv.canal
-          ? { ...c, messages: [...c.messages, { id: Date.now(), from: 'agent', text, time: new Date().toISOString() }] }
+          ? { ...c, messages: [...c.messages, { id: Date.now(), from: 'mandi', text, time: new Date().toISOString() }] }
           : c
       ))
     } catch (e) {
       console.error('Send error:', e)
+      setInput(text)
     } finally {
       setSending(false)
     }
