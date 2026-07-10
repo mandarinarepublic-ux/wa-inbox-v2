@@ -48,9 +48,38 @@ export function StatusPill({ estado }) {
   )
 }
 
+// ── Resaltar coincidencias de búsqueda ───────────────────────────
+function highlight(text, query) {
+  const t = String(text ?? '')
+  const q = String(query || '').trim().toLowerCase()
+  if (!q) return t
+  const lt = t.toLowerCase()
+  const parts = []
+  let last = 0, idx, key = 0
+  while ((idx = lt.indexOf(q, last)) !== -1) {
+    if (idx > last) parts.push(t.slice(last, idx))
+    parts.push(<mark key={key++} style={{ background:'#25d36633', color:'#4ade80', borderRadius:3, padding:'0 1px' }}>{t.slice(idx, idx + q.length)}</mark>)
+    last = idx + q.length
+  }
+  if (last < t.length) parts.push(t.slice(last))
+  return parts.length ? parts : t
+}
+
+// Etiqueta + color por estado (para el chip al buscar)
+const ESTADO_INFO = {
+  pendiente:    { label:'Pendiente',  color:'#f87171' },
+  atendido:     { label:'Atendido',   color:'#4ade80' },
+  ventaproceso: { label:'En proceso', color:'#f59e0b' },
+  venta:        { label:'Venta',      color:'#10b981' },
+  soporte:      { label:'Soporte',    color:'#a78bfa' },
+  archivado:    { label:'Archivado',  color:'#64748b' },
+}
+
 // ── CONTACT ROW ──────────────────────────────────────────────────
-export function ContactRow({ conv, isActive, onClick }) {
+export function ContactRow({ conv, isActive, onClick, search = '', estado }) {
   const [hovered, setHovered] = useState(false)
+  const searching = String(search || '').trim().length > 0
+  const info = ESTADO_INFO[estado] || null
   return (
     <div
       onClick={onClick}
@@ -69,31 +98,45 @@ export function ContactRow({ conv, isActive, onClick }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontWeight: 700, fontSize: 14, color: '#e2e8f0' }}>
-            {conv.nombre}
+            {highlight(conv.nombre, search)}
           </span>
           <span style={{ fontSize: 11, color: '#94a3b8', flexShrink: 0, marginLeft: 6 }}>
             {fmtTime(conv.last?.timestamp)}
           </span>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 3 }}>
-          <span style={{
-            fontSize: 12,
-            color: conv.unread > 0 ? '#94a3b8' : '#8899aa',
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            maxWidth: 175,
-            fontWeight: conv.unread > 0 ? 600 : 400,
-          }}>
-            {conv.last?.direccion === 'SALIENTE' ? 'Tú: ' : ''}
-            {conv.last?.mensaje}
-          </span>
-          {conv.unread > 0 && (
+        {searching ? (
+          // Al BUSCAR: mostrar el número (grande, resaltado) + en qué bandeja está
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'monospace', color: '#cbd5e1', whiteSpace: 'nowrap' }}>
+              📱 {highlight('+' + conv.telefono, search)}
+            </span>
+            {info && (
+              <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.04em', color: info.color, background: `${info.color}1e`, border: `1px solid ${info.color}44`, borderRadius: 6, padding: '1px 6px', flexShrink: 0 }}>
+                {info.label}
+              </span>
+            )}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 3 }}>
             <span style={{
-              background: '#25d366', color: '#040807',
-              borderRadius: 10, fontSize: 11, fontWeight: 800,
-              padding: '1px 7px', marginLeft: 6, flexShrink: 0,
-            }}>{conv.unread}</span>
-          )}
-        </div>
+              fontSize: 12,
+              color: conv.unread > 0 ? '#94a3b8' : '#8899aa',
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              maxWidth: 175,
+              fontWeight: conv.unread > 0 ? 600 : 400,
+            }}>
+              {conv.last?.direccion === 'SALIENTE' ? 'Tú: ' : ''}
+              {conv.last?.mensaje}
+            </span>
+            {conv.unread > 0 && (
+              <span style={{
+                background: '#25d366', color: '#040807',
+                borderRadius: 10, fontSize: 11, fontWeight: 800,
+                padding: '1px 7px', marginLeft: 6, flexShrink: 0,
+              }}>{conv.unread}</span>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

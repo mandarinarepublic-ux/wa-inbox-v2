@@ -269,11 +269,25 @@ export default function App() {
   // y a la vez sigue en la pestaña 💰 Ventas (que filtra por idVenta, ver abajo).
   const getStatus = (tel) => contacts[tel]?.estado || 'pendiente'
 
-  const searched = convs.filter(c => {
-    const alias = contacts[c.telefono]?.alias || ''
-    return c.nombre.toLowerCase().includes(search.toLowerCase()) ||
-           alias.toLowerCase().includes(search.toLowerCase()) ||
-           c.telefono.includes(search)
+  // Búsqueda tolerante de teléfono: ignora espacios/guiones y el prefijo de país.
+  // Ecuador: 0987498489 (local) == 593987498489 (internacional) == +593 98 749 8489.
+  const soloDigitos = (s) => String(s || '').replace(/\D/g, '')
+  const telLocal    = (s) => soloDigitos(s).replace(/^593/, '').replace(/^0+/, '') // núcleo sin país ni 0
+  const phoneMatch  = (telefono, query) => {
+    const p = soloDigitos(telefono), q = soloDigitos(query)
+    if (!q) return false
+    if (p.includes(q)) return true                       // coincidencia directa / parcial
+    const pl = telLocal(p), ql = telLocal(q)
+    return ql.length >= 7 && pl.endsWith(ql)              // mismo número con/ sin país o 0
+  }
+
+  const q = search.trim().toLowerCase()
+  const isSearching = q.length > 0
+  const searched = !isSearching ? convs : convs.filter(c => {
+    const alias = (contacts[c.telefono]?.alias || '').toLowerCase()
+    return c.nombre.toLowerCase().includes(q) ||
+           alias.includes(q) ||
+           phoneMatch(c.telefono, search)
   })
   // Pestaña "Ventas": muestra TODO el que tenga venta (idVenta), sin importar su estado
   // de flujo. Las demás pestañas filtran por el estado real → un contacto con venta puede
@@ -281,9 +295,13 @@ export default function App() {
   // Venta ACTIVA = tiene pedido (idVenta) y NO está archivada. Así, al archivar una
   // venta, sale de la pestaña 💰 Ventas y pasa a Archivados (las ventas en curso siguen).
   const esVentaActiva = (tel) => hasVenta(tel) && getStatus(tel) !== 'archivado'
-  const filtered = searched.filter(c =>
-    filter === 'venta' ? esVentaActiva(c.telefono) : getStatus(c.telefono) === filter
-  )
+  // Al BUSCAR mostramos TODOS los resultados sin importar la pestaña activa (antes un
+  // número en "Atendidos" no aparecía si estabas parado en "Pendientes").
+  const filtered = isSearching
+    ? searched
+    : searched.filter(c =>
+        filter === 'venta' ? esVentaActiva(c.telefono) : getStatus(c.telefono) === filter
+      )
   const counts = {
     pendiente:     searched.filter(c => getStatus(c.telefono) === 'pendiente').length,
     atendido:      searched.filter(c => getStatus(c.telefono) === 'atendido').length,
@@ -649,15 +667,28 @@ export default function App() {
                 <Spinner size={24} /><span style={{ fontSize:11, color:'#2a3f55' }}>Cargando...</span>
               </div>
             ) : filtered.length === 0 ? (
-              <div style={{ padding:28, textAlign:'center', color:'#2a3f55', fontSize:12 }}>Sin conversaciones {({pendiente:'pendientes',atendido:'atendidas',ventaproceso:'en proceso',venta:'con venta',soporte:'en soporte',archivado:'archivadas'})[filter]||''}</div>
-            ) : filtered.map(conv => (
-              <ContactRow
-                key={conv.telefono}
-                conv={{ ...conv, nombre: displayName(conv.telefono) }}
-                isActive={active===conv.telefono}
-                onClick={() => openConv(conv.telefono)}
-              />
-            ))}
+              <div style={{ padding:28, textAlign:'center', color:'#2a3f55', fontSize:12 }}>
+                {isSearching
+                  ? `Sin resultados para "${search.trim()}"`
+                  : `Sin conversaciones ${({pendiente:'pendientes',atendido:'atendidas',ventaproceso:'en proceso',venta:'con venta',soporte:'en soporte',archivado:'archivadas'})[filter]||''}`}
+              </div>
+            ) : (<>
+              {isSearching && (
+                <div style={{ padding:'8px 16px 4px', fontSize:10, fontWeight:800, letterSpacing:'.06em', color:'#64748b' }}>
+                  {filtered.length} RESULTADO{filtered.length===1?'':'S'} · TODAS LAS BANDEJAS
+                </div>
+              )}
+              {filtered.map(conv => (
+                <ContactRow
+                  key={conv.telefono}
+                  conv={{ ...conv, nombre: displayName(conv.telefono) }}
+                  isActive={active===conv.telefono}
+                  onClick={() => openConv(conv.telefono)}
+                  search={search}
+                  estado={getStatus(conv.telefono)}
+                />
+              ))}
+            </>)}
           </div>
 
           <div style={{ padding:'7px 14px', borderTop:'1px solid #162030', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
