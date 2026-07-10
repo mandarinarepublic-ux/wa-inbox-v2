@@ -178,9 +178,22 @@ export default function App() {
   }
 
   useEffect(() => {
+    // Polling inteligente: solo mientras la pestaña esté VISIBLE. Una pestaña en
+    // segundo plano dejaba de leer datos útiles pero seguía golpeando la cuota de
+    // Sheets cada 8s. Al volver a la pestaña, refrescamos al instante.
+    const start = () => {
+      if (pollRef.current) return
+      pollRef.current = setInterval(load, 8000)
+    }
+    const stop = () => { clearInterval(pollRef.current); pollRef.current = null }
+    const onVisibility = () => {
+      if (document.hidden) stop()
+      else { load(); start() }
+    }
     load()
-    pollRef.current = setInterval(load, 8000)
-    return () => clearInterval(pollRef.current)
+    start()
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => { stop(); document.removeEventListener('visibilitychange', onVisibility) }
   }, [load])
 
   // ── Scroll inteligente ────────────────────────────────────────
