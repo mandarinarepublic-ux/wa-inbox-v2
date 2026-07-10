@@ -276,6 +276,31 @@ Responde SOLO en JSON con estas 3 claves (sin markdown, sin backticks):
   catch { return { resumen: text, razon_no_venta: '', sugerencias: '' } }
 }
 
+// ─── Resaltar coincidencias de búsqueda ───────────────────────────
+// Devuelve el texto con las partes que coinciden envueltas en <mark>.
+// strong=true → resaltado fuerte (coincidencia "activa").
+function highlightMatch(text, query, strong = false) {
+  const t = String(text ?? '')
+  const q = String(query || '').trim().toLowerCase()
+  if (!q) return t
+  const lt = t.toLowerCase()
+  const parts = []
+  let last = 0, idx, key = 0
+  while ((idx = lt.indexOf(q, last)) !== -1) {
+    if (idx > last) parts.push(t.slice(last, idx))
+    parts.push(
+      <mark key={key++} style={{
+        background: strong ? '#f97316' : '#f9731633',
+        color:      strong ? '#fff'    : '#fdba74',
+        borderRadius: 3, padding: '0 1px',
+      }}>{t.slice(idx, idx + q.length)}</mark>
+    )
+    last = idx + q.length
+  }
+  if (last < t.length) parts.push(t.slice(last))
+  return parts.length ? parts : t
+}
+
 // ════════════════════════════════════════════════════════════════
 // COMPONENTE PRINCIPAL
 // ════════════════════════════════════════════════════════════════
@@ -317,10 +342,15 @@ export default function RepublicInbox({ active = false }) {
   const [filterEstado, setFilterEstado] = useState('ALL')
   const [toast,        setToast]        = useState(null)
   const [showSettings, setShowSettings] = useState(false)
+  // Buscador de texto DENTRO de la conversación abierta
+  const [convSearch,     setConvSearch]     = useState('')
+  const [showConvSearch, setShowConvSearch] = useState(false)
+  const [matchIdx,       setMatchIdx]       = useState(0)
 
   const messagesEnd = useRef(null)
   const pollRef     = useRef(null)
   const loadedRef   = useRef(false) // evitar doble carga en StrictMode
+  const msgRefs     = useRef({})    // refs a cada burbuja de mensaje (para scroll a coincidencia)
 
   // ── Toast ──────────────────────────────────────────────────────
   const showToast = useCallback((msg, type = 'info') => {
@@ -395,10 +425,23 @@ export default function RepublicInbox({ active = false }) {
     return () => clearInterval(pollRef.current)
   }, [activeChat, bridgeOk])
 
-  // ── Auto scroll ────────────────────────────────────────────────
+  // ── Auto scroll (solo si NO estás buscando dentro del chat) ────
   useEffect(() => {
+    if (convSearch.trim()) return
     messagesEnd.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [conversation])
+  }, [conversation, convSearch])
+
+  // ── Scroll a la coincidencia activa del buscador de conversación ─
+  useEffect(() => {
+    const q = convSearch.trim().toLowerCase()
+    if (!q) return
+    const matches = conversation
+      .map((m, i) => ((m.text || '').toLowerCase().includes(q) ? i : -1))
+      .filter(i => i >= 0)
+    if (!matches.length) return
+    const targetI = matches[Math.min(matchIdx, matches.length - 1)]
+    msgRefs.current[targetI]?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [matchIdx, convSearch, conversation])
 
   // ── Abrir chat ─────────────────────────────────────────────────
   const openChat = useCallback(async (contact) => {
@@ -406,6 +449,9 @@ export default function RepublicInbox({ active = false }) {
     setConversation([])
     setAnalysis(null)
     setMsgLimit(50)
+    setConvSearch('')
+    setShowConvSearch(false)
+    setMatchIdx(0)
     setLoadingConv(true)
     try {
       const name = contact.alias || contact.nombre || contact.name || contact.telefono
@@ -503,6 +549,19 @@ export default function RepublicInbox({ active = false }) {
     ARCHIVADO:    filteredList.filter(c => (c.estado || '').toUpperCase() === 'ARCHIVADO'),
   }
 
+  const isSearching = searchQuery.trim().length > 0
+
+  // Coincidencias del buscador DENTRO de la conversación abierta
+  const convQuery   = convSearch.trim().toLowerCase()
+  const convMatches = convQuery
+    ? conversation.map((m, i) => ((m.text || '').toLowerCase().includes(convQuery) ? i : -1)).filter(i => i >= 0)
+    : []
+  const activeMatchI = convMatches.length ? convMatches[Math.min(matchIdx, convMatches.length - 1)] : -1
+  const gotoMatch = (dir) => {
+    if (!convMatches.length) return
+    setMatchIdx(i => (i + dir + convMatches.length) % convMatches.length)
+  }
+
   // ════════════════════════════════════════════════════════════════
   // RENDER
   // ════════════════════════════════════════════════════════════════
@@ -569,13 +628,20 @@ export default function RepublicInbox({ active = false }) {
             <input
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Buscar contacto..."
+              placeholder="Buscar nombre o número..."
               style={{ flex:1, background:'transparent', border:'none', outline:'none', color:'#e2e8f0', fontSize:12, fontFamily:'Outfit,sans-serif' }}
             />
             {searchQuery && (
               <button onClick={() => setSearchQuery('')} style={{ background:'transparent', border:'none', color:'#334155', cursor:'pointer', fontSize:13, padding:0 }}>✕</button>
             )}
           </div>
+          {isSearching && (
+            <div style={{ fontSize:10, color:'#64748b', padding:'5px 4px 0', fontWeight:600 }}>
+              {filteredList.length === 0
+                ? `Sin resultados para "${searchQuery.trim()}"`
+                : `${filteredList.length} resultado${filteredList.length === 1 ? '' : 's'} para "${searchQuery.trim()}"`}
+            </div>
+          )}
         </div>
 
         {/* Tabs de filtro */}
@@ -639,11 +705,18 @@ export default function RepublicInbox({ active = false }) {
                         </div>
                         <div style={{ flex:1, minWidth:0 }}>
                           <div style={{ fontSize:13, fontWeight:600, color:'#e2e8f0', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
-                            {name}
+                            {highlightMatch(name, searchQuery)}
                           </div>
-                          <div style={{ fontSize:11, color:'#334155', marginTop:1, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
-                            {chat.lastMsg || chat.telefono || ''}
-                          </div>
+                          {isSearching ? (
+                            // Al buscar: mostrar SIEMPRE el número, grande y resaltado
+                            <div style={{ fontSize:12, fontWeight:700, fontFamily:'monospace', color:'#94a3b8', marginTop:2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                              📱 {highlightMatch(chat.telefono || chat.name || '—', searchQuery)}
+                            </div>
+                          ) : (
+                            <div style={{ fontSize:11, color:'#334155', marginTop:1, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                              {chat.lastMsg || chat.telefono || ''}
+                            </div>
+                          )}
                         </div>
                         {chat.unread > 0 && (
                           <div style={{ background:'#f97316', color:'#fff', borderRadius:10, padding:'2px 6px', fontSize:10, fontWeight:700, flexShrink:0 }}>
@@ -722,8 +795,55 @@ export default function RepublicInbox({ active = false }) {
                 >
                   {analyzing ? '⏳' : '🤖'} {analyzing ? 'Analizando...' : 'Analizar'}
                 </button>
+
+                <button
+                  onClick={() => {
+                    setShowConvSearch(v => {
+                      const next = !v
+                      if (!next) { setConvSearch(''); setMatchIdx(0) }
+                      return next
+                    })
+                  }}
+                  title="Buscar en esta conversación"
+                  style={{
+                    padding:'5px 10px', borderRadius:7,
+                    border:`1px solid ${showConvSearch ? '#60a5fa' : '#1e2d3d'}`,
+                    background: showConvSearch ? '#60a5fa22' : 'transparent',
+                    color: showConvSearch ? '#60a5fa' : '#475569',
+                    fontSize:11, fontWeight:700, cursor:'pointer', whiteSpace:'nowrap',
+                  }}
+                >🔍 Buscar</button>
               </div>
             </div>
+
+            {/* Barra de búsqueda dentro de la conversación */}
+            {showConvSearch && (
+              <div style={{ padding:'8px 14px', borderBottom:'1px solid #162030', display:'flex', alignItems:'center', gap:8, flexShrink:0, background:'#0a0f1a' }}>
+                <span style={{ color:'#60a5fa', fontSize:13 }}>🔍</span>
+                <input
+                  autoFocus
+                  value={convSearch}
+                  onChange={e => { setConvSearch(e.target.value); setMatchIdx(0) }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') { e.preventDefault(); gotoMatch(e.shiftKey ? -1 : 1) }
+                    if (e.key === 'Escape') { setConvSearch(''); setShowConvSearch(false); setMatchIdx(0) }
+                  }}
+                  placeholder="Buscar texto en el chat..."
+                  style={{ flex:1, background:'transparent', border:'none', outline:'none', color:'#e2e8f0', fontSize:13, fontFamily:'Outfit,sans-serif' }}
+                />
+                {convSearch.trim() && (
+                  <span style={{ fontSize:11, color: convMatches.length ? '#94a3b8' : '#f87171', fontWeight:700, whiteSpace:'nowrap' }}>
+                    {convMatches.length ? `${Math.min(matchIdx, convMatches.length - 1) + 1} / ${convMatches.length}` : 'Sin resultados'}
+                  </span>
+                )}
+                <button onClick={() => gotoMatch(-1)} disabled={!convMatches.length} title="Anterior (Shift+Enter)"
+                  style={{ background:'transparent', border:'1px solid #1e2d3d', borderRadius:6, color: convMatches.length ? '#94a3b8' : '#334155', cursor: convMatches.length ? 'pointer' : 'default', fontSize:12, padding:'2px 7px' }}>▲</button>
+                <button onClick={() => gotoMatch(1)} disabled={!convMatches.length} title="Siguiente (Enter)"
+                  style={{ background:'transparent', border:'1px solid #1e2d3d', borderRadius:6, color: convMatches.length ? '#94a3b8' : '#334155', cursor: convMatches.length ? 'pointer' : 'default', fontSize:12, padding:'2px 7px' }}>▼</button>
+                <button onClick={() => { setConvSearch(''); setShowConvSearch(false); setMatchIdx(0) }} title="Cerrar"
+                  style={{ background:'transparent', border:'none', color:'#334155', cursor:'pointer', fontSize:14, padding:'0 2px' }}>✕</button>
+              </div>
+            )}
 
             {/* Mensajes */}
             <div style={{ flex:1, overflowY:'auto', padding:'16px 20px' }}>
@@ -761,15 +881,17 @@ export default function RepublicInbox({ active = false }) {
               ) : (
                 conversation.map((msg, i) => {
                   const isOut = msg.direction === 'saliente'
+                  const isActiveMatch = i === activeMatchI
                   return (
-                    <div key={i} style={{ display:'flex', justifyContent: isOut ? 'flex-end' : 'flex-start', marginBottom:6 }}>
+                    <div key={i} ref={el => { msgRefs.current[i] = el }} style={{ display:'flex', justifyContent: isOut ? 'flex-end' : 'flex-start', marginBottom:6 }}>
                       <div style={{
                         maxWidth:'72%', padding: msg.mediaUrl && msg.tipo === 'image' ? '4px' : '8px 12px',
                         fontSize:13, lineHeight:1.5,
                         borderRadius: isOut ? '16px 4px 16px 16px' : '4px 16px 16px 16px',
                         background: isOut ? 'linear-gradient(135deg,#f97316,#ea580c)' : '#0d1828',
                         color: isOut ? '#fff' : '#e2e8f0',
-                        border: isOut ? 'none' : '1px solid #162030',
+                        border: isActiveMatch ? '2px solid #60a5fa' : (isOut ? 'none' : '1px solid #162030'),
+                        boxShadow: isActiveMatch ? '0 0 10px #60a5fa66' : 'none',
                         overflow: 'hidden',
                       }}>
                         {/* Mensaje citado */}
@@ -801,7 +923,7 @@ export default function RepublicInbox({ active = false }) {
                             />
                             <span style={{ display:'none', padding:'6px 8px' }}>{msg.text}</span>
                             {msg.text && !['🖼️ Imagen','🎞️ GIF','🎭 Sticker'].includes(msg.text) && (
-                              <div style={{ padding:'4px 8px 6px', fontSize:13 }}>{msg.text}</div>
+                              <div style={{ padding:'4px 8px 6px', fontSize:13 }}>{highlightMatch(msg.text, convSearch, isActiveMatch)}</div>
                             )}
                           </div>
                         ) : msg.mediaUrl && msg.tipo === 'audio' ? (
@@ -817,7 +939,7 @@ export default function RepublicInbox({ active = false }) {
                             </video>
                           </div>
                         ) : (
-                          <span>{msg.text}</span>
+                          <span>{highlightMatch(msg.text, convSearch, isActiveMatch)}</span>
                         )}
                         <div style={{ fontSize:9, color: isOut ? '#ffffff60' : '#334155', marginTop:4, textAlign:'right', padding: msg.mediaUrl ? '0 8px 4px' : 0 }}>
                           {msg.time}
