@@ -73,8 +73,18 @@ function groupByConversation(rows) {
         messages: [],
         last_time: row.Fecha || '',
         unread: 0,
+        // Pauta: de qué anuncio/publicación viene el cliente. Llega solo en la fila de
+        // origen (primer mensaje desde un anuncio / comentario en una publicación).
+        // FB: Ad_ID/Pauta(título)/Ref del referral CTM. IG: Ad_ID=media.id, Ref=tipo (AD/REELS/FEED).
+        pautaAdId:  '',
+        pautaTitle: '',
+        pautaRef:   '',
       }
     }
+    // Captura la primera aparición no vacía de cada campo de pauta
+    if (!map[key].pautaAdId  && (row.Ad_ID || '').trim()) map[key].pautaAdId  = (row.Ad_ID || '').trim()
+    if (!map[key].pautaTitle && (row.Pauta || '').trim()) map[key].pautaTitle = (row.Pauta || '').trim()
+    if (!map[key].pautaRef   && (row.Ref   || '').trim()) map[key].pautaRef   = (row.Ref   || '').trim()
     const msg   = (row.Mensaje || '').trim()
     const reply = (row.MensajeSalida || '').trim()
     if (msg)   map[key].messages.push({ id: row.ID || Date.now(), from: 'user',  text: msg,   time: row.Fecha || '' })
@@ -84,6 +94,35 @@ function groupByConversation(rows) {
     if (row.Nombre && row.Nombre.trim()) map[key].nombre = row.Nombre.trim()
   })
   return Object.values(map).sort((a, b) => new Date(b.last_time) - new Date(a.last_time))
+}
+
+// Devuelve la info de pauta lista para mostrar, o null si la conversación no vino
+// de un anuncio/publicación.
+function pautaInfo(conv) {
+  const title = conv.pautaTitle, adId = conv.pautaAdId, ref = conv.pautaRef
+  if (!title && !adId && !ref) return null
+  if (conv.canal === 'IG') {
+    // IG son comentarios: ref = tipo de media (AD/REELS/FEED/STORY), adId = media.id
+    const tipo = (ref || '').toUpperCase()
+    const tipoLabel = { AD: 'un anuncio', REELS: 'un Reel', FEED: 'una publicación', STORY: 'una historia' }[tipo] || 'una publicación'
+    return { esAnuncio: tipo === 'AD', titulo: `Comentó en ${tipoLabel}`, detalle: adId }
+  }
+  // FB: referral de anuncio Click-to-Messenger
+  return { esAnuncio: true, titulo: title || (ref ? `ref: ${ref}` : 'Anuncio (Click-to-Messenger)'), detalle: adId || ref }
+}
+
+function PautaBadge({ conv }) {
+  const info = pautaInfo(conv)
+  if (!info) return null
+  return (
+    <div style={{ display:'inline-flex', alignItems:'center', gap:6, marginTop:5, padding:'4px 9px', borderRadius:8, background:'rgba(245,158,11,.1)', border:'1px solid rgba(245,158,11,.28)', maxWidth:'100%' }}>
+      <span style={{ fontSize:12, flexShrink:0 }}>📢</span>
+      <div style={{ minWidth:0 }}>
+        <div style={{ fontSize:10, fontWeight:800, color:'#f59e0b', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{info.titulo}</div>
+        {info.detalle && <div style={{ fontSize:9, color:'#64748b', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>ID: {info.detalle}</div>}
+      </div>
+    </div>
+  )
 }
 
 // ── COMPONENTES ──────────────────────────────────────────────────────────────
@@ -137,9 +176,12 @@ function ConvRow({ conv, isActive, onClick }) {
           <span style={{ fontSize:13, fontWeight:700, color:'#e2e8f0', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:130 }}>{conv.nombre}</span>
           <span style={{ fontSize:9, color:'#334155', flexShrink:0 }}>{conv.last_time ? new Date(conv.last_time).toLocaleTimeString('es-EC', { hour:'2-digit', minute:'2-digit' }) : ''}</span>
         </div>
-        <div style={{ display:'flex', gap:4, marginBottom:3 }}>
+        <div style={{ display:'flex', gap:4, marginBottom:3, alignItems:'center' }}>
           <ChannelBadge channel={conv.canal} />
           <StatusBadge status={conv.status} />
+          {pautaInfo(conv) && (
+            <span title="Vino de un anuncio/publicación" style={{ fontSize:10, color:'#f59e0b' }}>📢</span>
+          )}
         </div>
         <div style={{ fontSize:11, color:'#334155', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
           {conv.messages[conv.messages.length - 1]?.text || '—'}
@@ -317,6 +359,7 @@ export default function SocialInbox({ active: isVisible }) {
                 <ChannelBadge channel={selectedConv.canal} />
               </div>
               <div style={{ fontSize:10, color:'#475569' }}>{CHANNEL_META[selectedConv.canal]?.label} · {selectedConv.sender_id}</div>
+              <PautaBadge conv={selectedConv} />
             </div>
             <div style={{ display:'flex', gap:4, flexShrink:0 }}>
               {['PENDIENTE','VENTAPROCESO','ATENDIDO','ARCHIVADO'].map(s => {
