@@ -103,6 +103,10 @@ export default function App() {
   const [isVideo,      setIsVideo]      = useState(false)
   const [filter,       setFilter]       = useState('pendiente')
   const [searchMode,   setSearchMode]   = useState('contacto') // 'contacto' | 'mensaje'
+  // Ancho del panel derecho (notas / respuestas rápidas), redimensionable con el mouse
+  const [rightWidth,   setRightWidth]   = useState(340)
+  const rightWidthRef  = useRef(340)
+  const resizingRef    = useRef(false)
 
   // ── Estado botones interactivos ───────────────────────────────
   const [showBtnPanel, setShowBtnPanel] = useState(false)
@@ -213,6 +217,44 @@ export default function App() {
     const el = msgsRef.current
     if (!el) return
     autoScroll.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60
+  }
+
+  // ── Panel derecho redimensionable ─────────────────────────────
+  useEffect(() => { rightWidthRef.current = rightWidth }, [rightWidth])
+  useEffect(() => {
+    try {
+      const v = parseInt(localStorage.getItem('mandi_right_width') || '', 10)
+      if (v >= 280 && v <= 680) setRightWidth(v)
+    } catch {}
+    const clamp = (w) => Math.min(680, Math.max(280, w))
+    const onMove = (e) => {
+      if (!resizingRef.current) return
+      const x = e.touches ? e.touches[0].clientX : e.clientX
+      setRightWidth(clamp(window.innerWidth - x)) // panel pegado al borde derecho
+    }
+    const onUp = () => {
+      if (!resizingRef.current) return
+      resizingRef.current = false
+      document.body.style.userSelect = ''
+      document.body.style.cursor = ''
+      try { localStorage.setItem('mandi_right_width', String(rightWidthRef.current)) } catch {}
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    window.addEventListener('touchmove', onMove, { passive: false })
+    window.addEventListener('touchend', onUp)
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      window.removeEventListener('touchmove', onMove)
+      window.removeEventListener('touchend', onUp)
+    }
+  }, [])
+
+  const startResize = (e) => {
+    resizingRef.current = true
+    document.body.style.userSelect = 'none'
+    document.body.style.cursor = 'col-resize'
   }
 
   // ── Aviso de mensajes nuevos (pestaña del navegador + ícono) ──
@@ -954,18 +996,29 @@ export default function App() {
           </div>
         )}
 
-        {/* ══════ RIGHT PANEL (desktop) ══════ */}
+        {/* ══════ RIGHT PANEL (desktop) — redimensionable ══════ */}
         {activeConv && (
-          <div className="desktop-right right-col">
-            <RightPanel
-              activeConv={activeConv}
-              contactInfo={currentContact}
-              onQuickReply={handleQuickReply}
-              onSendText={handleSendText}
-              onSendImage={handleSendAIImage}
-              onUpdateContact={handleUpdateContact}
-              windowOpen={windowOpen}
+          <div className="desktop-right" style={{ width: rightWidth, flexShrink:0, display:'flex', position:'relative' }}>
+            {/* Asa de arrastre para ensanchar/adelgazar */}
+            <div
+              onMouseDown={startResize}
+              onTouchStart={startResize}
+              title="Arrastra para ajustar el ancho"
+              style={{ width:6, flexShrink:0, cursor:'col-resize', background:'#111c2a', borderLeft:'1px solid #162030', transition:'background .15s', touchAction:'none' }}
+              onMouseEnter={e => e.currentTarget.style.background = '#25d366'}
+              onMouseLeave={e => e.currentTarget.style.background = '#111c2a'}
             />
+            <div className="right-col" style={{ width:'auto', flex:1, borderLeft:'none' }}>
+              <RightPanel
+                activeConv={activeConv}
+                contactInfo={currentContact}
+                onQuickReply={handleQuickReply}
+                onSendText={handleSendText}
+                onSendImage={handleSendAIImage}
+                onUpdateContact={handleUpdateContact}
+                windowOpen={windowOpen}
+              />
+            </div>
           </div>
         )}
         {showRight && (
