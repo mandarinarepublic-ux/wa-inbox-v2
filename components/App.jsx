@@ -102,6 +102,7 @@ export default function App() {
   const [imgResult,    setImgResult]    = useState(null)
   const [isVideo,      setIsVideo]      = useState(false)
   const [filter,       setFilter]       = useState('pendiente')
+  const [searchMode,   setSearchMode]   = useState('contacto') // 'contacto' | 'mensaje'
 
   // ── Estado botones interactivos ───────────────────────────────
   const [showBtnPanel, setShowBtnPanel] = useState(false)
@@ -283,18 +284,37 @@ export default function App() {
 
   const q = search.trim().toLowerCase()
   const isSearching = q.length > 0
-  const searched = !isSearching ? convs : convs.filter(c => {
-    const alias = (contacts[c.telefono]?.alias || '').toLowerCase()
-    return c.nombre.toLowerCase().includes(q) ||
-           alias.includes(q) ||
-           phoneMatch(c.telefono, search)
-  })
+  const searchingMsgs = isSearching && searchMode === 'mensaje'
+
+  // Fragmento del mensaje más reciente que contiene la búsqueda (para el modo Mensajes)
+  const matchSnippet = (c) => {
+    const m = [...(c.msgs || [])].reverse().find(m => (m.mensaje || '').toLowerCase().includes(q))
+    if (!m) return ''
+    const t = String(m.mensaje || '')
+    const i = t.toLowerCase().indexOf(q)
+    const start = Math.max(0, i - 28)
+    const end   = i + q.length + 42
+    return (start > 0 ? '…' : '') + t.slice(start, end) + (end < t.length ? '…' : '')
+  }
+
+  const searched = !isSearching ? convs
+    : searchingMsgs
+      ? convs.filter(c => (c.msgs || []).some(m => (m.mensaje || '').toLowerCase().includes(q)))
+      : convs.filter(c => {
+          const alias = (contacts[c.telefono]?.alias || '').toLowerCase()
+          return c.nombre.toLowerCase().includes(q) ||
+                 alias.includes(q) ||
+                 phoneMatch(c.telefono, search)
+        })
   // Pestaña "Ventas": muestra TODO el que tenga venta (idVenta), sin importar su estado
   // de flujo. Las demás pestañas filtran por el estado real → un contacto con venta puede
   // aparecer a la vez en Pendiente (si te escribió) y en Ventas.
   // Venta ACTIVA = tiene pedido (idVenta) y NO está archivada. Así, al archivar una
   // venta, sale de la pestaña 💰 Ventas y pasa a Archivados (las ventas en curso siguen).
-  const esVentaActiva = (tel) => hasVenta(tel) && getStatus(tel) !== 'archivado'
+  // Venta ACTIVA = tiene pedido creado (idVenta) O fue marcado manualmente con el botón
+  // "💰 Venta" (estado='venta'), y NO está archivado. Antes solo contaba idVenta, así que
+  // marcar Venta a mano hacía "desaparecer" el chat (no salía en Ventas ni en su bandeja).
+  const esVentaActiva = (tel) => (hasVenta(tel) || getStatus(tel) === 'venta') && getStatus(tel) !== 'archivado'
   // Al BUSCAR mostramos TODOS los resultados sin importar la pestaña activa (antes un
   // número en "Atendidos" no aparecía si estabas parado en "Pendientes").
   const filtered = isSearching
@@ -369,7 +389,7 @@ export default function App() {
     await new Promise(r => setTimeout(r, 0))
     const [result] = await Promise.all([
       sendReply(activeConv.telefono, activeConv.nombre, t),
-      changeStatus(activeConv.telefono, currentStatus === 'ventaproceso' ? 'ventaproceso' : 'atendido'),
+      changeStatus(activeConv.telefono, ['ventaproceso','venta'].includes(currentStatus) ? currentStatus : 'atendido'),
     ])
     setSending(false); setToast(result)
     setTimeout(() => setToast(null), 4000)
@@ -437,7 +457,7 @@ export default function App() {
         }
       }
       setImgResult({ ok: allOk })
-      await changeStatus(activeConv.telefono, currentStatus === 'ventaproceso' ? 'ventaproceso' : 'atendido')
+      await changeStatus(activeConv.telefono, ['ventaproceso','venta'].includes(currentStatus) ? currentStatus : 'atendido')
       setTimeout(() => { setImgFiles([]); setImgResult(null); setIsVideo(false); setImgProgress(0); if (fileRef.current) fileRef.current.value = '' }, 1500)
       setTimeout(load, 4000)
     } catch { setImgResult({ ok: false }) }
@@ -471,7 +491,7 @@ export default function App() {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ Telefono: activeConv.telefono, Nombre: activeConv.nombre, ImagenURL: imageUrl }),
     })
-    if (res.ok) await changeStatus(activeConv.telefono, currentStatus === 'ventaproceso' ? 'ventaproceso' : 'atendido')
+    if (res.ok) await changeStatus(activeConv.telefono, ['ventaproceso','venta'].includes(currentStatus) ? currentStatus : 'atendido')
   }
 
   // ── Toggle modo IA ────────────────────────────────────────────
@@ -513,7 +533,7 @@ export default function App() {
     setTimeout(()=>setToast(null),4000)
     if (result.ok) {
       setInput(''); setBtnTexts(['','','']); setShowBtnPanel(false)
-      await changeStatus(activeConv.telefono, currentStatus==='ventaproceso'?'ventaproceso':'atendido')
+      await changeStatus(activeConv.telefono, ['ventaproceso','venta'].includes(currentStatus)?currentStatus:'atendido')
       setTimeout(load,4000)
     }
   }
@@ -633,10 +653,29 @@ export default function App() {
                 <button onClick={() => setShowSetup(true)} style={{ background:'rgba(255,255,255,.04)', border:'1px solid #1a2d40', color:'#64748b', borderRadius:8, width:28, height:28, cursor:'pointer', fontSize:12 }}>⚙</button>
               </div>
             </div>
-            <div style={{ position:'relative', marginBottom:10 }}>
+            <div style={{ position:'relative', marginBottom:6 }}>
               <span style={{ position:'absolute', left:9, top:'50%', transform:'translateY(-50%)', color:'#2a3f55', fontSize:12, pointerEvents:'none' }}>🔍</span>
-              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar..."
-                style={{ width:'100%', padding:'7px 10px 7px 28px', background:'#111c2a', border:'1px solid #1a2d40', borderRadius:8, color:'#e2e8f0', fontSize:12, outline:'none' }} />
+              <input value={search} onChange={e => setSearch(e.target.value)}
+                placeholder={searchMode === 'mensaje' ? 'Buscar en mensajes (ej: Hoodie)...' : 'Buscar nombre o número...'}
+                style={{ width:'100%', padding:'7px 28px 7px 28px', background:'#111c2a', border:`1px solid ${searchMode==='mensaje' ? 'rgba(96,165,250,.4)' : '#1a2d40'}`, borderRadius:8, color:'#e2e8f0', fontSize:12, outline:'none' }} />
+              {search && (
+                <button onClick={() => setSearch('')} style={{ position:'absolute', right:8, top:'50%', transform:'translateY(-50%)', background:'transparent', border:'none', color:'#475569', cursor:'pointer', fontSize:13, padding:0, lineHeight:1 }}>✕</button>
+              )}
+            </div>
+            {/* Selector de tipo de búsqueda */}
+            <div style={{ display:'flex', gap:4, marginBottom:10 }}>
+              {[
+                { key:'contacto', label:'👤 Contactos' },
+                { key:'mensaje',  label:'💬 Mensajes'  },
+              ].map(({ key, label }) => (
+                <button key={key} onClick={() => setSearchMode(key)} style={{
+                  flex:1, padding:'5px 2px', fontSize:10, fontWeight:700,
+                  background: searchMode===key ? 'rgba(96,165,250,.15)' : 'transparent',
+                  border: `1px solid ${searchMode===key ? 'rgba(96,165,250,.45)' : '#1a2d40'}`,
+                  color: searchMode===key ? '#60a5fa' : '#475569',
+                  borderRadius:7, cursor:'pointer', fontFamily:'inherit', transition:'all .15s',
+                }}>{label}</button>
+              ))}
             </div>
             <div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>
               {[
@@ -669,13 +708,13 @@ export default function App() {
             ) : filtered.length === 0 ? (
               <div style={{ padding:28, textAlign:'center', color:'#2a3f55', fontSize:12 }}>
                 {isSearching
-                  ? `Sin resultados para "${search.trim()}"`
+                  ? (searchingMsgs ? `Ningún mensaje dice "${search.trim()}"` : `Sin resultados para "${search.trim()}"`)
                   : `Sin conversaciones ${({pendiente:'pendientes',atendido:'atendidas',ventaproceso:'en proceso',venta:'con venta',soporte:'en soporte',archivado:'archivadas'})[filter]||''}`}
               </div>
             ) : (<>
               {isSearching && (
                 <div style={{ padding:'8px 16px 4px', fontSize:10, fontWeight:800, letterSpacing:'.06em', color:'#64748b' }}>
-                  {filtered.length} RESULTADO{filtered.length===1?'':'S'} · TODAS LAS BANDEJAS
+                  {filtered.length} {searchingMsgs ? (filtered.length===1?'CHAT CON':'CHATS CON') : `RESULTADO${filtered.length===1?'':'S'}`}{searchingMsgs ? ' ESE MENSAJE' : ' · TODAS LAS BANDEJAS'}
                 </div>
               )}
               {filtered.map(conv => (
@@ -686,6 +725,7 @@ export default function App() {
                   onClick={() => openConv(conv.telefono)}
                   search={search}
                   estado={getStatus(conv.telefono)}
+                  msgSnippet={searchingMsgs ? matchSnippet(conv) : null}
                 />
               ))}
             </>)}

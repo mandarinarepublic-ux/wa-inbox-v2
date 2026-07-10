@@ -76,7 +76,7 @@ const ESTADO_INFO = {
 }
 
 // ── CONTACT ROW ──────────────────────────────────────────────────
-export function ContactRow({ conv, isActive, onClick, search = '', estado }) {
+export function ContactRow({ conv, isActive, onClick, search = '', estado, msgSnippet = null }) {
   const [hovered, setHovered] = useState(false)
   const searching = String(search || '').trim().length > 0
   const info = ESTADO_INFO[estado] || null
@@ -104,8 +104,23 @@ export function ContactRow({ conv, isActive, onClick, search = '', estado }) {
             {fmtTime(conv.last?.timestamp)}
           </span>
         </div>
-        {searching ? (
-          // Al BUSCAR: mostrar el número (grande, resaltado) + en qué bandeja está
+        {msgSnippet != null ? (
+          // Búsqueda por MENSAJE: mostrar el fragmento que coincide + bandeja
+          <div style={{ marginTop: 4 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: 11, color: '#8899aa', fontFamily: 'monospace' }}>+{conv.telefono}</span>
+              {info && (
+                <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.04em', color: info.color, background: `${info.color}1e`, border: `1px solid ${info.color}44`, borderRadius: 6, padding: '1px 6px', flexShrink: 0 }}>
+                  {info.label}
+                </span>
+              )}
+            </div>
+            <div style={{ fontSize: 12, color: '#cbd5e1', marginTop: 3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.4 }}>
+              💬 {highlight(msgSnippet, search)}
+            </div>
+          </div>
+        ) : searching ? (
+          // Al BUSCAR contacto: mostrar el número (grande, resaltado) + en qué bandeja está
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
             <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'monospace', color: '#cbd5e1', whiteSpace: 'nowrap' }}>
               📱 {highlight('+' + conv.telefono, search)}
