@@ -12,6 +12,24 @@ const META_TOKEN    = process.env.META_TOKEN || ''
 const META_PHONE_ID = process.env.META_PHONE_ID || '1024077200794372'
 const GRAPH_URL     = `https://graph.facebook.com/v19.0/${META_PHONE_ID}/messages`
 
+// Fallback temporal a Make: mientras META_TOKEN NO esté configurado en Vercel,
+// seguimos enviando por Make para no cortar el servicio. En cuanto agregues el
+// token, esta ruta pasa sola a enviar DIRECTO a Meta y Make queda bypasseado.
+const MAKE_SEND_WEBHOOK = process.env.MAKE_SEND_WEBHOOK || 'https://hook.us2.make.com/2j5dzq4gjqkjjnyxiyb46bons15awy2k'
+
+async function enviarPorMake(body) {
+  try {
+    const res = await fetch(MAKE_SEND_WEBHOOK, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    return NextResponse.json({ ok: res.ok, via: 'make' })
+  } catch (err) {
+    return NextResponse.json({ ok: false, error: err.message, via: 'make' }, { status: 502 })
+  }
+}
+
 const soloDigitos = (s) => String(s || '').replace(/\D/g, '')
 
 // Traduce el body del cliente → { payload Graph, tipo, contenido, mediaUrl, mediaId }
@@ -83,10 +101,11 @@ function construir(body) {
 
 export async function POST(req) {
   try {
-    if (!META_TOKEN) {
-      return NextResponse.json({ ok: false, error: 'META_TOKEN no configurado' }, { status: 500 })
-    }
     const body = await req.json()
+
+    // Sin token todavía → no cortamos el servicio: enviamos por Make (temporal).
+    if (!META_TOKEN) return enviarPorMake(body)
+
     const { payload, tipo, contenido, mediaUrl, mediaId } = construir(body)
 
     const res  = await fetch(GRAPH_URL, {
