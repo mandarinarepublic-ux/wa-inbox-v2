@@ -1,9 +1,42 @@
 import { NextResponse } from 'next/server'
 import { readSheet, appendRow } from '@/lib/sheets'
-import { registrarContactoEntrante } from '@/lib/contactos'
+import { registrarContactoEntrante, getContactos } from '@/lib/contactos'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
+
+// ── Agente IA (mandi-agent) — reemplaza el módulo HTTP que llamaba Make ────────
+// El agente NO envía el WhatsApp: DEVUELVE el texto. Nosotros lo enviamos por
+// /api/saliente (que además lo registra en MENSAJES). Solo se llama si el contacto
+// tiene ModoIA = "IA" (igual que el filtro "IA PRENDIDA" del escenario de Make).
+const AGENT_URL = process.env.MANDI_AGENT_URL || 'https://mandi-agent.vercel.app/api/agent'
+const AGENT_KEY = process.env.MANDI_AGENT_KEY || 'mandi_republic_2024'
+
+const tail9 = (s) => String(s || '').replace(/\D/g, '').replace(/^593/, '').replace(/^0+/, '').slice(-9)
+
+async function responderConIA(origin, phone, name, message) {
+  try {
+    const r = await fetch(AGENT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-mandi-key': AGENT_KEY },
+      body: JSON.stringify({ phone, name: name || '', message, source: 'webhook' }),
+      signal: AbortSignal.timeout(22000),
+    })
+    const data = await r.json().catch(() => ({}))
+    if (!r.ok) { console.error('[webhook IA] agente', r.status, data?.error || ''); return }
+    const reply = String(data?.reply_clean || data?.reply || '').trim()
+    if (!reply) return
+    // Enviar la respuesta del agente (texto con sus URLs de foto) por nuestra ruta,
+    // que maneja Meta-directo-o-Make y registra la salida en la hoja.
+    await fetch(`${origin}/api/saliente`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ Telefono: phone, Nombre: name || '', Mensaje: reply }),
+    }).catch(e => console.error('[webhook IA] envío falló:', e.message))
+  } catch (e) {
+    console.error('[webhook IA] agente falló:', e.message)
+  }
+}
 
 // ── Webhook de Meta/WhatsApp — RECEPCIÓN directa (reemplaza a Make) ────────────
 // Meta llama aquí con cada mensaje entrante. Escribimos la fila en MENSAJES y
@@ -86,6 +119,15 @@ export async function POST(req) {
       const rows   = await readSheet('MENSAJES').catch(() => [])
       const vistos = new Set(rows.map(r => String(r[0] || '')))
 
+      // Para decidir la auto-respuesta IA necesitamos el ModoIA del contacto.
+      const contactos = await getContactos().catch(() => [])
+      const modoIAde = (phone) => {
+        const t = tail9(phone)
+        const c = contactos.find(c => tail9(c.telefono) === t)
+        return c ? c.modoIA !== false : true // contacto nuevo → IA prendida por defecto
+      }
+      const origin = new URL(req.url).origin
+
       for (const m of nuevos) {
         if (m.wamid && vistos.has(m.wamid)) continue
         vistos.add(m.wamid)
@@ -97,6 +139,11 @@ export async function POST(req) {
         ])
         try { await registrarContactoEntrante(m.telefono, m.nombre, m.telefono) }
         catch (e) { console.error('[/api/webhook] contacto:', e.message) }
+
+        // Auto-respuesta IA: solo texto y solo si el contacto tiene la IA prendida.
+        if (m.tipo === 'texto' && String(m.contenido).trim() && modoIAde(m.telefono)) {
+          await responderConIA(origin, m.telefono, m.nombre, m.contenido)
+        }
       }
     }
 

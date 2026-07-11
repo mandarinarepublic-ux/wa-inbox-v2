@@ -216,20 +216,25 @@ export function QuickReplies({ onSelect }) {
 // ── MEDIA CONTENT ────────────────────────────────────────────────
 function MediaContent({ tipo, mediaUrl, mediaId }) {
   const url = mediaUrl || ''
+  const t   = String(tipo || '').toLowerCase()
+  const has = !!(url || mediaId) // entrante directo de Meta trae solo mediaId (sin url)
 
-  // Las URLs de Meta exigen token → pasan por el proxy /api/media. Preferimos el
-  // MediaID (no caduca); si no hay, mandamos la URL. El resto de fuentes van directas.
+  // Fuente: con MediaID (entrante de Meta) o URL de Meta → proxy /api/media (usa el
+  // token server-side). Drive → vista. Cualquier otra URL pública → directa.
   const isMeta = /lookaside\.fbsbx\.com|graph\.facebook\.com/i.test(url)
-  const src = isMeta
-    ? (mediaId ? `/api/media?id=${encodeURIComponent(mediaId)}` : `/api/media?url=${encodeURIComponent(url)}`)
-    : (url.includes('drive.google.com/uc') ? url.replace('export=download', 'export=view') : url)
+  const src = mediaId
+    ? `/api/media?id=${encodeURIComponent(mediaId)}`
+    : isMeta
+      ? `/api/media?url=${encodeURIComponent(url)}`
+      : (url.includes('drive.google.com/uc') ? url.replace('export=download', 'export=view') : url)
 
-  const isImage    = ['image', 'sticker'].includes(tipo) || !!url.match(/\.(jpg|jpeg|png|webp|gif)(\?|$)/i)
-  const isAudio    = tipo === 'audio' || !!url.match(/\.(ogg|mp3|aac|m4a|opus)(\?|$)/i)
-  const isVideo    = tipo === 'video' || !!url.match(/\.(mp4|mov|webm)(\?|$)/i)
-  const isDocument = tipo === 'document' || !!url.match(/\.(pdf|doc|docx|xls|xlsx)(\?|$)/i)
+  // Acepta tipos en inglés (Make/legacy) y español (webhook directo de Meta).
+  const isImage    = ['image', 'imagen', 'sticker'].includes(t) || !!url.match(/\.(jpg|jpeg|png|webp|gif)(\?|$)/i)
+  const isAudio    = t === 'audio' || !!url.match(/\.(ogg|mp3|aac|m4a|opus)(\?|$)/i)
+  const isVideo    = t === 'video' || !!url.match(/\.(mp4|mov|webm)(\?|$)/i)
+  const isDocument = ['document', 'documento'].includes(t) || !!url.match(/\.(pdf|doc|docx|xls|xlsx)(\?|$)/i)
 
-  if (url && isImage) return (
+  if (has && isImage) return (
     <a href={src} target="_blank" rel="noreferrer" style={{ display: 'block', marginBottom: 6 }}>
       <img
         src={src}
@@ -244,7 +249,7 @@ function MediaContent({ tipo, mediaUrl, mediaId }) {
     </a>
   )
 
-  if (url && isAudio) {
+  if (has && isAudio) {
     const isDrive = url.includes('drive.google.com')
     if (isDrive) return (
       <a href={src} target="_blank" rel="noreferrer" style={{
@@ -263,7 +268,7 @@ function MediaContent({ tipo, mediaUrl, mediaId }) {
     )
   }
 
-  if (url && isVideo) return (
+  if (has && isVideo) return (
     <a href={src} target="_blank" rel="noreferrer" style={{
       display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6,
       background: 'rgba(99,102,241,.1)', border: '1px solid rgba(99,102,241,.2)',
@@ -274,7 +279,7 @@ function MediaContent({ tipo, mediaUrl, mediaId }) {
     </a>
   )
 
-  if (url && isDocument) return (
+  if (has && isDocument) return (
     <a href={src} target="_blank" rel="noreferrer" style={{
       display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6,
       background: 'rgba(99,102,241,.1)', border: '1px solid rgba(99,102,241,.2)',
@@ -285,7 +290,7 @@ function MediaContent({ tipo, mediaUrl, mediaId }) {
     </a>
   )
 
-  if (url && tipo && !['text', 'texto', 'reaction'].includes(tipo)) return (
+  if (has && t && !['text', 'texto', 'reaction'].includes(t)) return (
     <a href={src} target="_blank" rel="noreferrer" style={{
       display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6,
       background: 'rgba(37,211,102,.08)', border: '1px solid rgba(37,211,102,.15)',
