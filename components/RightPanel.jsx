@@ -117,6 +117,41 @@ function MultiImgEditor({ urls, onChange }) {
   )
 }
 
+// ── Tarjeta de un pedido del historial (MANDARINACRM) ────────────
+function PedidoCard({ p }) {
+  const est       = String(p.estado || '').toUpperCase()
+  const pago      = String(p.estadoPago || '').toUpperCase()
+  const entregado = /ENTREG/.test(est)
+  const pagado    = /PAG/.test(pago)
+  const estColor  = entregado ? '#10b981' : '#f59e0b'
+  const items     = p.items || []
+  return (
+    <div style={{ padding:'7px 9px', background:'#0d1828', border:'1px solid #162030', borderRadius:8 }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:6 }}>
+        <span style={{ fontSize:11, fontWeight:800, color:'#e2e8f0' }}>
+          <span style={{ color: estColor }}>{entregado ? '●' : '○'}</span> {p.id || 'Pedido'}
+        </span>
+        <span style={{ fontSize:10, color:'#94a3b8', flexShrink:0 }}>
+          {p.fecha} · <strong style={{ color:'#10b981' }}>${Number(p.total || 0).toFixed(2)}</strong>
+        </span>
+      </div>
+      {items.slice(0, 4).map((it, i) => (
+        <div key={i} style={{ fontSize:11, color:'#cbd5e1', marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+          • {it.producto}{it.talla ? ` · ${it.talla}` : ''}{it.color ? ` · ${it.color}` : ''}{it.cantidad > 1 ? ` ×${it.cantidad}` : ''}
+        </div>
+      ))}
+      {items.length > 4 && (
+        <div style={{ fontSize:10, color:'#475569', marginTop:2 }}>+{items.length - 4} ítem{items.length - 4 === 1 ? '' : 's'} más…</div>
+      )}
+      <div style={{ display:'flex', alignItems:'center', gap:5, marginTop:5, flexWrap:'wrap' }}>
+        <span style={{ fontSize:8.5, fontWeight:800, color:estColor, background:`${estColor}1e`, border:`1px solid ${estColor}44`, borderRadius:5, padding:'1px 6px' }}>{p.estado || '—'}</span>
+        <span style={{ fontSize:8.5, fontWeight:800, color: pagado ? '#10b981' : '#f87171', background: pagado ? 'rgba(16,185,129,.12)' : 'rgba(248,113,113,.12)', border:`1px solid ${pagado ? 'rgba(16,185,129,.35)' : 'rgba(248,113,113,.35)'}`, borderRadius:5, padding:'1px 6px' }}>{p.estadoPago || 'PENDIENTE'}</span>
+        {p.url && <a href={p.url} target="_blank" rel="noreferrer" style={{ marginLeft:'auto', fontSize:9, fontWeight:700, color:'#60a5fa', textDecoration:'none' }}>Ver →</a>}
+      </div>
+    </div>
+  )
+}
+
 export default function RightPanel({ activeConv, onQuickReply, onSendText, onSendImage, contactInfo, onUpdateContact, windowOpen }) {
   const [countdown, setCountdown] = useState('')
 
@@ -162,6 +197,25 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
   const [pedidoLoading, setPedidoLoading] = useState(false)
   const [pedidoRes,     setPedidoRes]     = useState(null)
 
+  // ── Historial de pedidos del cliente (desde MANDARINACRM) ────
+  const [historial,   setHistorial]   = useState(null)  // null = cargando
+  const [histError,   setHistError]   = useState(false)
+  const [histOpen,    setHistOpen]    = useState(true)
+  const histLoadedRef = useRef(null)
+
+  const loadHistorial = async (tel, idVenta) => {
+    setHistorial(null); setHistError(false)
+    try {
+      const url = `/api/cliente-pedidos?telefono=${encodeURIComponent(tel)}${idVenta ? `&idVenta=${encodeURIComponent(idVenta)}` : ''}`
+      const r = await fetch(url)
+      if (!r.ok) throw new Error('http ' + r.status)
+      const d = await r.json()
+      if (histLoadedRef.current === tel) setHistorial(d)
+    } catch {
+      if (histLoadedRef.current === tel) setHistError(true)
+    }
+  }
+
   // ── Leer respuestas directamente desde Google Sheets ─────────
   useEffect(() => {
     if (repliesLoaded) return
@@ -180,6 +234,14 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
       setNotasSaved(false)
       setPedidoRes(null)
     }
+  }, [activeConv, contactInfo])
+
+  // Cargar historial de pedidos al cambiar de contacto (una sola vez por teléfono)
+  useEffect(() => {
+    if (!activeConv) return
+    if (histLoadedRef.current === activeConv.telefono) return
+    histLoadedRef.current = activeConv.telefono
+    loadHistorial(activeConv.telefono, contactInfo?.idVenta)
   }, [activeConv, contactInfo])
 
   if (!activeConv) return null
@@ -369,7 +431,55 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
         )}
       </div>
 
-      {/* SUGERENCIA IA eliminada — respuestas rápidas suben para optimizar espacio */}
+      {/* ── HISTORIAL DE PEDIDOS (MANDARINACRM) ── */}
+      <div style={{ flexShrink:0, padding:'8px 12px 10px', borderBottom:'1px solid #111c2a', background:'#0a1019' }}>
+        <div onClick={() => setHistOpen(o => !o)} style={{ cursor:'pointer', userSelect:'none', display:'flex', alignItems:'center', gap:5 }}>
+          <span style={{ fontSize:9, color:'#475569', transition:'transform .2s', display:'inline-block', transform: histOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
+          <p style={{ fontSize:10, color:'#60a5fa', fontWeight:700, letterSpacing:'.08em', margin:0, display:'flex', alignItems:'center', gap:6 }}>
+            📦 HISTORIAL DE PEDIDOS
+            {historial?.totalPedidos > 0 && (historial.totalPedidos >= 3 || historial.totalGastado >= 80) && (
+              <span style={{ fontSize:8, background:'rgba(245,158,11,.15)', color:'#f59e0b', border:'1px solid rgba(245,158,11,.35)', borderRadius:10, padding:'1px 6px', fontWeight:800 }}>⭐ VIP</span>
+            )}
+          </p>
+          <span
+            onClick={e => { e.stopPropagation(); loadHistorial(activeConv.telefono, contactInfo?.idVenta) }}
+            title="Recargar historial"
+            style={{ marginLeft:'auto', color:'#475569', fontSize:12, cursor:'pointer', padding:'0 2px', lineHeight:1 }}
+          >🔄</span>
+        </div>
+
+        {histOpen && (
+          <div style={{ marginTop:8 }}>
+            {historial === null && !histError ? (
+              // Skeleton mientras carga
+              <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                {[0, 1].map(i => (
+                  <div key={i} style={{ height:38, borderRadius:8, background:'#0d1828', border:'1px solid #162030', opacity:.6, animation:'pulse 1.2s infinite' }} />
+                ))}
+              </div>
+            ) : histError ? (
+              <div style={{ fontSize:11, color:'#64748b', padding:'4px 0' }}>
+                No se pudo cargar el historial.{' '}
+                <button onClick={() => loadHistorial(activeConv.telefono, contactInfo?.idVenta)}
+                  style={{ background:'transparent', border:'none', color:'#60a5fa', cursor:'pointer', fontSize:11, padding:0, textDecoration:'underline', fontFamily:'inherit' }}>Reintentar</button>
+              </div>
+            ) : !historial || historial.totalPedidos === 0 ? (
+              <div style={{ fontSize:11, color:'#94a3b8', padding:'7px 9px', background:'rgba(96,165,250,.06)', border:'1px solid rgba(96,165,250,.18)', borderRadius:7 }}>
+                Cliente nuevo ✨ — sin pedidos previos
+              </div>
+            ) : (
+              <>
+                <div style={{ fontSize:11, color:'#94a3b8', marginBottom:7 }}>
+                  {historial.totalPedidos} pedido{historial.totalPedidos === 1 ? '' : 's'} · <strong style={{ color:'#10b981' }}>${historial.totalGastado.toFixed(2)}</strong> total
+                </div>
+                <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                  {historial.pedidos.map(p => <PedidoCard key={p.id} p={p} />)}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* ── RESPUESTAS RÁPIDAS — scroll independiente ── */}
       <div style={{ flex:1, overflowY:'auto', minHeight:0 }}>
