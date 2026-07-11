@@ -49,7 +49,11 @@ export async function GET(req) {
   } catch (err) {
     console.error('[/api/cliente-pedidos] no se pudo leer MANDARINACRM:', err?.message || err)
     return NextResponse.json(
-      { error: 'No se pudo leer MANDARINACRM. ¿El Sheet está compartido con la Service Account del inbox?' },
+      {
+        error: 'No se pudo leer MANDARINACRM. Comparte el Sheet (lectura) con la Service Account del inbox.',
+        compartirCon: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || '(GOOGLE_SERVICE_ACCOUNT_EMAIL no definido)',
+        detalle: String(err?.message || err).slice(0, 200),
+      },
       { status: 502 },
     )
   }
