@@ -58,6 +58,19 @@ export async function GET(req) {
     )
   }
 
+  // DEBUG temporal: ?debug=1 → conteos + nombres de columnas para diagnosticar el mapeo
+  if (searchParams.get('debug') === '1') {
+    const mask = (s) => { const d = digits(s); return d ? d.slice(0, 3) + '***' + d.slice(-2) : '' }
+    return NextResponse.json({
+      counts: { pedidos: pedidos.length, detalle: detalle.length, clientes: clientes.length },
+      pedidoKeys:  Object.keys(pedidos[0] || {}),
+      clienteKeys: Object.keys(clientes[0] || {}),
+      detalleKeys: Object.keys(detalle[0] || {}),
+      samplePedido: pedidos[0] ? { PEDIDO_ID: pedidos[0].PEDIDO_ID, CLIENTE_ID: pedidos[0].CLIENTE_ID, FECHA_PEDIDO: pedidos[0].FECHA_PEDIDO, ESTADO_PEDIDO: pedidos[0].ESTADO_PEDIDO, MONTO_TOTAL: pedidos[0].MONTO_TOTAL } : null,
+      sampleCelulares: clientes.slice(0, 5).map(c => ({ id: c.CLIENTE_ID, cel: mask(c.CELULAR) })),
+    })
+  }
+
   // 1. CLIENTE_IDs cuyo CELULAR coincide con el teléfono buscado
   const clienteIds = new Set(
     clientes
