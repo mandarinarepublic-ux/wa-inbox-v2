@@ -11,7 +11,6 @@ import SocialInbox from '@/components/SocialInbox'
 import { actualizarNoLeidos } from '@/lib/notif'
 
 const IMGBB_KEY    = '2307574d43689522feabd27cff3443df'
-const MAKE_WEBHOOK = 'https://hook.us2.make.com/2j5dzq4gjqkjjnyxiyb46bons15awy2k'
 
 async function toJpeg(file) {
   return new Promise((resolve) => {
@@ -454,7 +453,7 @@ export default function App() {
 
   // ── Enviar imagen ─────────────────────────────────────────────
   const sendImageUrl = async (imageUrl) => {
-    const res = await fetch(MAKE_WEBHOOK, {
+    const res = await fetch('/api/saliente', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ Telefono: activeConv.telefono, Nombre: activeConv.nombre, ImagenURL: imageUrl }),
     })
@@ -529,7 +528,7 @@ export default function App() {
   // ── Enviar imagen IA (Shopify) por WhatsApp ──────────────────
   const handleSendAIImage = async (imageUrl) => {
     if (!activeConv || !imageUrl) return
-    const res = await fetch(MAKE_WEBHOOK, {
+    const res = await fetch('/api/saliente', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ Telefono: activeConv.telefono, Nombre: activeConv.nombre, ImagenURL: imageUrl }),
     })
