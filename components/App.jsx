@@ -514,7 +514,19 @@ export default function App() {
   // ── Quick reply con imagen ────────────────────────────────────
   const handleQuickReply = async (reply) => {
     if (!activeConv) return
-    if (reply.text) await handleSend(reply.text)
+    const botones = (reply.botones || []).filter(Boolean).slice(0, 3)
+    if (botones.length && reply.text) {
+      // Respuesta rápida CON botones interactivos → mensaje + botones
+      const validBtns = botones.map((t, i) => ({ id: `btn_${i + 1}`, title: t }))
+      const tmpMsg = { id: 'tmp_' + Date.now(), telefono: activeConv.telefono, nombre: activeConv.nombre, mensaje: `${reply.text}\n${validBtns.map(b => `[ ${b.title} ]`).join('  ')}`, direccion: 'SALIENTE', timestamp: new Date().toISOString(), estado: 'enviado' }
+      setConvs(prev => prev.map(c => c.telefono === activeConv.telefono ? { ...c, msgs: [...c.msgs, tmpMsg], last: tmpMsg } : c))
+      pendingRef.current[activeConv.telefono] = [ ...(pendingRef.current[activeConv.telefono] || []), tmpMsg ]
+      changeStatus(activeConv.telefono, currentStatus === 'ventaproceso' ? 'ventaproceso' : 'atendido')
+      await sendInteractiveButtons(activeConv.telefono, activeConv.nombre, reply.text, validBtns)
+      setTimeout(load, 4000)
+    } else if (reply.text) {
+      await handleSend(reply.text)
+    }
     // Envía hasta 10 imágenes de la respuesta rápida, en orden, con pausa entre cada una
     const imgs = Array.from({ length: 10 }, (_, i) =>
       i === 0 ? reply.imageUrl : reply[`imageUrl${i + 1}`]

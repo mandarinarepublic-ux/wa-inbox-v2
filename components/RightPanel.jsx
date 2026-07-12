@@ -117,6 +117,22 @@ function MultiImgEditor({ urls, onChange }) {
   )
 }
 
+// ── Editor de 3 botones interactivos para una respuesta rápida ──
+function BotonesEditor({ botones, onChange }) {
+  const set = (i, v) => onChange([0, 1, 2].map(j => j === i ? v : (botones[j] || '')))
+  return (
+    <div style={{ marginTop:6 }}>
+      <p style={{ fontSize:9, color:'#f59e0b', margin:'0 0 3px', fontWeight:600 }}>🔘 Botones (opcional · máx 3 · 20 car.)</p>
+      {[0, 1, 2].map(i => (
+        <input key={i} value={botones[i] || ''} onChange={e => set(i, e.target.value)} maxLength={20}
+          placeholder={`Botón ${i + 1}`}
+          style={{ width:'100%', marginBottom:4, background:'#111c2a', border:'1px solid #1e2d3d', borderRadius:6, padding:'5px 8px', color:'#e2e8f0', fontSize:11, outline:'none', fontFamily:'inherit' }}
+          onFocus={e => e.target.style.borderColor = '#f59e0b'} onBlur={e => e.target.style.borderColor = '#1e2d3d'} />
+      ))}
+    </div>
+  )
+}
+
 // ── Tarjeta de un pedido del historial (MANDARINACRM) ────────────
 function PedidoCard({ p }) {
   const est       = String(p.estado || '').toUpperCase()
@@ -183,6 +199,8 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
   const [editImgUrls,   setEditImgUrls]   = useState([])
   const [newText,       setNewText]       = useState('')
   const [newImgUrls,    setNewImgUrls]    = useState([])
+  const [editBotones,   setEditBotones]   = useState(['', '', ''])
+  const [newBotones,    setNewBotones]    = useState(['', '', ''])
   const [sending,       setSending]       = useState(null)
   const [editAlias,     setEditAlias]     = useState(false)
   const [aliasInput,    setAliasInput]    = useState('')
@@ -252,13 +270,16 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
   const startEdit = (idx) => {
     setEditingIdx(idx); setEditText(replies[idx].text)
     setEditImgUrls(getImgUrls(replies[idx]))
+    const b = replies[idx].botones || []
+    setEditBotones([b[0] || '', b[1] || '', b[2] || ''])
   }
 
   const saveEdit = async () => {
     if (!editText.trim()) return
-    const updated = { ...replies[editingIdx], text: editText.trim(), ...urlsToReply(editImgUrls) }
+    const botones = editBotones.map(s => s.trim()).filter(Boolean).slice(0, 3)
+    const updated = { ...replies[editingIdx], text: editText.trim(), ...urlsToReply(editImgUrls), botones }
     setReplies(prev => prev.map((r, i) => i === editingIdx ? updated : r))
-    setEditingIdx(null); setEditText(''); setEditImgUrls([])
+    setEditingIdx(null); setEditText(''); setEditImgUrls([]); setEditBotones(['', '', ''])
     await writeReply('actualizar', updated)
   }
 
@@ -270,9 +291,10 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
 
   const addReply = async () => {
     if (!newText.trim()) return
-    const newReply = { id: crypto.randomUUID(), text: newText.trim(), ...urlsToReply(newImgUrls) }
+    const botones = newBotones.map(s => s.trim()).filter(Boolean).slice(0, 3)
+    const newReply = { id: crypto.randomUUID(), text: newText.trim(), ...urlsToReply(newImgUrls), botones }
     setReplies(prev => [...prev, newReply])
-    setNewText(''); setNewImgUrls([])
+    setNewText(''); setNewImgUrls([]); setNewBotones(['', '', ''])
     await writeReply('agregar', newReply)
   }
 
@@ -504,6 +526,7 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                     style={{ width:'100%', background:'#111c2a', border:'1px solid #25d366', borderRadius:6, color:'#e2e8f0', fontSize:12, padding:'8px 10px', resize:'vertical', outline:'none', fontFamily:'inherit', marginBottom:5, whiteSpace:'pre-wrap', minHeight:100 }} />
                   <p style={{ fontSize:9, color:'#475569', marginBottom:3 }}>Fotos ({editImgUrls.length}/{MAX_IMGS})</p>
                   <MultiImgEditor urls={editImgUrls} onChange={setEditImgUrls} />
+                  <BotonesEditor botones={editBotones} onChange={setEditBotones} />
                   <div style={{ display:'flex', gap:3, marginTop:7 }}>
                     <button onClick={saveEdit} style={{ flex:1, padding:'4px', background:'rgba(37,211,102,.15)', border:'1px solid rgba(37,211,102,.3)', color:'#25d366', borderRadius:6, fontSize:10, cursor:'pointer', fontFamily:'inherit' }}>✓ Guardar</button>
                     <button onClick={() => { setEditingIdx(null); setEditText(''); setEditImgUrls([]) }} style={{ flex:1, padding:'4px', background:'transparent', border:'1px solid #2a3f55', color:'#94a3b8', borderRadius:6, fontSize:10, cursor:'pointer', fontFamily:'inherit' }}>✕</button>
@@ -525,7 +548,7 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                   {/* Texto + botones */}
                   <div style={{ padding:'7px 8px', display:'flex', alignItems:'flex-start', gap:4 }}>
                     <span style={{ flex:1, fontSize:12, color:'#94a3b8', lineHeight:1.4, overflow:'hidden', textOverflow:'ellipsis', display:'-webkit-box', WebkitLineClamp:3, WebkitBoxOrient:'vertical', minWidth:0 }}>
-                      {imgs.length > 0 && `🖼×${imgs.length} `}{reply.text}
+                      {imgs.length > 0 && `🖼×${imgs.length} `}{reply.botones?.length > 0 && <span style={{ color:'#f59e0b', fontWeight:700 }}>{`🔘×${reply.botones.length} `}</span>}{reply.text}
                     </span>
                     <div style={{ display:'flex', gap:4, flexShrink:0 }}>
                       <button onClick={() => handleSendQuick(idx)} disabled={sending===idx||!windowOpen} title="Enviar" style={{ background:'rgba(37,211,102,.12)', border:'1px solid rgba(37,211,102,.2)', color:'#25d366', borderRadius:5, padding:'3px 8px', fontSize:10, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>{sending===idx?'⏳':'▶ Enviar'}</button>
@@ -556,6 +579,7 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
             onFocus={e => e.target.style.borderColor='#25d366'} onBlur={e => e.target.style.borderColor='#1e2d3d'} />
           <p style={{ fontSize:9, color:'#475569', margin:'0 0 3px' }}>Fotos ({newImgUrls.length}/{MAX_IMGS})</p>
           <MultiImgEditor urls={newImgUrls} onChange={setNewImgUrls} />
+          <BotonesEditor botones={newBotones} onChange={setNewBotones} />
             <button onClick={addReply} disabled={!newText.trim()} style={{ width:'100%', marginTop:7, padding:'6px', background:newText.trim()?'rgba(37,211,102,.1)':'transparent', border:`1px solid ${newText.trim()?'rgba(37,211,102,.3)':'#475569'}`, color:newText.trim()?'#25d366':'#ffffff', borderRadius:7, fontSize:11, fontWeight:600, cursor:newText.trim()?'pointer':'default', fontFamily:'inherit', transition:'all .15s' }}>
               + Agregar
             </button>
