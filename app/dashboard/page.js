@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 
 const C = {
   bg: '#080d14', card: '#0d1420', border: '#1e2d3d', text: '#e2e8f0', dim: '#64748b',
-  orange: '#f97316', green: '#4ade80', red: '#f87171', amber: '#f59e0b', emerald: '#10b981', violet: '#a78bfa', slate: '#64748b',
+  orange: '#f97316', green: '#4ade80', red: '#f87171', amber: '#f59e0b', emerald: '#10b981', violet: '#a78bfa', slate: '#64748b', blue: '#60a5fa',
 }
 const ESTADOS = [
   { key: 'pendiente',    label: 'Pendientes',  color: C.red },
@@ -13,6 +13,7 @@ const ESTADOS = [
   { key: 'soporte',      label: 'Soporte',     color: C.violet },
   { key: 'archivado',    label: 'Archivados',  color: C.slate },
 ]
+const money = (v) => '$' + Number(v || 0).toLocaleString('es-EC', { maximumFractionDigits: 0 })
 
 function Tile({ label, value, sub, color }) {
   return (
@@ -24,21 +25,20 @@ function Tile({ label, value, sub, color }) {
   )
 }
 
-// Gráfico de barras verticales para una serie mensual
 function BarChart({ title, months, values, color, fmt = (v) => v }) {
   const max = Math.max(1, ...months.map(m => values[m.key] || 0))
   return (
     <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px 18px' }}>
       <div style={{ fontSize: 12, color: C.text, fontWeight: 700, marginBottom: 14 }}>{title}</div>
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, height: 130 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 130 }}>
         {months.map(m => {
           const v = values[m.key] || 0
           const h = Math.round((v / max) * 100)
           return (
             <div key={m.key} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, minWidth: 0 }}>
-              <div style={{ fontSize: 10, color: C.text, fontWeight: 700, whiteSpace: 'nowrap' }}>{v ? fmt(v) : ''}</div>
-              <div style={{ width: '100%', maxWidth: 42, height: `${h}%`, minHeight: v ? 4 : 0, background: `linear-gradient(180deg, ${color}, ${color}88)`, borderRadius: '6px 6px 2px 2px', transition: 'height .4s' }} />
-              <div style={{ fontSize: 10, color: C.dim, whiteSpace: 'nowrap' }}>{m.label}</div>
+              <div style={{ fontSize: 9.5, color: C.text, fontWeight: 700, whiteSpace: 'nowrap' }}>{v ? fmt(v) : ''}</div>
+              <div style={{ width: '100%', maxWidth: 38, height: `${h}%`, minHeight: v ? 4 : 0, background: `linear-gradient(180deg, ${color}, ${color}88)`, borderRadius: '6px 6px 2px 2px', transition: 'height .4s' }} />
+              <div style={{ fontSize: 9, color: C.dim, whiteSpace: 'nowrap' }}>{m.label}</div>
             </div>
           )
         })}
@@ -47,70 +47,95 @@ function BarChart({ title, months, values, color, fmt = (v) => v }) {
   )
 }
 
+function FilterBtns({ options, value, onChange }) {
+  return (
+    <div style={{ display: 'flex', gap: 4, background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: 3 }}>
+      {options.map(o => (
+        <button key={o.v} onClick={() => onChange(o.v)}
+          style={{ padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, fontFamily: 'inherit', transition: 'all .15s',
+            background: value === o.v ? (o.color || C.orange) : 'transparent', color: value === o.v ? '#fff' : C.dim }}>
+          {o.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export default function Dashboard() {
   const [data, setData] = useState(null)
   const [err, setErr] = useState(false)
+  const [meses, setMeses] = useState(6)
+  const [vista, setVista] = useState('total') // 'total' | 'MANDARINA' | 'INDSTORE'
 
-  const load = () => {
-    setErr(false)
-    fetch(`/api/dashboard?t=${Date.now()}`, { cache: 'no-store' })
+  const load = (m = meses) => {
+    setErr(false); setData(null)
+    fetch(`/api/dashboard?meses=${m}&t=${Date.now()}`, { cache: 'no-store' })
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(setData).catch(() => setErr(true))
   }
-  useEffect(() => { load() }, [])
+  useEffect(() => { load(meses) }, [meses])
 
-  const money = (v) => '$' + Number(v || 0).toLocaleString('es-EC', { maximumFractionDigits: 0 })
+  const D = data ? (vista === 'total' ? data.total : data.porTienda[vista]) : null
+  const tituloVista = vista === 'total' ? 'Total del negocio' : (data?.porTienda[vista]?.label || vista)
+  const accent = vista === 'INDSTORE' ? C.blue : vista === 'MANDARINA' ? C.orange : C.emerald
 
   return (
     <div style={{ minHeight: '100dvh', background: C.bg, color: C.text, fontFamily: 'Outfit, system-ui, sans-serif', padding: '24px 20px 40px' }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap'); *{box-sizing:border-box}`}</style>
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>
 
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 22 }}>
+        {/* Header + filtros */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
           <div>
-            <div style={{ fontSize: 11, fontWeight: 800, color: C.orange, letterSpacing: '3px' }}>⬡ MANDARINA REPUBLIC</div>
-            <div style={{ fontSize: 24, fontWeight: 800, marginTop: 4 }}>Dashboard de conversaciones</div>
+            <div style={{ fontSize: 11, fontWeight: 800, color: C.orange, letterSpacing: '3px' }}>⬡ DASHBOARD DEL NEGOCIO</div>
+            <div style={{ fontSize: 24, fontWeight: 800, marginTop: 4 }}>{tituloVista}</div>
           </div>
-          <button onClick={load} style={{ background: C.card, border: `1px solid ${C.border}`, color: C.dim, borderRadius: 10, padding: '8px 14px', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>🔄 Actualizar</button>
+          <button onClick={() => load()} style={{ background: C.card, border: `1px solid ${C.border}`, color: C.dim, borderRadius: 10, padding: '8px 14px', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>🔄 Actualizar</button>
         </div>
 
-        {err && <div style={{ background: '#2d0a0a', border: '1px solid #f8717140', color: C.red, borderRadius: 12, padding: 16, marginBottom: 20 }}>No se pudieron cargar los datos. <button onClick={load} style={{ color: C.red, background: 'none', border: 'none', textDecoration: 'underline', cursor: 'pointer' }}>Reintentar</button></div>}
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 22 }}>
+          <FilterBtns value={vista} onChange={setVista} options={[
+            { v: 'total', label: '🌎 Todo', color: C.emerald },
+            { v: 'MANDARINA', label: '🍊 Mandarina', color: C.orange },
+            { v: 'INDSTORE', label: '🖤 IND Store', color: C.blue },
+          ]} />
+          <FilterBtns value={meses} onChange={setMeses} options={[
+            { v: 3, label: '3 meses' }, { v: 6, label: '6 meses' }, { v: 12, label: '12 meses' },
+          ]} />
+        </div>
 
+        {err && <div style={{ background: '#2d0a0a', border: '1px solid #f8717140', color: C.red, borderRadius: 12, padding: 16, marginBottom: 20 }}>No se pudieron cargar los datos. <button onClick={() => load()} style={{ color: C.red, background: 'none', border: 'none', textDecoration: 'underline', cursor: 'pointer' }}>Reintentar</button></div>}
         {!data && !err && <div style={{ color: C.dim, padding: 40, textAlign: 'center' }}>Cargando métricas...</div>}
 
-        {data && (<>
-          {/* Tiles principales */}
+        {D && (<>
+          {/* Tiles */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 14 }}>
-            <Tile label="Pendientes" value={data.estados.pendiente} color={C.red} sub="esperando respuesta" />
-            <Tile label="En proceso" value={data.estados.ventaproceso} color={C.amber} />
-            <Tile label="Atendidos" value={data.estados.atendido} color={C.green} />
-            <Tile label="Sin responder +24h" value={data.sinResponder} color={data.sinResponder ? C.red : C.green} sub="requieren atención" />
-            <Tile label="Tiempo de respuesta" value={data.tiempoRespMin != null ? `${data.tiempoRespMin} min` : '—'} color={C.text} sub="promedio 1ª respuesta" />
-            <Tile label="Contactos totales" value={data.totalContactos} color={C.text} />
+            <Tile label="Pendientes" value={D.estados.pendiente} color={C.red} sub="esperando respuesta" />
+            <Tile label="Atendidos" value={D.estados.atendido} color={C.green} />
+            <Tile label="Sin responder +24h" value={D.sinResponder} color={D.sinResponder ? C.red : C.green} sub="requieren atención" />
+            <Tile label="Tiempo de respuesta" value={D.tiempoRespMin != null ? `${D.tiempoRespMin} min` : '—'} color={C.text} sub="promedio 1ª respuesta" />
+            <Tile label="Contactos totales" value={D.totalContactos} color={C.text} />
           </div>
-
-          {/* Ventas destacadas */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 20 }}>
-            <Tile label="Ventas (6 meses)" value={data.ventasTotalPeriodo} color={C.emerald} sub="pedidos creados" />
-            <Tile label="Monto vendido (6 meses)" value={money(data.ventasMontoPeriodo)} color={C.emerald} sub="del CRM Mandarina" />
+            <Tile label={`Ventas (${meses} meses)`} value={D.ventasTotal} color={accent} sub="pedidos creados" />
+            <Tile label={`Monto vendido (${meses} meses)`} value={money(D.ventasMonto)} color={accent} sub="del CRM" />
           </div>
 
           {/* Charts */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 14, marginBottom: 20 }}>
-            <BarChart title="💰 Ventas por mes ($)" months={data.months} values={data.ventasMontoPorMes} color={C.emerald} fmt={money} />
-            <BarChart title="📈 Actividad por mes (mensajes enviados)" months={data.months} values={data.salientesPorMes} color={C.orange} />
-            <BarChart title="✨ Leads nuevos por mes" months={data.months} values={data.leadsPorMes} color={C.amber} />
-            <BarChart title="🧾 Nº de ventas por mes" months={data.months} values={data.ventasNPorMes} color={C.green} />
+            <BarChart title="💰 Ventas por mes ($)" months={data.months} values={D.ventasMontoPorMes} color={C.emerald} fmt={money} />
+            <BarChart title="🧾 Nº de ventas por mes" months={data.months} values={D.ventasNPorMes} color={C.green} />
+            <BarChart title="📈 Mensajes enviados por mes" months={data.months} values={D.salientesPorMes} color={C.orange} />
+            <BarChart title="✨ Leads nuevos por mes" months={data.months} values={D.leadsPorMes} color={C.amber} />
           </div>
 
-          {/* Estados actuales — barras */}
+          {/* Estados */}
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px 18px', marginBottom: 26 }}>
             <div style={{ fontSize: 12, color: C.text, fontWeight: 700, marginBottom: 14 }}>Estado actual de las bandejas</div>
             {(() => {
-              const max = Math.max(1, ...ESTADOS.map(e => data.estados[e.key] || 0))
+              const max = Math.max(1, ...ESTADOS.map(e => D.estados[e.key] || 0))
               return ESTADOS.map(e => {
-                const v = data.estados[e.key] || 0
+                const v = D.estados[e.key] || 0
                 return (
                   <div key={e.key} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
                     <div style={{ width: 90, fontSize: 12, color: C.dim, flexShrink: 0 }}>{e.label}</div>
@@ -127,12 +152,8 @@ export default function Dashboard() {
 
         {/* Botones a las apps */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 14 }}>
-          <a href="/" style={{ display: 'block', textAlign: 'center', padding: '18px', borderRadius: 14, background: 'linear-gradient(135deg,#f97316,#ea580c)', color: '#fff', fontSize: 16, fontWeight: 800, textDecoration: 'none' }}>
-            📱 Abrir MANDARINA Inbox
-          </a>
-          <a href="https://ind-inbox-v2.vercel.app" style={{ display: 'block', textAlign: 'center', padding: '18px', borderRadius: 14, background: C.card, border: `1px solid ${C.border}`, color: C.text, fontSize: 16, fontWeight: 800, textDecoration: 'none' }}>
-            🖤 Abrir IND STORE Inbox →
-          </a>
+          <a href="/" style={{ display: 'block', textAlign: 'center', padding: '18px', borderRadius: 14, background: 'linear-gradient(135deg,#f97316,#ea580c)', color: '#fff', fontSize: 16, fontWeight: 800, textDecoration: 'none' }}>📱 Abrir MANDARINA Inbox</a>
+          <a href="https://ind-inbox-v2.vercel.app" style={{ display: 'block', textAlign: 'center', padding: '18px', borderRadius: 14, background: C.card, border: `1px solid ${C.border}`, color: C.text, fontSize: 16, fontWeight: 800, textDecoration: 'none' }}>🖤 Abrir IND STORE Inbox →</a>
         </div>
 
         {data && <div style={{ textAlign: 'center', color: C.dim, fontSize: 11, marginTop: 20 }}>Actualizado {new Date(data.generadoEn).toLocaleString('es-EC')}</div>}
