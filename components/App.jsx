@@ -957,7 +957,13 @@ export default function App() {
                         {txt && <span style={{ fontSize:9, color:'#334155' }}>{txt.length}/20</span>}
                       </div>
                     ))}
-                    <div style={{ fontSize:9, color:'#2a3f55', marginTop:3 }}>Escribe el mensaje en el campo de abajo · Máx 3 botones</div>
+                    {btnTexts.some(t=>t.trim()) && !input.trim() ? (
+                      <div style={{ marginTop:5, padding:'5px 9px', background:'rgba(245,158,11,.14)', border:'1px solid rgba(245,158,11,.35)', borderRadius:7, fontSize:10, color:'#f59e0b', fontWeight:600 }}>
+                        ⚠️ Falta escribir el mensaje (va arriba de los botones) — luego dale a ➤
+                      </div>
+                    ) : (
+                      <div style={{ fontSize:9, color:'#2a3f55', marginTop:3 }}>Escribe el mensaje abajo y dale a enviar · Máx 3 botones</div>
+                    )}
                   </div>
                 )}
 
@@ -975,14 +981,24 @@ export default function App() {
                 </div>
 
                 <div style={{ display:'flex', flexDirection:'column', gap:4, flexShrink:0 }}>
-                  {showBtnPanel && btnTexts.some(t=>t.trim()) && (
-                    <button onClick={handleSendButtons} disabled={sendingBtns||!input.trim()||!windowOpen}
-                      title="Enviar con botones"
-                      style={{ width:42, height:42, background:sendingBtns?'#111c2a':'linear-gradient(135deg,#f59e0b,#d97706)', border:'none', borderRadius:11, cursor:sendingBtns?'default':'pointer', fontSize:14, color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', transition:'all .2s' }}>
-                      {sendingBtns?'⏳':'🔘'}
-                    </button>
-                  )}
-                  <button onClick={() => handleSend()} disabled={!input.trim()||sending||!windowOpen} style={{ width:42, height:42, flexShrink:0, background:input.trim()&&windowOpen?'linear-gradient(135deg,#25d366,#128c7e)':'#111c2a', border:'none', borderRadius:11, cursor:input.trim()&&windowOpen?'pointer':'default', fontSize:17, color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', transition:'all .2s', boxShadow:input.trim()&&windowOpen?'0 4px 14px rgba(37,211,102,.3)':'none' }}>➤</button>
+                  {(() => {
+                    // UN SOLO botón de envío: si el panel de botones está abierto y hay
+                    // botones con texto → manda CON botones; si no → manda solo texto.
+                    const conBotones = showBtnPanel && btnTexts.some(t => t.trim())
+                    const busy = sending || sendingBtns
+                    const activo = !!input.trim() && windowOpen && !busy
+                    return (
+                      <button
+                        onClick={() => { if (conBotones) handleSendButtons(); else handleSend() }}
+                        disabled={!activo}
+                        title={conBotones ? 'Enviar con botones' : 'Enviar'}
+                        style={{ width:42, height:42, flexShrink:0, border:'none', borderRadius:11, cursor: activo ? 'pointer' : 'default', fontSize: conBotones ? 15 : 17, color:'#fff', display:'flex', alignItems:'center', justifyContent:'center', transition:'all .2s',
+                          background: activo ? (conBotones ? 'linear-gradient(135deg,#f59e0b,#d97706)' : 'linear-gradient(135deg,#25d366,#128c7e)') : '#111c2a',
+                          boxShadow: activo ? (conBotones ? '0 4px 14px rgba(245,158,11,.3)' : '0 4px 14px rgba(37,211,102,.3)') : 'none' }}>
+                        {busy ? '⏳' : (conBotones ? '🔘' : '➤')}
+                      </button>
+                    )
+                  })()}
                 </div>
               </div>
             </div>
