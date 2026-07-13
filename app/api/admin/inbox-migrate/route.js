@@ -8,7 +8,9 @@ import { readSheet } from '@/lib/sheets'
 import { mapContactRow } from '@/lib/contactos'
 import { mapMensajeRow } from '@/lib/mensajes'
 import { mapRespuestaRow } from '@/lib/respuestas'
-import { getSupabase, CUENTA, canonTel } from '@/lib/supabase'
+import { getSupabase, CUENTA, canonTel, DATA_BACKEND } from '@/lib/supabase'
+import { getContactos } from '@/lib/contactos'
+import * as SB from '@/lib/inbox-supabase'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -24,13 +26,15 @@ export async function GET(req) {
 
   if (tabla === 'diag') {
     const v = process.env.DATA_BACKEND
+    let sbCount = null, sbErr = null, gcCount = null, gcErr = null
+    try { sbCount = (await SB.getContactosSupabase()).length } catch (e) { sbErr = e.message }
+    try { gcCount = (await getContactos()).length } catch (e) { gcErr = e.message }
     return Response.json({
-      DATA_BACKEND: v,
-      codes: v ? Array.from(v).map((c) => c.charCodeAt(0)) : null,
-      esSupabase: v === 'supabase',
-      cuenta: process.env.INBOX_CUENTA,
-      supaUrlOk: Boolean(process.env.SUPABASE_URL),
-      srkOk: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+      DATA_BACKEND_runtime: v,
+      DATA_BACKEND_const: DATA_BACKEND,
+      esSupabaseConst: DATA_BACKEND === 'supabase',
+      getContactosSupabase_count: sbCount, getContactosSupabase_err: sbErr,
+      getContactos_count: gcCount, getContactos_err: gcErr,
     })
   }
 
