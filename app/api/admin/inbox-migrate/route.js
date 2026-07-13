@@ -29,10 +29,16 @@ export async function GET(req) {
     let sbCount = null, sbErr = null, gcCount = null, gcErr = null
     try { sbCount = (await SB.getContactosSupabase()).length } catch (e) { sbErr = e.message }
     try { gcCount = (await getContactos()).length } catch (e) { gcErr = e.message }
+    const url = process.env.SUPABASE_URL || ''
+    const srk = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+    // ref del proyecto embebido en el JWT (no secreto): payload.ref
+    let keyRef = null
+    try { keyRef = JSON.parse(Buffer.from(srk.split('.')[1], 'base64').toString()).ref } catch {}
     return Response.json({
-      DATA_BACKEND_runtime: v,
       DATA_BACKEND_const: DATA_BACKEND,
-      esSupabaseConst: DATA_BACKEND === 'supabase',
+      SUPABASE_URL_host: url.replace(/^https?:\/\//, '').split('.')[0],
+      key_ref: keyRef,
+      key_len: srk.length,
       getContactosSupabase_count: sbCount, getContactosSupabase_err: sbErr,
       getContactos_count: gcCount, getContactos_err: gcErr,
     })
