@@ -8,6 +8,7 @@
     "start": "next start"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.110.3",
     "@vercel/functions": "^3.7.5",
     "google-auth-library": "^9.0.0",
     "googleapis": "^144.0.0",
