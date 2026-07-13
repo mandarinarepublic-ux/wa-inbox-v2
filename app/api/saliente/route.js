@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import { appendRow } from '@/lib/sheets'
+import { dualWrite } from '@/lib/supabase'
+import { guardarMensajeSupabase } from '@/lib/inbox-supabase'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -125,22 +127,24 @@ export async function POST(req) {
 
     // Registrar en MENSAJES (A=ID B=Telefono C=Nombre D=Tipo E=Contenido F=MediaURL
     //  G=Fecha H=Direccion I=MediaID J=RespuestaIA K=FotoIA L=ContextoID)
+    const telSal = soloDigitos(body.Telefono)
+    const fechaSal = new Date().toISOString()
     try {
-      await appendRow('MENSAJES', [
-        wamid,
-        soloDigitos(body.Telefono),
-        body.Nombre || '',
-        tipo,
-        contenido,
-        mediaUrl,
-        new Date().toISOString(),
-        'SALIENTE',
-        mediaId,
-        '', '', '',
-      ])
+      // Dual-write del saliente (Sheets 12 cols + Supabase idempotente por wamid).
+      await dualWrite(
+        () => appendRow('MENSAJES', [
+          wamid, telSal, body.Nombre || '', tipo, contenido, mediaUrl,
+          fechaSal, 'SALIENTE', mediaId, '', '', '',
+        ]),
+        () => guardarMensajeSupabase({
+          id: wamid, telefono: telSal, nombre: body.Nombre || '', tipo,
+          mensaje: contenido, mediaUrl, timestamp: fechaSal, direccion: 'SALIENTE', mediaId,
+        }),
+        'msg.saliente',
+      )
     } catch (e) {
       // El mensaje YA se envió por WhatsApp; si falla el log no revertimos.
-      console.error('[/api/saliente] Enviado pero no se pudo registrar en Sheets:', e.message)
+      console.error('[/api/saliente] Enviado pero no se pudo registrar:', e.message)
     }
 
     return NextResponse.json({ ok: true, wamid })

@@ -1,4 +1,6 @@
 import { readMensajesTail } from '@/lib/cache'
+import { usaSupabaseLectura } from '@/lib/supabase'
+import { getConversacionSupabase } from '@/lib/inbox-supabase'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,6 +17,11 @@ export async function GET(req) {
     const limite = Math.min(parseInt(searchParams.get('limite') || '20', 10) || 20, 60)
     const objetivo = soloDigitos(phone)
     if (!objetivo) return Response.json([])
+
+    // Modo Supabase: el hilo sale de inbox.mensajes (así el bot lee Supabase sin cambios).
+    if (usaSupabaseLectura()) {
+      return Response.json(await getConversacionSupabase(phone, limite))
+    }
 
     const rows = await readMensajesTail(3000)
     const msgs = []

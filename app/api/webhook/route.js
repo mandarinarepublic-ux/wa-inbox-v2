@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { waitUntil } from '@vercel/functions'
 import { readSheet, appendRow } from '@/lib/sheets'
 import { registrarContactoEntrante, getContactos } from '@/lib/contactos'
+import { dualWrite, usaSupabaseLectura } from '@/lib/supabase'
+import { guardarMensajeSupabase, existeWamidSupabase } from '@/lib/inbox-supabase'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -97,9 +99,20 @@ function extraer(msg) {
 
 // ── Trabajo pesado en segundo plano (fuera del ciclo de respuesta a Meta) ──────
 async function procesar(nuevos, origin) {
-  // Dedup por wamid contra la hoja (segunda capa, además del set en memoria)
-  const rows   = await readSheet('MENSAJES').catch(() => [])
-  const vistos = new Set(rows.map(r => String(r[0] || '')))
+  // Dedup por wamid contra el backend activo (2ª capa, además del set en memoria).
+  // En 'sheets'/'dual' = Set de la hoja; en 'supabase' = existeWamid (+ UNIQUE en BD).
+  const enSupabase = usaSupabaseLectura()
+  let vistos = new Set()
+  if (!enSupabase) {
+    const rows = await readSheet('MENSAJES').catch(() => [])
+    vistos = new Set(rows.map(r => String(r[0] || '')))
+  }
+  const yaVisto = async (wamid) => {
+    if (!wamid) return false
+    if (vistos.has(wamid)) return true
+    if (enSupabase && (await existeWamidSupabase(wamid).catch(() => false))) return true
+    return false
+  }
 
   const contactos = await getContactos().catch(() => [])
   const modoIAde = (phone) => {
@@ -109,14 +122,23 @@ async function procesar(nuevos, origin) {
   }
 
   for (const m of nuevos) {
-    if (m.wamid && vistos.has(m.wamid)) continue
+    if (await yaVisto(m.wamid)) continue
     vistos.add(m.wamid)
-    // A=ID B=Telefono C=Nombre D=Tipo E=Contenido F=MediaURL G=Fecha
-    //  H=Direccion I=MediaID J=RespuestaIA K=FotoIA L=ContextoID
-    await appendRow('MENSAJES', [
-      m.wamid, m.telefono, m.nombre, m.tipo, m.contenido, '',
-      m.fecha, 'ENTRANTE', m.mediaId, '', '', m.contextoId,
-    ]).catch(e => console.error('[/api/webhook] appendRow:', e.message))
+    // Escritura dual del entrante (Sheets 12 cols + Supabase idempotente por wamid).
+    // A=ID B=Tel C=Nombre D=Tipo E=Contenido F=MediaURL G=Fecha H=Direccion I=MediaID J K L=ContextoID
+    await dualWrite(
+      () => appendRow('MENSAJES', [
+        m.wamid, m.telefono, m.nombre, m.tipo, m.contenido, '',
+        m.fecha, 'ENTRANTE', m.mediaId, '', '', m.contextoId,
+      ]),
+      () => guardarMensajeSupabase({
+        id: m.wamid, telefono: m.telefono, nombre: m.nombre, tipo: m.tipo,
+        mensaje: m.contenido, mediaUrl: '', timestamp: m.fecha, direccion: 'ENTRANTE',
+        mediaId: m.mediaId, contextoId: m.contextoId,
+      }),
+      'msg.entrante',
+    ).catch(e => console.error('[/api/webhook] guardar entrante:', e.message))
+
     try { await registrarContactoEntrante(m.telefono, m.nombre, m.telefono) }
     catch (e) { console.error('[/api/webhook] contacto:', e.message) }
 
