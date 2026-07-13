@@ -21,6 +21,19 @@ export async function GET(req) {
   const key = process.env.MIG_KEY
   if (!key || searchParams.get('key') !== key) return Response.json({ error: 'no autorizado' }, { status: 401 })
   const tabla = searchParams.get('tabla')
+
+  if (tabla === 'diag') {
+    const v = process.env.DATA_BACKEND
+    return Response.json({
+      DATA_BACKEND: v,
+      codes: v ? Array.from(v).map((c) => c.charCodeAt(0)) : null,
+      esSupabase: v === 'supabase',
+      cuenta: process.env.INBOX_CUENTA,
+      supaUrlOk: Boolean(process.env.SUPABASE_URL),
+      srkOk: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+    })
+  }
+
   const sb = getSupabase()
 
   try {
