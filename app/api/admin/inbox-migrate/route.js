@@ -8,9 +8,7 @@ import { readSheet } from '@/lib/sheets'
 import { mapContactRow } from '@/lib/contactos'
 import { mapMensajeRow } from '@/lib/mensajes'
 import { mapRespuestaRow } from '@/lib/respuestas'
-import { getSupabase, CUENTA, canonTel, DATA_BACKEND } from '@/lib/supabase'
-import { getContactos } from '@/lib/contactos'
-import * as SB from '@/lib/inbox-supabase'
+import { getSupabase, CUENTA, canonTel } from '@/lib/supabase'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -23,27 +21,6 @@ export async function GET(req) {
   const key = process.env.MIG_KEY
   if (!key || searchParams.get('key') !== key) return Response.json({ error: 'no autorizado' }, { status: 401 })
   const tabla = searchParams.get('tabla')
-
-  if (tabla === 'diag') {
-    const v = process.env.DATA_BACKEND
-    let sbCount = null, sbErr = null, gcCount = null, gcErr = null
-    try { sbCount = (await SB.getContactosSupabase()).length } catch (e) { sbErr = e.message }
-    try { gcCount = (await getContactos()).length } catch (e) { gcErr = e.message }
-    const url = process.env.SUPABASE_URL || ''
-    const srk = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-    // ref del proyecto embebido en el JWT (no secreto): payload.ref
-    let keyRef = null
-    try { keyRef = JSON.parse(Buffer.from(srk.split('.')[1], 'base64').toString()).ref } catch {}
-    return Response.json({
-      DATA_BACKEND_const: DATA_BACKEND,
-      SUPABASE_URL_host: url.replace(/^https?:\/\//, '').split('.')[0],
-      key_ref: keyRef,
-      key_len: srk.length,
-      getContactosSupabase_count: sbCount, getContactosSupabase_err: sbErr,
-      getContactos_count: gcCount, getContactos_err: gcErr,
-    })
-  }
-
   const sb = getSupabase()
 
   try {
