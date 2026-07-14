@@ -4,6 +4,8 @@ import { readSheet, appendRow } from '@/lib/sheets'
 import { registrarContactoEntrante, getContactos, updateEstado, updateModoIA } from '@/lib/contactos'
 import { dualWrite, usaSupabaseLectura } from '@/lib/supabase'
 import { guardarMensajeSupabase, existeWamidSupabase } from '@/lib/inbox-supabase'
+import { archivarFoto } from '@/lib/media-archive'
+import { parseLinkpago, crearLinkPago, mensajeLinkPago } from '@/lib/dlocal'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -184,6 +186,11 @@ async function procesar(nuevos, origin) {
     return c ? c.modoIA !== false : true // contacto nuevo → IA prendida por defecto
   }
 
+  // Archivado de fotos entrantes a Supabase Storage (URL estable en media_url).
+  // Corre concurrente con la IA; lo esperamos al final para que waitUntil no mate
+  // la función antes de terminar. Solo en modo supabase (la fila ya está insertada).
+  const archivos = []
+
   for (const m of nuevos) {
     if (await yaVisto(m.wamid)) continue
     vistos.add(m.wamid)
@@ -202,8 +209,29 @@ async function procesar(nuevos, origin) {
       'msg.entrante',
     ).catch(e => console.error('[/api/webhook] guardar entrante:', e.message))
 
+    // Archivar la foto entrante a Supabase Storage (URL estable → media_url). Solo
+    // en modo supabase, donde la fila ya quedó insertada por el dualWrite de arriba.
+    if (usaSupabaseLectura() && (m.tipo === 'imagen' || m.tipo === 'sticker') && m.mediaId) {
+      archivos.push(archivarFoto({ mediaId: m.mediaId, wamid: m.wamid }))
+    }
+
     try { await registrarContactoEntrante(m.telefono, m.nombre, m.telefono) }
     catch (e) { console.error('[/api/webhook] contacto:', e.message) }
+
+    // LINKPAGO<monto> entrante → genera link dLocal y lo devuelve al remitente.
+    // Funciona SIEMPRE (independiente del modo IA), como el flujo viejo de Make.
+    if (m.tipo === 'texto') {
+      const monto = parseLinkpago(m.contenido)
+      if (monto) {
+        try {
+          const link = await crearLinkPago(monto, `${m.telefono}-${Date.now()}`)
+          await enviarSaliente(origin, { Telefono: m.telefono, Nombre: m.nombre || '', Mensaje: mensajeLinkPago(monto, link) })
+        } catch (e) {
+          console.error('[webhook LINKPAGO] falló:', e.message)
+        }
+        continue // no seguir con la IA para este mensaje
+      }
+    }
 
     // Auto-respuesta IA (solo si el contacto tiene la IA prendida):
     if (modoIAde(m.telefono)) {
@@ -217,6 +245,11 @@ async function procesar(nuevos, origin) {
       }
     }
   }
+
+  // Esperar el archivado de fotos: mantiene viva la función (waitUntil) hasta que
+  // todas las subidas a Storage + updates de media_url terminen. No bloquea la IA
+  // (corrió concurrente durante el loop).
+  if (archivos.length) await Promise.allSettled(archivos)
 }
 
 // ── Recepción de mensajes (POST) — responde 200 YA, procesa en background ──────

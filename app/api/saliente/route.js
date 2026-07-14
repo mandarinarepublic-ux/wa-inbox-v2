@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { appendRow } from '@/lib/sheets'
 import { dualWrite } from '@/lib/supabase'
 import { guardarMensajeSupabase } from '@/lib/inbox-supabase'
+import { parseLinkpago, crearLinkPago, mensajeLinkPago } from '@/lib/dlocal'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -108,6 +109,23 @@ function construir(body) {
 export async function POST(req) {
   try {
     const body = await req.json()
+
+    // ── LINKPAGO<monto> ───────────────────────────────────────────────────────
+    // Si el ejecutivo escribe "LINKPAGO35" en el chat, NO enviamos ese texto:
+    // generamos un link de cobro dLocal por ese monto y enviamos el mensaje de
+    // pago al cliente. (Recupera la herramienta que vivía en Make.)
+    if (!body.TipoMensaje && !body.ImagenURL && !body.VideoMediaId) {
+      const monto = parseLinkpago(body.Mensaje)
+      if (monto) {
+        try {
+          const link = await crearLinkPago(monto, `${soloDigitos(body.Telefono)}-${Date.now()}`)
+          body.Mensaje = mensajeLinkPago(monto, link)   // seguimos el flujo normal de texto
+        } catch (e) {
+          console.error('[/api/saliente] LINKPAGO falló:', e.message)
+          return NextResponse.json({ ok: false, error: `No se pudo generar el link de pago: ${e.message}` }, { status: 502 })
+        }
+      }
+    }
 
     // Sin token todavía → no cortamos el servicio: enviamos por Make (temporal).
     if (!META_TOKEN) return enviarPorMake(body)
