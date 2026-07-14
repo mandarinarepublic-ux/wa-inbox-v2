@@ -75,8 +75,29 @@ const ESTADO_INFO = {
   archivado:    { label:'Archivado',  color:'#64748b' },
 }
 
+// ── MINI-BURBUJA IA / HUMANO ─────────────────────────────────────
+// Indica de un vistazo quién atiende el chat: la IA (🤖 verde) o un
+// humano (🧑 ámbar, IA apagada). modoIA: true = IA, false = HUMANO.
+function IABadge({ modoIA }) {
+  const ia = modoIA !== false // undefined/true → IA prendida por defecto
+  const c  = ia ? '#25d366' : '#f59e0b'
+  return (
+    <span
+      title={ia ? 'IA atendiendo' : 'Atiende un humano'}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0,
+        fontSize: 9, fontWeight: 800, letterSpacing: '.04em', lineHeight: 1,
+        color: c, background: `${c}1e`, border: `1px solid ${c}55`,
+        borderRadius: 20, padding: '2px 6px',
+      }}
+    >
+      {ia ? '🤖 IA' : '🧑 TÚ'}
+    </span>
+  )
+}
+
 // ── CONTACT ROW ──────────────────────────────────────────────────
-export function ContactRow({ conv, isActive, onClick, search = '', estado, msgSnippet = null }) {
+export function ContactRow({ conv, isActive, onClick, search = '', estado, modoIA, msgSnippet = null }) {
   const [hovered, setHovered] = useState(false)
   const searching = String(search || '').trim().length > 0
   const info = ESTADO_INFO[estado] || null
@@ -96,13 +117,16 @@ export function ContactRow({ conv, isActive, onClick, search = '', estado, msgSn
     >
       <Avatar name={conv.nombre} phone={conv.telefono} size={46} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontWeight: 700, fontSize: 14, color: '#e2e8f0' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontWeight: 700, fontSize: 14, color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
             {highlight(conv.nombre, search)}
           </span>
-          <span style={{ fontSize: 11, color: '#94a3b8', flexShrink: 0, marginLeft: 6 }}>
-            {fmtTime(conv.last?.timestamp)}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+            <IABadge modoIA={modoIA} />
+            <span style={{ fontSize: 11, color: '#94a3b8' }}>
+              {fmtTime(conv.last?.timestamp)}
+            </span>
+          </div>
         </div>
         {msgSnippet != null ? (
           // Búsqueda por MENSAJE: mostrar el fragmento que coincide + bandeja

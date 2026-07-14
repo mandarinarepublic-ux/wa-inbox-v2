@@ -785,6 +785,7 @@ export default function App() {
                   onClick={() => openConv(conv.telefono)}
                   search={search}
                   estado={getStatus(conv.telefono)}
+                  modoIA={getModoIA(conv.telefono)}
                   msgSnippet={searchingMsgs ? matchSnippet(conv) : null}
                 />
               ))}
