@@ -185,6 +185,12 @@ async function procesar(nuevos, origin) {
     const c = contactos.find(c => tail9(c.telefono) === t)
     return c ? c.modoIA !== false : true // contacto nuevo → IA prendida por defecto
   }
+  // Estado de flujo actual del contacto (snapshot de este ciclo). Contacto nuevo → 'pendiente'.
+  const estadoDe = (phone) => {
+    const t = tail9(phone)
+    const c = contactos.find(c => tail9(c.telefono) === t)
+    return c ? String(c.estado || 'pendiente').toLowerCase().trim() : 'pendiente'
+  }
 
   // Archivado de fotos entrantes a Supabase Storage (URL estable en media_url).
   // Corre concurrente con la IA; lo esperamos al final para que waitUntil no mate
@@ -217,6 +223,15 @@ async function procesar(nuevos, origin) {
 
     try { await registrarContactoEntrante(m.telefono, m.nombre, m.telefono) }
     catch (e) { console.error('[/api/webhook] contacto:', e.message) }
+
+    // REABRIR: un cliente que ya estaba ATENDIDO y vuelve a escribir debe regresar
+    // a PENDIENTES (necesita atención). Esto lo hacía Make en la recepción; al pasar
+    // al webhook directo se perdió y los chats se quedaban "atascados" en Atendidos.
+    // No tocamos ventaproceso/venta/soporte/archivado: son estados deliberados.
+    if (estadoDe(m.telefono) === 'atendido') {
+      await updateEstado(m.telefono, 'PENDIENTE')
+        .catch(e => console.error('[/api/webhook] reabrir a PENDIENTE:', e.message))
+    }
 
     // LINKPAGO<monto> entrante → genera link dLocal y lo devuelve al remitente.
     // Funciona SIEMPRE (independiente del modo IA), como el flujo viejo de Make.
