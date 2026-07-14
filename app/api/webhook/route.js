@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { waitUntil } from '@vercel/functions'
 import { readSheet, appendRow } from '@/lib/sheets'
-import { registrarContactoEntrante, getContactos } from '@/lib/contactos'
+import { registrarContactoEntrante, getContactos, updateEstado, updateModoIA } from '@/lib/contactos'
 import { dualWrite, usaSupabaseLectura } from '@/lib/supabase'
 import { guardarMensajeSupabase, existeWamidSupabase } from '@/lib/inbox-supabase'
 
@@ -37,6 +37,33 @@ function marcarNuevo(wamid) {
   return true
 }
 
+// Regex de URLs de imagen (mismas extensiones que extrae el agente).
+const RE_IMG = /https?:\/\/[^\s)]+?\.(?:png|jpe?g|webp|gif)(?:\?[^\s)]*)?/gi
+
+// Envía un mensaje (texto o imagen) por /api/saliente, que lo manda a Meta y lo
+// registra en MENSAJES.
+async function enviarSaliente(origin, body) {
+  return fetch(`${origin}/api/saliente`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }).catch(e => console.error('[webhook IA] envío falló:', e.message))
+}
+
+// Mensaje de espera cuando el cliente manda algo que MANDI no procesa (una foto).
+const MSG_ESPERA = 'Permíteme un momento por favor 🧡'
+
+// Handoff invisible: el cliente mandó una imagen → MANDI no vende ni identifica.
+// Marcamos el contacto SOPORTE + HUMANO (la IA se apaga y un ejecutivo lo toma)
+// y respondemos SOLO con el mensaje de espera, en la voz de MANDI.
+async function escalarASoporte(origin, phone, name) {
+  await Promise.all([
+    updateEstado(phone, 'SOPORTE').catch(e => console.error('[webhook IA] estado SOPORTE:', e.message)),
+    updateModoIA(phone, 'HUMANO').catch(e => console.error('[webhook IA] modoIA HUMANO:', e.message)),
+  ])
+  await enviarSaliente(origin, { Telefono: phone, Nombre: name || '', Mensaje: MSG_ESPERA })
+}
+
 async function responderConIA(origin, phone, name, message) {
   try {
     const r = await fetch(AGENT_URL, {
@@ -48,12 +75,28 @@ async function responderConIA(origin, phone, name, message) {
     const data = await r.json().catch(() => ({}))
     if (!r.ok) { console.error('[webhook IA] agente', r.status, data?.error || ''); return }
     const reply = String(data?.reply_clean || data?.reply || '').trim()
-    if (!reply) return
-    await fetch(`${origin}/api/saliente`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ Telefono: phone, Nombre: name || '', Mensaje: reply }),
-    }).catch(e => console.error('[webhook IA] envío falló:', e.message))
+
+    // Fotos que MANDI incluyó en su respuesta. El agente las devuelve en
+    // data.imagenes; si no vinieran, las extraemos del propio texto.
+    let imagenes = Array.isArray(data?.imagenes) ? data.imagenes.filter(Boolean) : []
+    if (!imagenes.length) imagenes = reply.match(RE_IMG) || []
+    // Dedup preservando el orden.
+    imagenes = [...new Set(imagenes)]
+
+    // Quitamos las URLs de imagen del texto para NO mandar links crudos al
+    // cliente: cada una se envía aparte como foto real.
+    let texto = reply
+    for (const u of imagenes) texto = texto.split(u).join('')
+    texto = texto.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
+
+    if (!texto && !imagenes.length) return
+
+    // 1) Primero el texto (descripción, precios, tallas).
+    if (texto) await enviarSaliente(origin, { Telefono: phone, Nombre: name || '', Mensaje: texto })
+    // 2) Luego cada foto, en orden.
+    for (const url of imagenes) {
+      await enviarSaliente(origin, { Telefono: phone, Nombre: name || '', ImagenURL: url })
+    }
   } catch (e) {
     console.error('[webhook IA] agente falló:', e.message)
   }
@@ -72,10 +115,30 @@ export async function GET(req) {
   return new NextResponse('Forbidden', { status: 403 })
 }
 
-// Extrae { tipo, contenido, mediaId, contextoId } según el tipo de mensaje de Meta
+// Normaliza el objeto `referral` de Meta (mensajes que entran desde un anuncio
+// Click-to-WhatsApp). Devuelve null si no viene de una pauta.
+function normalizarReferral(r) {
+  if (!r || typeof r !== 'object') return null
+  const out = {
+    source_type:   r.source_type || '',   // 'ad' | 'post'
+    source_id:     r.source_id || '',      // ID del anuncio (o del post)
+    source_url:    r.source_url || '',     // link de la pauta
+    headline:      r.headline || '',       // titular del anuncio
+    body:          r.body || '',           // texto del anuncio
+    media_type:    r.media_type || '',     // 'image' | 'video'
+    image_url:     r.image_url || '',      // creativo (imagen)
+    video_url:     r.video_url || '',      // creativo (video)
+    thumbnail_url: r.thumbnail_url || '',  // miniatura del creativo
+    ctwa_clid:     r.ctwa_clid || '',      // click id (Conversions API)
+  }
+  return Object.values(out).some(Boolean) ? out : null
+}
+
+// Extrae { tipo, contenido, mediaId, contextoId, referral } según el tipo de mensaje de Meta
 function extraer(msg) {
   const contextoId = msg.context?.id || ''
-  const base = (o) => ({ ...o, contextoId })
+  const referral   = normalizarReferral(msg.referral)
+  const base = (o) => ({ ...o, contextoId, referral })
   switch (msg.type) {
     case 'text':     return base({ tipo: 'texto',     contenido: msg.text?.body || '',        mediaId: '' })
     case 'image':    return base({ tipo: 'imagen',    contenido: msg.image?.caption || '',    mediaId: msg.image?.id || '' })
@@ -134,7 +197,7 @@ async function procesar(nuevos, origin) {
       () => guardarMensajeSupabase({
         id: m.wamid, telefono: m.telefono, nombre: m.nombre, tipo: m.tipo,
         mensaje: m.contenido, mediaUrl: '', timestamp: m.fecha, direccion: 'ENTRANTE',
-        mediaId: m.mediaId, contextoId: m.contextoId,
+        mediaId: m.mediaId, contextoId: m.contextoId, referral: m.referral,
       }),
       'msg.entrante',
     ).catch(e => console.error('[/api/webhook] guardar entrante:', e.message))
@@ -142,9 +205,16 @@ async function procesar(nuevos, origin) {
     try { await registrarContactoEntrante(m.telefono, m.nombre, m.telefono) }
     catch (e) { console.error('[/api/webhook] contacto:', e.message) }
 
-    // Auto-respuesta IA: solo texto y solo si el contacto tiene la IA prendida.
-    if (m.tipo === 'texto' && String(m.contenido).trim() && modoIAde(m.telefono)) {
-      await responderConIA(origin, m.telefono, m.nombre, m.contenido)
+    // Auto-respuesta IA (solo si el contacto tiene la IA prendida):
+    if (modoIAde(m.telefono)) {
+      if (m.tipo === 'texto' && String(m.contenido).trim()) {
+        // Texto → MANDI responde normalmente.
+        await responderConIA(origin, m.telefono, m.nombre, m.contenido)
+      } else if (m.tipo === 'imagen') {
+        // Foto del cliente → NO vender/identificar: mensaje de espera + handoff a
+        // SOPORTE (apaga la IA para que un ejecutivo tome el chat).
+        await escalarASoporte(origin, m.telefono, m.nombre)
+      }
     }
   }
 }
@@ -167,12 +237,12 @@ export async function POST(req) {
         for (const msg of value?.messages || []) {
           if (!marcarNuevo(msg.id)) continue // reintento rápido de Meta → ignorar
           const telefono = String(msg.from || '')
-          const { tipo, contenido, mediaId, contextoId } = extraer(msg)
+          const { tipo, contenido, mediaId, contextoId, referral } = extraer(msg)
           nuevos.push({
             wamid: msg.id || '',
             telefono,
             nombre: nombreDe[telefono] || '',
-            tipo, contenido, mediaId, contextoId,
+            tipo, contenido, mediaId, contextoId, referral,
             fecha: msg.timestamp ? new Date(Number(msg.timestamp) * 1000).toISOString() : new Date().toISOString(),
           })
         }

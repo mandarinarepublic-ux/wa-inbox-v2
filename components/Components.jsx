@@ -304,6 +304,67 @@ function MediaContent({ tipo, mediaUrl, mediaId }) {
   return null
 }
 
+// ── REFERRAL / PAUTA (anuncio Click-to-WhatsApp) ─────────────────
+// Cuando un cliente entra desde un anuncio de Meta, el mensaje trae `referral`
+// con el anuncio del que vino. Lo mostramos para responder con contexto.
+function ReferralCard({ referral }) {
+  let r = referral
+  if (typeof r === 'string') { try { r = JSON.parse(r) } catch { return null } }
+  if (!r || typeof r !== 'object') return null
+
+  const img = r.image_url || r.thumbnail_url || ''
+  const proxied = img && /lookaside\.fbsbx\.com|graph\.facebook\.com|fbcdn|scontent/i.test(img)
+    ? `/api/media?url=${encodeURIComponent(img)}`
+    : img
+  if (!r.headline && !r.body && !proxied && !r.source_url) return null
+
+  return (
+    <div style={{
+      border: '1px solid rgba(99,102,241,.35)',
+      background: 'rgba(99,102,241,.10)',
+      borderRadius: 12, padding: 8, marginBottom: 8,
+      display: 'flex', gap: 8, alignItems: 'flex-start', maxWidth: '100%',
+    }}>
+      {proxied && (
+        <img
+          src={proxied}
+          alt="anuncio"
+          style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }}
+          onError={e => { e.currentTarget.style.display = 'none' }}
+        />
+      )}
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div style={{ fontSize: 10, fontWeight: 800, color: '#818cf8', letterSpacing: '.03em', marginBottom: 2 }}>
+          📣 VINO DE {r.source_type === 'post' ? 'UNA PUBLICACIÓN' : 'UN ANUNCIO'}
+        </div>
+        {r.headline && (
+          <div style={{
+            fontSize: 13, fontWeight: 700, color: '#e2e8f0',
+            overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+          }}>{r.headline}</div>
+        )}
+        {r.body && (
+          <div style={{
+            fontSize: 12, color: '#94a3b8', marginTop: 2,
+            overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', whiteSpace: 'pre-wrap',
+          }}>{r.body}</div>
+        )}
+        <div style={{ display: 'flex', gap: 10, marginTop: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+          {r.source_url && (
+            <a href={r.source_url} target="_blank" rel="noreferrer"
+              style={{ fontSize: 11, color: '#818cf8', fontWeight: 600, textDecoration: 'none' }}>
+              Ver anuncio ↗
+            </a>
+          )}
+          {r.source_id && (
+            <span style={{ fontSize: 10, color: '#475569' }}>ID: {r.source_id}</span>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── QUOTED MESSAGE (cita) ────────────────────────────────────────
 function QuotedMessage({ contextoId, allMsgs }) {
   const [fetched, setFetched] = useState(null)
@@ -403,6 +464,8 @@ export function MessageBubble({ msg, allMsgs }) {
         boxShadow: '0 2px 8px rgba(0,0,0,.3)',
         border: isMe ? '1px solid rgba(37,211,102,.1)' : '1px solid #1e2d3d',
       }}>
+
+        {msg.referral && <ReferralCard referral={msg.referral} />}
 
         {msg.contextoId && (
           <QuotedMessage contextoId={msg.contextoId} allMsgs={allMsgs} />
