@@ -518,7 +518,10 @@ export default function App() {
     if (botones.length && reply.text) {
       // Respuesta rápida CON botones interactivos → mensaje + botones
       const validBtns = botones.map((t, i) => ({ id: `btn_${i + 1}`, title: t }))
-      const tmpMsg = { id: 'tmp_' + Date.now(), telefono: activeConv.telefono, nombre: activeConv.nombre, mensaje: `${reply.text}\n${validBtns.map(b => `[ ${b.title} ]`).join('  ')}`, direccion: 'SALIENTE', timestamp: new Date().toISOString(), estado: 'enviado' }
+      // El servidor guarda SOLO el cuerpo en `mensaje`; los botones van aparte en `botones`.
+      // Así el texto optimista coincide con el guardado y la reconciliación descarta el
+      // temporal (sin duplicar), mientras la burbuja pinta los botones desde `botones`.
+      const tmpMsg = { id: 'tmp_' + Date.now(), telefono: activeConv.telefono, nombre: activeConv.nombre, mensaje: reply.text, botones: validBtns, direccion: 'SALIENTE', timestamp: new Date().toISOString(), estado: 'enviado' }
       setConvs(prev => prev.map(c => c.telefono === activeConv.telefono ? { ...c, msgs: [...c.msgs, tmpMsg], last: tmpMsg } : c))
       pendingRef.current[activeConv.telefono] = [ ...(pendingRef.current[activeConv.telefono] || []), tmpMsg ]
       changeStatus(activeConv.telefono, currentStatus === 'ventaproceso' ? 'ventaproceso' : 'atendido')
@@ -573,9 +576,12 @@ export default function App() {
     const validBtns = btnTexts.map((t,i) => ({ id:`btn_${i+1}`, title:t.trim() })).filter(b=>b.title)
     if (validBtns.length === 0) return
     setSendingBtns(true)
+    // El servidor guarda SOLO el cuerpo en `mensaje`; los botones van aparte en `botones`
+    // (columna M / campo Supabase). Con el texto igual al guardado, la reconciliación
+    // descarta el temporal sin duplicar, y la burbuja pinta los botones desde `botones`.
     const tmpMsg = {
       id:'tmp_'+Date.now(), telefono:activeConv.telefono, nombre:activeConv.nombre,
-      mensaje:`${input.trim()}\n${validBtns.map(b=>`[ ${b.title} ]`).join('  ')}`,
+      mensaje:input.trim(), botones:validBtns,
       direccion:'SALIENTE', timestamp:new Date().toISOString(), estado:'enviado',
     }
     setConvs(prev=>prev.map(c=>c.telefono===activeConv.telefono?{...c,msgs:[...c.msgs,tmpMsg],last:tmpMsg}:c))

@@ -42,9 +42,13 @@ function construir(body) {
   if (body.TipoMensaje === 'interactive_buttons') {
     let buttons = []
     try { buttons = JSON.parse(body.Botones || '[]') } catch {}
+    // Botones en forma simple para la UI/persistencia: [{ id, title }].
+    // (El payload de Meta usa { type:'reply', reply:{ id, title } }.)
+    const botones = buttons.map(b => (b?.reply ? { id: b.reply.id, title: b.reply.title } : b))
     return {
       tipo: 'interactive',
       contenido: body.Cuerpo || '',
+      botones,
       mediaUrl: '', mediaId: '',
       payload: {
         messaging_product: 'whatsapp',
@@ -108,7 +112,7 @@ export async function POST(req) {
     // Sin token todavía → no cortamos el servicio: enviamos por Make (temporal).
     if (!META_TOKEN) return enviarPorMake(body)
 
-    const { payload, tipo, contenido, mediaUrl, mediaId } = construir(body)
+    const { payload, tipo, contenido, mediaUrl, mediaId, botones } = construir(body)
 
     const res  = await fetch(GRAPH_URL, {
       method: 'POST',
@@ -126,19 +130,22 @@ export async function POST(req) {
     const wamid = data.messages[0].id
 
     // Registrar en MENSAJES (A=ID B=Telefono C=Nombre D=Tipo E=Contenido F=MediaURL
-    //  G=Fecha H=Direccion I=MediaID J=RespuestaIA K=FotoIA L=ContextoID)
+    //  G=Fecha H=Direccion I=MediaID J=RespuestaIA K=FotoIA L=ContextoID M=Botones)
     const telSal = soloDigitos(body.Telefono)
     const fechaSal = new Date().toISOString()
+    // Botones (interactivos) serializados para la columna M / campo Supabase.
+    const botonesStr = botones && botones.length ? JSON.stringify(botones) : ''
     try {
-      // Dual-write del saliente (Sheets 12 cols + Supabase idempotente por wamid).
+      // Dual-write del saliente (Sheets 13 cols + Supabase idempotente por wamid).
       await dualWrite(
         () => appendRow('MENSAJES', [
           wamid, telSal, body.Nombre || '', tipo, contenido, mediaUrl,
-          fechaSal, 'SALIENTE', mediaId, '', '', '',
+          fechaSal, 'SALIENTE', mediaId, '', '', '', botonesStr,
         ]),
         () => guardarMensajeSupabase({
           id: wamid, telefono: telSal, nombre: body.Nombre || '', tipo,
           mensaje: contenido, mediaUrl, timestamp: fechaSal, direccion: 'SALIENTE', mediaId,
+          botones: botonesStr,
         }),
         'msg.saliente',
       )
