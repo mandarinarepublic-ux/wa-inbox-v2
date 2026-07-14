@@ -1,7 +1,7 @@
 'use client'
 import { useState, useRef, useEffect } from 'react'
 import { Avatar } from '@/components/Components'
-import { fetchRepliesFromSheet, writeReply, saveNotes, setIdVenta } from '@/lib/api-client'
+import { fetchRepliesFromSheet, writeReply, saveNotes, setIdVenta, fetchProductos } from '@/lib/api-client'
 import { parseDate } from '@/lib/utils'
 
 const IMGBB_KEY = '2307574d43689522feabd27cff3443df'
@@ -168,7 +168,50 @@ function PedidoCard({ p }) {
   )
 }
 
+// ── Tarjeta de producto del catálogo (pestaña TIENDA) ────────────
+function ProductCard({ p, sending, windowOpen, onSendFoto, onSendInfo }) {
+  return (
+    <div style={{ background:'rgba(255,255,255,.02)', border:'1px solid #111c2a', borderRadius:9, overflow:'hidden', display:'flex', flexDirection:'column' }}>
+      <div style={{ position:'relative', width:'100%', aspectRatio:'1 / 1', background:'#0d1828' }}>
+        <img src={p.image} alt={p.title} loading="lazy"
+          style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }}
+          onError={e => { e.currentTarget.style.opacity = 0 }} />
+        <span style={{ position:'absolute', top:5, right:5, background:'rgba(16,185,129,.94)', color:'#04120c', fontSize:10, fontWeight:800, padding:'1px 7px', borderRadius:6 }}>
+          ${p.price}
+        </span>
+      </div>
+      <div style={{ padding:'6px 7px', display:'flex', flexDirection:'column', gap:4, flex:1 }}>
+        <span style={{ fontSize:11, color:'#cbd5e1', fontWeight:600, lineHeight:1.25, overflow:'hidden', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', minHeight:28 }}>
+          {p.title}
+        </span>
+        {p.variants?.length > 0 && (
+          <span style={{ fontSize:9, color:'#475569' }}>{p.variants.length} variante{p.variants.length === 1 ? '' : 's'}</span>
+        )}
+        <div style={{ display:'flex', gap:3, marginTop:'auto' }}>
+          <button onClick={() => onSendFoto(p)} disabled={sending || !windowOpen}
+            title={windowOpen ? 'Enviar solo la foto' : 'Ventana cerrada'}
+            style={{ flex:1, padding:'5px', background: windowOpen ? 'rgba(37,211,102,.12)' : 'rgba(255,255,255,.03)', border:`1px solid ${windowOpen ? 'rgba(37,211,102,.3)' : '#1e2d3d'}`, color: windowOpen ? '#25d366' : '#475569', borderRadius:6, fontSize:10, fontWeight:700, cursor: windowOpen && !sending ? 'pointer' : 'default', fontFamily:'inherit' }}>
+            {sending === 'foto' ? '⏳' : '📤 Foto'}
+          </button>
+          <button onClick={() => onSendInfo(p)} disabled={sending || !windowOpen}
+            title={windowOpen ? 'Enviar foto + título y precio' : 'Ventana cerrada'}
+            style={{ padding:'5px 8px', background:'rgba(255,255,255,.03)', border:'1px solid #1e2d3d', color: windowOpen ? '#94a3b8' : '#475569', borderRadius:6, fontSize:10, fontWeight:700, cursor: windowOpen && !sending ? 'pointer' : 'default', fontFamily:'inherit' }}>
+            {sending === 'info' ? '⏳' : 'ℹ️'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const TABS = [
+  { id: 'respuestas', icon: '⚡', label: 'Respuestas' },
+  { id: 'ventas',     icon: '📦', label: 'Ventas' },
+  { id: 'tienda',     icon: '🛍️', label: 'Tienda' },
+]
+
 export default function RightPanel({ activeConv, onQuickReply, onSendText, onSendImage, contactInfo, onUpdateContact, windowOpen }) {
+  const [tab, setTab]           = useState('respuestas')
   const [countdown, setCountdown] = useState('')
 
   // ── Contador regresivo ventana 24h ───────────────────────────
@@ -191,9 +234,7 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
   }, [activeConv])
   const [replies,       setReplies]       = useState([])
   const [repliesLoaded, setRepliesLoaded] = useState(false)
-  const [repliesOpen,   setRepliesOpen]   = useState(true)
   const [nuevaOpen,     setNuevaOpen]     = useState(false)
-  const [notasOpen,     setNotasOpen]     = useState(true)
   const [editingIdx,    setEditingIdx]    = useState(null)
   const [editText,      setEditText]      = useState('')
   const [editImgUrls,   setEditImgUrls]   = useState([])
@@ -218,8 +259,13 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
   // ── Historial de pedidos del cliente (desde MANDARINACRM) ────
   const [historial,   setHistorial]   = useState(null)  // null = cargando
   const [histError,   setHistError]   = useState(false)
-  const [histOpen,    setHistOpen]    = useState(true)
   const histLoadedRef = useRef(null)
+
+  // ── Catálogo TIENDA (Shopify) ────────────────────────────────
+  const [productos,     setProductos]     = useState(null)  // null = cargando
+  const [productosLoaded, setProductosLoaded] = useState(false)
+  const [prodQuery,     setProdQuery]     = useState('')
+  const [prodSending,   setProdSending]   = useState(null)  // { id, modo } del producto que se está enviando
 
   const loadHistorial = async (tel, idVenta) => {
     setHistorial(null); setHistError(false)
@@ -261,6 +307,17 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
     histLoadedRef.current = activeConv.telefono
     loadHistorial(activeConv.telefono, contactInfo?.idVenta)
   }, [activeConv, contactInfo])
+
+  // Cargar el catálogo la PRIMERA vez que se abre la pestaña Tienda (perezoso)
+  useEffect(() => {
+    if (tab !== 'tienda' || productosLoaded) return
+    let cancel = false
+    setProductos(null)
+    fetchProductos().then(list => {
+      if (!cancel) { setProductos(list || []); setProductosLoaded(true) }
+    })
+    return () => { cancel = true }
+  }, [tab, productosLoaded])
 
   if (!activeConv) return null
 
@@ -304,6 +361,27 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
     setSending(null)
   }
 
+  // ── TIENDA: enviar producto ──────────────────────────────────
+  const productosFiltrados = (productos || []).filter(p =>
+    !prodQuery.trim() || String(p.title).toLowerCase().includes(prodQuery.trim().toLowerCase())
+  )
+
+  const sendProductoFoto = async (p) => {
+    if (!windowOpen || prodSending) return
+    setProdSending({ id: p.id, modo: 'foto' })
+    try { await onSendImage?.(p.image) }
+    finally { setTimeout(() => setProdSending(null), 600) }
+  }
+
+  const sendProductoInfo = async (p) => {
+    if (!windowOpen || prodSending) return
+    setProdSending({ id: p.id, modo: 'info' })
+    try {
+      await onSendText?.(`${p.title}${p.price ? ` — $${p.price}` : ''}`)
+      await onSendImage?.(p.image)
+    } finally { setTimeout(() => setProdSending(null), 600) }
+  }
+
   // Guardar nota del vendedor (col I vía webhook)
   const crearPedido = async () => {
     if (pedidoLoading || !activeConv) return
@@ -330,7 +408,7 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
         const linea = `📦 Pedido ${res.pedidoId} · $${res.montoTotal}\n${res.url}`
         const base = String(notasInput || '')
         const nueva = base.includes(res.pedidoId) ? base : (base.trim() ? `${base.trim()}\n${linea}` : linea)
-        setNotasInput(nueva); setNotasOpen(true)
+        setNotasInput(nueva)
         saveNotes(activeConv.telefono, contactInfo?.nombre || activeConv.nombre, nueva).catch(() => {})
         setIdVenta(activeConv.telefono, res.pedidoId).catch(() => {})
       }
@@ -354,7 +432,7 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
   return (
     <div style={{ display:'flex', flexDirection:'column', height:'100%', background:'#07111d', overflow:'hidden' }}>
 
-      {/* ── INFO CONTACTO ── */}
+      {/* ── HEADER FIJO: INFO CONTACTO + VENTANA ── */}
       <div style={{ flexShrink:0, padding:'14px 14px 10px', borderBottom:'1px solid #111c2a' }}>
         <div style={{ display:'flex', alignItems:'center', gap:9, marginBottom:8 }}>
           <Avatar name={contactName} phone={activeConv.telefono} size={38} />
@@ -386,207 +464,276 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
             <span style={{ fontFamily:'monospace', fontSize:11, color:'#94a3b8' }}>Expirada</span>
           )}
         </div>
-
       </div>
 
-      {/* ── NOTAS DEL VENDEDOR (arriba, debajo de VENTANA ACTIVA — guarda el pedido creado) ── */}
-      <div style={{ flexShrink:0, padding:'8px 12px 10px', borderBottom:'1px solid #111c2a', background:'#0a1019' }}>
-        <div onClick={() => setNotasOpen(o => !o)} style={{ padding:'0 0 6px', cursor:'pointer', userSelect:'none', display:'flex', alignItems:'center', gap:5 }}>
-          <span style={{ fontSize:9, color:'#475569', transition:'transform .2s', display:'inline-block', transform: notasOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
-          <p style={{ fontSize:10, color:'#f59e0b', fontWeight:700, letterSpacing:'.08em', margin:0, display:'flex', alignItems:'center', gap:5 }}>
-            📝 NOTAS
-            {notasSaved && <span style={{ fontSize:8, background:'rgba(37,211,102,.15)', color:'#25d366', borderRadius:10, padding:'1px 6px' }}>Guardado ✓</span>}
-          </p>
-        </div>
-        {notasOpen && <>
-          {(() => { const u = (String(notasInput || '').match(/https?:\/\/\S+\/dashboard\/pedido\/\S+/) || [])[0]; return u ? (
-            <a href={u} target="_blank" rel="noreferrer" style={{ display:'inline-block', marginBottom:6, padding:'4px 9px', background:'rgba(16,185,129,.15)', border:'1px solid rgba(16,185,129,.35)', color:'#10b981', borderRadius:6, fontSize:11, fontWeight:700, textDecoration:'none' }}>📄 Ver pedido</a>
-          ) : null })()}
-          <textarea
-            value={notasInput}
-            onChange={e => { setNotasInput(e.target.value); setNotasSaved(false) }}
-            placeholder="Ej: Falta que envíe la foto del pago..."
-            rows={3}
-            style={{ width:'100%', background:'#111c2a', border:'1px solid #1e2d3d', borderRadius:7, color:'#ffffff', fontSize:11, padding:'6px 8px', resize:'vertical', outline:'none', fontFamily:'inherit', whiteSpace:'pre-wrap', minHeight:56 }}
-            onFocus={e => e.target.style.borderColor='#f59e0b'} onBlur={e => e.target.style.borderColor='#1e2d3d'}
-          />
-          <button onClick={handleSaveNotas} disabled={notasSaving}
-            style={{ width:'100%', marginTop:5, padding:'6px', background: notasSaving ? '#111c2a' : 'rgba(245,158,11,.12)', border:'1px solid rgba(245,158,11,.3)', color:'#f59e0b', borderRadius:7, fontSize:11, fontWeight:700, cursor: notasSaving ? 'default' : 'pointer', fontFamily:'inherit', transition:'all .15s' }}>
-            {notasSaving ? '⏳ Guardando...' : '💾 Guardar nota'}
-          </button>
-        </> }
+      {/* ── BARRA DE PESTAÑAS ── */}
+      <div style={{ flexShrink:0, display:'flex', background:'#0a1019', borderBottom:'1px solid #111c2a' }}>
+        {TABS.map(t => {
+          const active = tab === t.id
+          return (
+            <button key={t.id} onClick={() => setTab(t.id)}
+              style={{
+                flex:1, padding:'10px 4px 8px', background: active ? 'rgba(37,211,102,.07)' : 'transparent',
+                border:'none', borderBottom: active ? '2px solid #25d366' : '2px solid transparent',
+                color: active ? '#25d366' : '#64748b', fontSize:11, fontWeight:800, cursor:'pointer',
+                fontFamily:'inherit', display:'flex', flexDirection:'column', alignItems:'center', gap:2,
+                transition:'all .15s', letterSpacing:'.02em',
+              }}>
+              <span style={{ fontSize:15 }}>{t.icon}</span>
+              {t.label}
+            </button>
+          )
+        })}
       </div>
 
-      {/* ── CREAR PEDIDO ── */}
-      <div style={{ flexShrink:0, padding:'10px 12px', borderBottom:'1px solid #111c2a' }}>
-        <button onClick={crearPedido} disabled={pedidoLoading}
-          style={{ width:'100%', padding:'9px', background: pedidoLoading?'#111c2a':'linear-gradient(135deg,#10b981,#059669)', border:'1px solid rgba(16,185,129,.4)', color:'#fff', borderRadius:8, fontSize:12, fontWeight:800, cursor: pedidoLoading?'default':'pointer', fontFamily:'inherit', letterSpacing:'.03em' }}>
-          {pedidoLoading ? '⏳ Leyendo conversación y creando…' : '🧾 CREAR PEDIDO'}
-        </button>
-
-        {pedidoRes?.ok && (
-          <div style={{ marginTop:8, padding:'9px 10px', background:'rgba(16,185,129,.1)', border:'1px solid rgba(16,185,129,.3)', borderRadius:8 }}>
-            <div style={{ fontSize:12, fontWeight:800, color:'#10b981' }}>✅ Pedido creado: {pedidoRes.pedidoId}</div>
-            <div style={{ fontSize:11, color:'#94a3b8', marginTop:2 }}>Total ${pedidoRes.montoTotal} · {pedidoRes.diasCalculado} días</div>
-            <a href={pedidoRes.url} target="_blank" rel="noreferrer" style={{ display:'inline-block', marginTop:6, padding:'5px 10px', background:'rgba(16,185,129,.15)', border:'1px solid rgba(16,185,129,.35)', color:'#10b981', borderRadius:6, fontSize:11, fontWeight:700, textDecoration:'none' }}>📄 Ver pedido</a>
-          </div>
-        )}
-
-        {pedidoRes && !pedidoRes.ok && pedidoRes.faltan && (
-          <div style={{ marginTop:8, padding:'9px 10px', background:'rgba(245,158,11,.08)', border:'1px solid rgba(245,158,11,.3)', borderRadius:8 }}>
-            <div style={{ fontSize:11, fontWeight:800, color:'#f59e0b' }}>⚠️ Faltan datos: {pedidoRes.faltan.join(', ')}</div>
-            <textarea readOnly value={pedidoRes.sugerencia || ''} rows={3}
-              style={{ width:'100%', marginTop:6, background:'#111c2a', border:'1px solid #1e2d3d', borderRadius:6, color:'#e2e8f0', fontSize:11, padding:'6px 8px', resize:'vertical', outline:'none', fontFamily:'inherit', whiteSpace:'pre-wrap' }} />
-            <div style={{ display:'flex', gap:5, marginTop:5 }}>
-              <button onClick={() => onSendText && onSendText(pedidoRes.sugerencia)} disabled={!windowOpen}
-                style={{ flex:1, padding:'6px', background:'rgba(37,211,102,.12)', border:'1px solid rgba(37,211,102,.3)', color:'#25d366', borderRadius:6, fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>📤 Enviar al cliente</button>
-              <button onClick={() => onSendText && onSendText(null, pedidoRes.sugerencia)}
-                style={{ flex:1, padding:'6px', background:'rgba(255,255,255,.04)', border:'1px solid #2a3f55', color:'#94a3b8', borderRadius:6, fontSize:11, cursor:'pointer', fontFamily:'inherit' }}>✏️ Editar</button>
-            </div>
-          </div>
-        )}
-
-        {pedidoRes && !pedidoRes.ok && !pedidoRes.faltan && (
-          <div style={{ marginTop:8, padding:'8px 10px', background:'rgba(248,113,113,.08)', border:'1px solid rgba(248,113,113,.3)', borderRadius:8, fontSize:11, color:'#f87171' }}>
-            ❌ {pedidoRes.error || 'No se pudo crear el pedido'}
-          </div>
-        )}
-      </div>
-
-      {/* ── HISTORIAL DE PEDIDOS (MANDARINACRM) ── */}
-      <div style={{ flexShrink:0, padding:'8px 12px 10px', borderBottom:'1px solid #111c2a', background:'#0a1019' }}>
-        <div onClick={() => setHistOpen(o => !o)} style={{ cursor:'pointer', userSelect:'none', display:'flex', alignItems:'center', gap:5 }}>
-          <span style={{ fontSize:9, color:'#475569', transition:'transform .2s', display:'inline-block', transform: histOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
-          <p style={{ fontSize:10, color:'#60a5fa', fontWeight:700, letterSpacing:'.08em', margin:0, display:'flex', alignItems:'center', gap:6 }}>
-            📦 HISTORIAL DE PEDIDOS
-            {historial?.totalPedidos > 0 && (historial.totalPedidos >= 3 || historial.totalGastado >= 80) && (
-              <span style={{ fontSize:8, background:'rgba(245,158,11,.15)', color:'#f59e0b', border:'1px solid rgba(245,158,11,.35)', borderRadius:10, padding:'1px 6px', fontWeight:800 }}>⭐ VIP</span>
-            )}
-          </p>
-          <span
-            onClick={e => { e.stopPropagation(); loadHistorial(activeConv.telefono, contactInfo?.idVenta) }}
-            title="Recargar historial"
-            style={{ marginLeft:'auto', color:'#475569', fontSize:12, cursor:'pointer', padding:'0 2px', lineHeight:1 }}
-          >🔄</span>
-        </div>
-
-        {histOpen && (
-          <div style={{ marginTop:8 }}>
-            {historial === null && !histError ? (
-              // Skeleton mientras carga
-              <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-                {[0, 1].map(i => (
-                  <div key={i} style={{ height:38, borderRadius:8, background:'#0d1828', border:'1px solid #162030', opacity:.6, animation:'pulse 1.2s infinite' }} />
-                ))}
-              </div>
-            ) : histError ? (
-              <div style={{ fontSize:11, color:'#64748b', padding:'4px 0' }}>
-                No se pudo cargar el historial.{' '}
-                <button onClick={() => loadHistorial(activeConv.telefono, contactInfo?.idVenta)}
-                  style={{ background:'transparent', border:'none', color:'#60a5fa', cursor:'pointer', fontSize:11, padding:0, textDecoration:'underline', fontFamily:'inherit' }}>Reintentar</button>
-              </div>
-            ) : !historial || historial.totalPedidos === 0 ? (
-              <div style={{ fontSize:11, color:'#94a3b8', padding:'7px 9px', background:'rgba(96,165,250,.06)', border:'1px solid rgba(96,165,250,.18)', borderRadius:7 }}>
-                Cliente nuevo ✨ — sin pedidos previos
-              </div>
-            ) : (
-              <>
-                <div style={{ fontSize:11, color:'#94a3b8', marginBottom:7 }}>
-                  {historial.totalPedidos} pedido{historial.totalPedidos === 1 ? '' : 's'} · <strong style={{ color:'#10b981' }}>${historial.totalGastado.toFixed(2)}</strong> total
-                </div>
-                <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-                  {historial.pedidos.map(p => <PedidoCard key={p.id} p={p} />)}
-                </div>
-              </>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* ── RESPUESTAS RÁPIDAS — scroll independiente ── */}
+      {/* ── CONTENIDO DE LA PESTAÑA ACTIVA (scroll propio) ── */}
       <div style={{ flex:1, overflowY:'auto', minHeight:0 }}>
-        <div
-          onClick={() => setRepliesOpen(o => !o)}
-          style={{ padding:'10px 12px 6px', cursor:'pointer', userSelect:'none' }}
-        >
-          <p style={{ fontSize:10, color:'#94a3b8', fontWeight:700, letterSpacing:'.08em', display:'flex', alignItems:'center', gap:5, margin:0 }}>
-            <span style={{ fontSize:9, color:'#475569', transition:'transform .2s', display:'inline-block', transform: repliesOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
-            ⚡ RESPUESTAS RÁPIDAS
-            {!repliesLoaded && <span style={{ fontSize:9, color:'#94a3b8' }}>cargando...</span>}
-            <span onClick={e => { e.stopPropagation(); setRepliesLoaded(false) }} title="Recargar" style={{ marginLeft:'auto', background:'transparent', border:'none', color:'#475569', fontSize:12, cursor:'pointer', padding:'0 2px', lineHeight:1 }}>🔄</span>
-          </p>
-        </div>
 
-        {repliesOpen && <div style={{ padding:'0 12px', display:'flex', flexDirection:'column', gap:5 }}>
-          {replies.map((reply, idx) => { const imgs = getImgUrls(reply); return (
-            <div key={reply.id || idx}>
-              {editingIdx === idx ? (
-                <div style={{ background:'rgba(255,255,255,.03)', border:'1px solid #25d366', borderRadius:9, padding:'7px', marginBottom:2 }}>
-                  <textarea value={editText} onChange={e => setEditText(e.target.value)} rows={5} placeholder="Texto..."
-                    style={{ width:'100%', background:'#111c2a', border:'1px solid #25d366', borderRadius:6, color:'#e2e8f0', fontSize:12, padding:'8px 10px', resize:'vertical', outline:'none', fontFamily:'inherit', marginBottom:5, whiteSpace:'pre-wrap', minHeight:100 }} />
-                  <p style={{ fontSize:9, color:'#475569', marginBottom:3 }}>Fotos ({editImgUrls.length}/{MAX_IMGS})</p>
-                  <MultiImgEditor urls={editImgUrls} onChange={setEditImgUrls} />
-                  <BotonesEditor botones={editBotones} onChange={setEditBotones} />
-                  <div style={{ display:'flex', gap:3, marginTop:7 }}>
-                    <button onClick={saveEdit} style={{ flex:1, padding:'4px', background:'rgba(37,211,102,.15)', border:'1px solid rgba(37,211,102,.3)', color:'#25d366', borderRadius:6, fontSize:10, cursor:'pointer', fontFamily:'inherit' }}>✓ Guardar</button>
-                    <button onClick={() => { setEditingIdx(null); setEditText(''); setEditImgUrls([]) }} style={{ flex:1, padding:'4px', background:'transparent', border:'1px solid #2a3f55', color:'#94a3b8', borderRadius:6, fontSize:10, cursor:'pointer', fontFamily:'inherit' }}>✕</button>
-                  </div>
-                </div>
-              ) : (
-                <div style={{ background:'rgba(255,255,255,.02)', border:'1px solid #111c2a', borderRadius:8, overflow:'hidden', transition:'background .1s' }}
-                  onMouseEnter={e => e.currentTarget.style.background='rgba(255,255,255,.04)'}
-                  onMouseLeave={e => e.currentTarget.style.background='rgba(255,255,255,.02)'}
-                >
-                  {/* Strip de fotos (hasta 10) */}
-                  {imgs.length > 0 && (
-                    <div style={{ display:'flex', gap:1, height:44 }}>
-                      {imgs.map((u, i) => (
-                        <img key={i} src={u} style={{ flex:1, objectFit:'cover', display:'block', maxWidth:`${100/imgs.length}%` }} alt="" onError={e => e.currentTarget.style.display='none'} />
-                      ))}
+        {/* ═══════════ RESPUESTAS RÁPIDAS ═══════════ */}
+        {tab === 'respuestas' && (
+          <>
+            <div style={{ padding:'10px 12px 6px' }}>
+              <p style={{ fontSize:10, color:'#94a3b8', fontWeight:700, letterSpacing:'.08em', display:'flex', alignItems:'center', gap:5, margin:0 }}>
+                ⚡ RESPUESTAS RÁPIDAS
+                {!repliesLoaded && <span style={{ fontSize:9, color:'#94a3b8' }}>cargando...</span>}
+                <span onClick={() => setRepliesLoaded(false)} title="Recargar" style={{ marginLeft:'auto', background:'transparent', border:'none', color:'#475569', fontSize:12, cursor:'pointer', padding:'0 2px', lineHeight:1 }}>🔄</span>
+              </p>
+            </div>
+
+            <div style={{ padding:'0 12px', display:'flex', flexDirection:'column', gap:5 }}>
+              {replies.map((reply, idx) => { const imgs = getImgUrls(reply); return (
+                <div key={reply.id || idx}>
+                  {editingIdx === idx ? (
+                    <div style={{ background:'rgba(255,255,255,.03)', border:'1px solid #25d366', borderRadius:9, padding:'7px', marginBottom:2 }}>
+                      <textarea value={editText} onChange={e => setEditText(e.target.value)} rows={5} placeholder="Texto..."
+                        style={{ width:'100%', background:'#111c2a', border:'1px solid #25d366', borderRadius:6, color:'#e2e8f0', fontSize:12, padding:'8px 10px', resize:'vertical', outline:'none', fontFamily:'inherit', marginBottom:5, whiteSpace:'pre-wrap', minHeight:100 }} />
+                      <p style={{ fontSize:9, color:'#475569', marginBottom:3 }}>Fotos ({editImgUrls.length}/{MAX_IMGS})</p>
+                      <MultiImgEditor urls={editImgUrls} onChange={setEditImgUrls} />
+                      <BotonesEditor botones={editBotones} onChange={setEditBotones} />
+                      <div style={{ display:'flex', gap:3, marginTop:7 }}>
+                        <button onClick={saveEdit} style={{ flex:1, padding:'4px', background:'rgba(37,211,102,.15)', border:'1px solid rgba(37,211,102,.3)', color:'#25d366', borderRadius:6, fontSize:10, cursor:'pointer', fontFamily:'inherit' }}>✓ Guardar</button>
+                        <button onClick={() => { setEditingIdx(null); setEditText(''); setEditImgUrls([]) }} style={{ flex:1, padding:'4px', background:'transparent', border:'1px solid #2a3f55', color:'#94a3b8', borderRadius:6, fontSize:10, cursor:'pointer', fontFamily:'inherit' }}>✕</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ background:'rgba(255,255,255,.02)', border:'1px solid #111c2a', borderRadius:8, overflow:'hidden', transition:'background .1s' }}
+                      onMouseEnter={e => e.currentTarget.style.background='rgba(255,255,255,.04)'}
+                      onMouseLeave={e => e.currentTarget.style.background='rgba(255,255,255,.02)'}
+                    >
+                      {/* Strip de fotos (hasta 10) */}
+                      {imgs.length > 0 && (
+                        <div style={{ display:'flex', gap:1, height:44 }}>
+                          {imgs.map((u, i) => (
+                            <img key={i} src={u} style={{ flex:1, objectFit:'cover', display:'block', maxWidth:`${100/imgs.length}%` }} alt="" onError={e => e.currentTarget.style.display='none'} />
+                          ))}
+                        </div>
+                      )}
+                      {/* Texto + botones */}
+                      <div style={{ padding:'7px 8px', display:'flex', alignItems:'flex-start', gap:4 }}>
+                        <span style={{ flex:1, fontSize:12, color:'#94a3b8', lineHeight:1.4, overflow:'hidden', textOverflow:'ellipsis', display:'-webkit-box', WebkitLineClamp:3, WebkitBoxOrient:'vertical', minWidth:0 }}>
+                          {imgs.length > 0 && `🖼×${imgs.length} `}{reply.botones?.length > 0 && <span style={{ color:'#f59e0b', fontWeight:700 }}>{`🔘×${reply.botones.length} `}</span>}{reply.text}
+                        </span>
+                        <div style={{ display:'flex', gap:4, flexShrink:0 }}>
+                          <button onClick={() => handleSendQuick(idx)} disabled={sending===idx||!windowOpen} title="Enviar" style={{ background:'rgba(37,211,102,.12)', border:'1px solid rgba(37,211,102,.2)', color:'#25d366', borderRadius:5, padding:'3px 8px', fontSize:10, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>{sending===idx?'⏳':'▶ Enviar'}</button>
+                          <button onClick={() => startEdit(idx)} style={{ background:'transparent', border:'1px solid #1e2d3d', color:'#64748b', borderRadius:5, padding:'3px 6px', fontSize:10, cursor:'pointer', fontFamily:'inherit' }}>✏️</button>
+                          <button onClick={() => deleteReply(idx)} style={{ background:'transparent', border:'1px solid #1e2d3d', color:'#64748b', borderRadius:5, padding:'3px 6px', fontSize:10, cursor:'pointer', fontFamily:'inherit' }}>🗑</button>
+                        </div>
+                      </div>
                     </div>
                   )}
-                  {/* Texto + botones */}
-                  <div style={{ padding:'7px 8px', display:'flex', alignItems:'flex-start', gap:4 }}>
-                    <span style={{ flex:1, fontSize:12, color:'#94a3b8', lineHeight:1.4, overflow:'hidden', textOverflow:'ellipsis', display:'-webkit-box', WebkitLineClamp:3, WebkitBoxOrient:'vertical', minWidth:0 }}>
-                      {imgs.length > 0 && `🖼×${imgs.length} `}{reply.botones?.length > 0 && <span style={{ color:'#f59e0b', fontWeight:700 }}>{`🔘×${reply.botones.length} `}</span>}{reply.text}
-                    </span>
-                    <div style={{ display:'flex', gap:4, flexShrink:0 }}>
-                      <button onClick={() => handleSendQuick(idx)} disabled={sending===idx||!windowOpen} title="Enviar" style={{ background:'rgba(37,211,102,.12)', border:'1px solid rgba(37,211,102,.2)', color:'#25d366', borderRadius:5, padding:'3px 8px', fontSize:10, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>{sending===idx?'⏳':'▶ Enviar'}</button>
-                      <button onClick={() => startEdit(idx)} style={{ background:'transparent', border:'1px solid #1e2d3d', color:'#64748b', borderRadius:5, padding:'3px 6px', fontSize:10, cursor:'pointer', fontFamily:'inherit' }}>✏️</button>
-                      <button onClick={() => deleteReply(idx)} style={{ background:'transparent', border:'1px solid #1e2d3d', color:'#64748b', borderRadius:5, padding:'3px 6px', fontSize:10, cursor:'pointer', fontFamily:'inherit' }}>🗑</button>
-                    </div>
+                </div>
+              ) })}
+            </div>
+
+            {/* Nueva respuesta */}
+            <div style={{ margin:'8px 12px 14px', background:'rgba(255,255,255,.02)', border:'1px dashed #1a2d40', borderRadius:8, overflow:'hidden' }}>
+              <div
+                onClick={() => setNuevaOpen(o => !o)}
+                style={{ padding:'7px 9px', cursor:'pointer', userSelect:'none', display:'flex', alignItems:'center', gap:5 }}
+              >
+                <span style={{ fontSize:9, color:'#475569', transition:'transform .2s', display:'inline-block', transform: nuevaOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
+                <p style={{ fontSize:9, color:'#ffffff', fontWeight:700, letterSpacing:'.06em', margin:0 }}>+ NUEVA RESPUESTA</p>
+              </div>
+              {nuevaOpen && <div style={{ padding:'0 7px 7px' }}>
+              <textarea value={newText} onChange={e => setNewText(e.target.value)} placeholder="Texto..." rows={2}
+                style={{ width:'100%', background:'#111c2a', border:'1px solid #1e2d3d', borderRadius:6, color:'#ffffff', fontSize:11, padding:'5px 7px', resize:'none', outline:'none', fontFamily:'inherit', marginBottom:5, whiteSpace:'pre-wrap' }}
+                onFocus={e => e.target.style.borderColor='#25d366'} onBlur={e => e.target.style.borderColor='#1e2d3d'} />
+              <p style={{ fontSize:9, color:'#475569', margin:'0 0 3px' }}>Fotos ({newImgUrls.length}/{MAX_IMGS})</p>
+              <MultiImgEditor urls={newImgUrls} onChange={setNewImgUrls} />
+              <BotonesEditor botones={newBotones} onChange={setNewBotones} />
+                <button onClick={addReply} disabled={!newText.trim()} style={{ width:'100%', marginTop:7, padding:'6px', background:newText.trim()?'rgba(37,211,102,.1)':'transparent', border:`1px solid ${newText.trim()?'rgba(37,211,102,.3)':'#475569'}`, color:newText.trim()?'#25d366':'#ffffff', borderRadius:7, fontSize:11, fontWeight:600, cursor:newText.trim()?'pointer':'default', fontFamily:'inherit', transition:'all .15s' }}>
+                  + Agregar
+                </button>
+              </div>}
+            </div>
+          </>
+        )}
+
+        {/* ═══════════ VENTAS: CREAR PEDIDO + NOTAS + HISTORIAL ═══════════ */}
+        {tab === 'ventas' && (
+          <>
+            {/* CREAR PEDIDO */}
+            <div style={{ padding:'12px 12px 4px' }}>
+              <button onClick={crearPedido} disabled={pedidoLoading}
+                style={{ width:'100%', padding:'9px', background: pedidoLoading?'#111c2a':'linear-gradient(135deg,#10b981,#059669)', border:'1px solid rgba(16,185,129,.4)', color:'#fff', borderRadius:8, fontSize:12, fontWeight:800, cursor: pedidoLoading?'default':'pointer', fontFamily:'inherit', letterSpacing:'.03em' }}>
+                {pedidoLoading ? '⏳ Leyendo conversación y creando…' : '🧾 CREAR PEDIDO'}
+              </button>
+
+              {pedidoRes?.ok && (
+                <div style={{ marginTop:8, padding:'9px 10px', background:'rgba(16,185,129,.1)', border:'1px solid rgba(16,185,129,.3)', borderRadius:8 }}>
+                  <div style={{ fontSize:12, fontWeight:800, color:'#10b981' }}>✅ Pedido creado: {pedidoRes.pedidoId}</div>
+                  <div style={{ fontSize:11, color:'#94a3b8', marginTop:2 }}>Total ${pedidoRes.montoTotal} · {pedidoRes.diasCalculado} días</div>
+                  <a href={pedidoRes.url} target="_blank" rel="noreferrer" style={{ display:'inline-block', marginTop:6, padding:'5px 10px', background:'rgba(16,185,129,.15)', border:'1px solid rgba(16,185,129,.35)', color:'#10b981', borderRadius:6, fontSize:11, fontWeight:700, textDecoration:'none' }}>📄 Ver pedido</a>
+                </div>
+              )}
+
+              {pedidoRes && !pedidoRes.ok && pedidoRes.faltan && (
+                <div style={{ marginTop:8, padding:'9px 10px', background:'rgba(245,158,11,.08)', border:'1px solid rgba(245,158,11,.3)', borderRadius:8 }}>
+                  <div style={{ fontSize:11, fontWeight:800, color:'#f59e0b' }}>⚠️ Faltan datos: {pedidoRes.faltan.join(', ')}</div>
+                  <textarea readOnly value={pedidoRes.sugerencia || ''} rows={3}
+                    style={{ width:'100%', marginTop:6, background:'#111c2a', border:'1px solid #1e2d3d', borderRadius:6, color:'#e2e8f0', fontSize:11, padding:'6px 8px', resize:'vertical', outline:'none', fontFamily:'inherit', whiteSpace:'pre-wrap' }} />
+                  <div style={{ display:'flex', gap:5, marginTop:5 }}>
+                    <button onClick={() => onSendText && onSendText(pedidoRes.sugerencia)} disabled={!windowOpen}
+                      style={{ flex:1, padding:'6px', background:'rgba(37,211,102,.12)', border:'1px solid rgba(37,211,102,.3)', color:'#25d366', borderRadius:6, fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>📤 Enviar al cliente</button>
+                    <button onClick={() => onSendText && onSendText(null, pedidoRes.sugerencia)}
+                      style={{ flex:1, padding:'6px', background:'rgba(255,255,255,.04)', border:'1px solid #2a3f55', color:'#94a3b8', borderRadius:6, fontSize:11, cursor:'pointer', fontFamily:'inherit' }}>✏️ Editar</button>
                   </div>
                 </div>
               )}
+
+              {pedidoRes && !pedidoRes.ok && !pedidoRes.faltan && (
+                <div style={{ marginTop:8, padding:'8px 10px', background:'rgba(248,113,113,.08)', border:'1px solid rgba(248,113,113,.3)', borderRadius:8, fontSize:11, color:'#f87171' }}>
+                  ❌ {pedidoRes.error || 'No se pudo crear el pedido'}
+                </div>
+              )}
             </div>
-          ) })}
-        </div>
 
-        }
+            {/* NOTAS DEL VENDEDOR */}
+            <div style={{ padding:'10px 12px', borderTop:'1px solid #111c2a', marginTop:8, background:'#0a1019' }}>
+              <p style={{ fontSize:10, color:'#f59e0b', fontWeight:700, letterSpacing:'.08em', margin:'0 0 6px', display:'flex', alignItems:'center', gap:5 }}>
+                📝 NOTAS
+                {notasSaved && <span style={{ fontSize:8, background:'rgba(37,211,102,.15)', color:'#25d366', borderRadius:10, padding:'1px 6px' }}>Guardado ✓</span>}
+              </p>
+              {(() => { const u = (String(notasInput || '').match(/https?:\/\/\S+\/dashboard\/pedido\/\S+/) || [])[0]; return u ? (
+                <a href={u} target="_blank" rel="noreferrer" style={{ display:'inline-block', marginBottom:6, padding:'4px 9px', background:'rgba(16,185,129,.15)', border:'1px solid rgba(16,185,129,.35)', color:'#10b981', borderRadius:6, fontSize:11, fontWeight:700, textDecoration:'none' }}>📄 Ver pedido</a>
+              ) : null })()}
+              <textarea
+                value={notasInput}
+                onChange={e => { setNotasInput(e.target.value); setNotasSaved(false) }}
+                placeholder="Ej: Falta que envíe la foto del pago..."
+                rows={3}
+                style={{ width:'100%', background:'#111c2a', border:'1px solid #1e2d3d', borderRadius:7, color:'#ffffff', fontSize:11, padding:'6px 8px', resize:'vertical', outline:'none', fontFamily:'inherit', whiteSpace:'pre-wrap', minHeight:56 }}
+                onFocus={e => e.target.style.borderColor='#f59e0b'} onBlur={e => e.target.style.borderColor='#1e2d3d'}
+              />
+              <button onClick={handleSaveNotas} disabled={notasSaving}
+                style={{ width:'100%', marginTop:5, padding:'6px', background: notasSaving ? '#111c2a' : 'rgba(245,158,11,.12)', border:'1px solid rgba(245,158,11,.3)', color:'#f59e0b', borderRadius:7, fontSize:11, fontWeight:700, cursor: notasSaving ? 'default' : 'pointer', fontFamily:'inherit', transition:'all .15s' }}>
+                {notasSaving ? '⏳ Guardando...' : '💾 Guardar nota'}
+              </button>
+            </div>
 
-        {/* Nueva respuesta */}
-        <div style={{ margin:'8px 12px 14px', background:'rgba(255,255,255,.02)', border:'1px dashed #1a2d40', borderRadius:8, overflow:'hidden' }}>
-          <div
-            onClick={() => setNuevaOpen(o => !o)}
-            style={{ padding:'7px 9px', cursor:'pointer', userSelect:'none', display:'flex', alignItems:'center', gap:5 }}
-          >
-            <span style={{ fontSize:9, color:'#475569', transition:'transform .2s', display:'inline-block', transform: nuevaOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
-            <p style={{ fontSize:9, color:'#ffffff', fontWeight:700, letterSpacing:'.06em', margin:0 }}>+ NUEVA RESPUESTA</p>
+            {/* HISTORIAL DE PEDIDOS */}
+            <div style={{ padding:'10px 12px 16px', borderTop:'1px solid #111c2a', background:'#0a1019' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:5 }}>
+                <p style={{ fontSize:10, color:'#60a5fa', fontWeight:700, letterSpacing:'.08em', margin:0, display:'flex', alignItems:'center', gap:6 }}>
+                  📦 HISTORIAL DE PEDIDOS
+                  {historial?.totalPedidos > 0 && (historial.totalPedidos >= 3 || historial.totalGastado >= 80) && (
+                    <span style={{ fontSize:8, background:'rgba(245,158,11,.15)', color:'#f59e0b', border:'1px solid rgba(245,158,11,.35)', borderRadius:10, padding:'1px 6px', fontWeight:800 }}>⭐ VIP</span>
+                  )}
+                </p>
+                <span
+                  onClick={() => loadHistorial(activeConv.telefono, contactInfo?.idVenta)}
+                  title="Recargar historial"
+                  style={{ marginLeft:'auto', color:'#475569', fontSize:12, cursor:'pointer', padding:'0 2px', lineHeight:1 }}
+                >🔄</span>
+              </div>
+
+              <div style={{ marginTop:8 }}>
+                {historial === null && !histError ? (
+                  <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                    {[0, 1].map(i => (
+                      <div key={i} style={{ height:38, borderRadius:8, background:'#0d1828', border:'1px solid #162030', opacity:.6, animation:'pulse 1.2s infinite' }} />
+                    ))}
+                  </div>
+                ) : histError ? (
+                  <div style={{ fontSize:11, color:'#64748b', padding:'4px 0' }}>
+                    No se pudo cargar el historial.{' '}
+                    <button onClick={() => loadHistorial(activeConv.telefono, contactInfo?.idVenta)}
+                      style={{ background:'transparent', border:'none', color:'#60a5fa', cursor:'pointer', fontSize:11, padding:0, textDecoration:'underline', fontFamily:'inherit' }}>Reintentar</button>
+                  </div>
+                ) : !historial || historial.totalPedidos === 0 ? (
+                  <div style={{ fontSize:11, color:'#94a3b8', padding:'7px 9px', background:'rgba(96,165,250,.06)', border:'1px solid rgba(96,165,250,.18)', borderRadius:7 }}>
+                    Cliente nuevo ✨ — sin pedidos previos
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ fontSize:11, color:'#94a3b8', marginBottom:7 }}>
+                      {historial.totalPedidos} pedido{historial.totalPedidos === 1 ? '' : 's'} · <strong style={{ color:'#10b981' }}>${historial.totalGastado.toFixed(2)}</strong> total
+                    </div>
+                    <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                      {historial.pedidos.map(p => <PedidoCard key={p.id} p={p} />)}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* ═══════════ TIENDA: CATÁLOGO SHOPIFY ═══════════ */}
+        {tab === 'tienda' && (
+          <div style={{ display:'flex', flexDirection:'column', minHeight:'100%' }}>
+            {/* Buscador */}
+            <div style={{ position:'sticky', top:0, zIndex:2, padding:'10px 12px', background:'#07111d', borderBottom:'1px solid #111c2a' }}>
+              <div style={{ position:'relative' }}>
+                <span style={{ position:'absolute', left:9, top:'50%', transform:'translateY(-50%)', fontSize:12, color:'#475569' }}>🔍</span>
+                <input value={prodQuery} onChange={e => setProdQuery(e.target.value)} placeholder="Buscar producto…"
+                  style={{ width:'100%', background:'#111c2a', border:'1px solid #1e2d3d', borderRadius:8, color:'#e2e8f0', fontSize:12, padding:'7px 28px 7px 28px', outline:'none', fontFamily:'inherit' }}
+                  onFocus={e => e.target.style.borderColor='#25d366'} onBlur={e => e.target.style.borderColor='#1e2d3d'} />
+                {prodQuery && (
+                  <button onClick={() => setProdQuery('')} style={{ position:'absolute', right:6, top:'50%', transform:'translateY(-50%)', background:'transparent', border:'none', color:'#64748b', fontSize:12, cursor:'pointer', padding:'2px 4px' }}>✕</button>
+                )}
+              </div>
+              {productos !== null && (
+                <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:5 }}>
+                  <span style={{ fontSize:9, color:'#475569' }}>{productosFiltrados.length} producto{productosFiltrados.length === 1 ? '' : 's'}</span>
+                  <span onClick={() => setProductosLoaded(false)} title="Recargar catálogo" style={{ marginLeft:'auto', color:'#475569', fontSize:12, cursor:'pointer', padding:'0 2px', lineHeight:1 }}>🔄</span>
+                </div>
+              )}
+            </div>
+
+            {/* Contenido */}
+            {productos === null ? (
+              // Skeleton
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, padding:'10px 12px' }}>
+                {[0,1,2,3].map(i => (
+                  <div key={i} style={{ borderRadius:9, overflow:'hidden', border:'1px solid #162030' }}>
+                    <div style={{ width:'100%', aspectRatio:'1 / 1', background:'#0d1828', opacity:.6, animation:'pulse 1.2s infinite' }} />
+                    <div style={{ height:34, background:'#0a1019' }} />
+                  </div>
+                ))}
+              </div>
+            ) : productosFiltrados.length === 0 ? (
+              <div style={{ fontSize:12, color:'#94a3b8', textAlign:'center', padding:'26px 16px' }}>
+                {prodQuery ? `Sin resultados para “${prodQuery}”` : 'No hay productos en el catálogo'}
+              </div>
+            ) : (
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, padding:'10px 12px 16px' }}>
+                {productosFiltrados.map(p => (
+                  <ProductCard
+                    key={p.id}
+                    p={p}
+                    windowOpen={windowOpen}
+                    sending={prodSending?.id === p.id ? prodSending.modo : null}
+                    onSendFoto={sendProductoFoto}
+                    onSendInfo={sendProductoInfo}
+                  />
+                ))}
+              </div>
+            )}
           </div>
-          {nuevaOpen && <div style={{ padding:'0 7px 7px' }}>
-          <textarea value={newText} onChange={e => setNewText(e.target.value)} placeholder="Texto..." rows={2}
-            style={{ width:'100%', background:'#111c2a', border:'1px solid #1e2d3d', borderRadius:6, color:'#ffffff', fontSize:11, padding:'5px 7px', resize:'none', outline:'none', fontFamily:'inherit', marginBottom:5, whiteSpace:'pre-wrap' }}
-            onFocus={e => e.target.style.borderColor='#25d366'} onBlur={e => e.target.style.borderColor='#1e2d3d'} />
-          <p style={{ fontSize:9, color:'#475569', margin:'0 0 3px' }}>Fotos ({newImgUrls.length}/{MAX_IMGS})</p>
-          <MultiImgEditor urls={newImgUrls} onChange={setNewImgUrls} />
-          <BotonesEditor botones={newBotones} onChange={setNewBotones} />
-            <button onClick={addReply} disabled={!newText.trim()} style={{ width:'100%', marginTop:7, padding:'6px', background:newText.trim()?'rgba(37,211,102,.1)':'transparent', border:`1px solid ${newText.trim()?'rgba(37,211,102,.3)':'#475569'}`, color:newText.trim()?'#25d366':'#ffffff', borderRadius:7, fontSize:11, fontWeight:600, cursor:newText.trim()?'pointer':'default', fontFamily:'inherit', transition:'all .15s' }}>
-              + Agregar
-            </button>
-          </div>}
-        </div>
-      </div>
+        )}
 
+      </div>
     </div>
   )
 }
