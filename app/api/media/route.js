@@ -39,12 +39,43 @@ export async function GET(req) {
 
     const contentType = bin.headers.get('content-type') || 'application/octet-stream'
     const buf = Buffer.from(await bin.arrayBuffer())
+    const total = buf.length
+
+    // Soporte de Range (HTTP 206): los elementos <audio>/<video> del navegador piden
+    // "Range: bytes=0-" y NECESITAN Content-Length + Accept-Ranges para reproducir/
+    // buscar. Sin esto, las notas de voz de WhatsApp (audio/ogg) mostraban el
+    // reproductor pero NO sonaban en Chrome/Edge/Safari de escritorio.
+    const baseHeaders = {
+      'Content-Type': contentType,
+      'Accept-Ranges': 'bytes',
+      'Cache-Control': 'public, max-age=86400', // cache 1 día en el navegador
+    }
+
+    const range = req.headers.get('range')
+    const m = range && /bytes=(\d*)-(\d*)/.exec(range)
+    if (m) {
+      const start = m[1] ? parseInt(m[1], 10) : 0
+      const end   = m[2] ? parseInt(m[2], 10) : total - 1
+      if (start >= total || start > end) {
+        return new NextResponse(null, {
+          status: 416,
+          headers: { ...baseHeaders, 'Content-Range': `bytes */${total}` },
+        })
+      }
+      const chunk = buf.subarray(start, end + 1)
+      return new NextResponse(chunk, {
+        status: 206,
+        headers: {
+          ...baseHeaders,
+          'Content-Range': `bytes ${start}-${end}/${total}`,
+          'Content-Length': String(chunk.length),
+        },
+      })
+    }
+
     return new NextResponse(buf, {
       status: 200,
-      headers: {
-        'Content-Type': contentType,
-        'Cache-Control': 'public, max-age=86400', // cache 1 día en el navegador
-      },
+      headers: { ...baseHeaders, 'Content-Length': String(total) },
     })
   } catch (err) {
     console.error('[/api/media]', err)

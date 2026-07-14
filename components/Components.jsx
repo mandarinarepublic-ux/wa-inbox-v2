@@ -80,7 +80,7 @@ const ESTADO_INFO = {
 // humano (🧑 ámbar, IA apagada). modoIA: true = IA, false = HUMANO.
 function IABadge({ modoIA }) {
   const ia = modoIA !== false // undefined/true → IA prendida por defecto
-  const c  = ia ? '#25d366' : '#f59e0b'
+  const c  = ia ? '#f59e0b' : '#25d366' // IA = amarillo, HUMANO = verde
   return (
     <span
       title={ia ? 'IA atendiendo' : 'Atiende un humano'}
