@@ -287,7 +287,12 @@ function MediaContent({ tipo, mediaUrl, mediaId }) {
     )
     return (
       <div style={{ marginBottom: 6, minWidth: 280 }}>
-        <audio controls src={src} style={{ width: '100%', minWidth: 280, height: 40, display: 'block', borderRadius: 10, outline: 'none', accentColor: '#25d366' }} />
+        <audio controls preload="metadata" src={src} style={{ width: '100%', minWidth: 280, height: 40, display: 'block', borderRadius: 10, outline: 'none', accentColor: '#25d366' }} />
+        {/* Respaldo: si el reproductor inline falla (caché/navegador), este link
+            abre el audio en pestaña nueva, donde siempre suena. */}
+        <a href={src} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 4, fontSize: 11, color: '#25d366', textDecoration: 'none', fontWeight: 600 }}>
+          🎧 Abrir audio ↗
+        </a>
       </div>
     )
   }
@@ -472,7 +477,9 @@ function QuotedMessage({ contextoId, allMsgs }) {
 // ── MESSAGE BUBBLE ───────────────────────────────────────────────
 export function MessageBubble({ msg, allMsgs }) {
   const isMe     = msg.direccion === 'SALIENTE'
-  const hasMedia = !!msg.mediaUrl
+  // Los entrantes de Meta (audio/video/doc) llegan SOLO con mediaId (sin mediaUrl):
+  // sin incluir mediaId aquí, la burbuja no pintaba el reproductor (audios "mudos").
+  const hasMedia = !!(msg.mediaUrl || msg.mediaId)
   const hasText  = !!msg.mensaje
 
   return (
