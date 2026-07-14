@@ -184,9 +184,14 @@ function ProductCard({ p, sending, windowOpen, onSendFoto, onSendInfo }) {
         <span style={{ fontSize:11, color:'#cbd5e1', fontWeight:600, lineHeight:1.25, overflow:'hidden', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', minHeight:28 }}>
           {p.title}
         </span>
-        {p.variants?.length > 0 && (
+        {p.fuente === 'sucursal' ? (
+          <span style={{ fontSize:9, color:'#475569' }}>
+            {[p.talla, p.color].filter(Boolean).join(' · ')}{(p.talla || p.color) ? ' · ' : ''}
+            <span style={{ color: p.stock > 0 ? '#10b981' : '#f87171', fontWeight:700 }}>{p.stock > 0 ? `${p.stock} en stock` : 'sin stock'}</span>
+          </span>
+        ) : p.variants?.length > 0 ? (
           <span style={{ fontSize:9, color:'#475569' }}>{p.variants.length} variante{p.variants.length === 1 ? '' : 's'}</span>
-        )}
+        ) : null}
         <div style={{ display:'flex', gap:3, marginTop:'auto' }}>
           <button onClick={() => onSendFoto(p)} disabled={sending || !windowOpen}
             title={windowOpen ? 'Enviar solo la foto' : 'Ventana cerrada'}
@@ -209,6 +214,8 @@ const TABS = [
   { id: 'ventas',     icon: '📦', label: 'Ventas' },
   { id: 'tienda',     icon: '🛍️', label: 'Tienda' },
 ]
+// Etiqueta del catálogo online en el selector de la pestaña Tienda (este inbox = Mandarina).
+const CATALOGO_LABEL = 'Mandarina'
 
 export default function RightPanel({ activeConv, onQuickReply, onSendText, onSendImage, contactInfo, onUpdateContact, windowOpen }) {
   const [tab, setTab]           = useState('respuestas')
@@ -262,10 +269,11 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
   const histLoadedRef = useRef(null)
 
   // ── Catálogo TIENDA (Shopify) ────────────────────────────────
-  const [productos,     setProductos]     = useState(null)  // null = cargando
-  const [productosLoaded, setProductosLoaded] = useState(false)
+  const [fuente,        setFuente]        = useState('shopify') // 'shopify' | 'sucursal'
+  const [prodCache,     setProdCache]     = useState({})        // { shopify:[...], sucursal:[...] }
   const [prodQuery,     setProdQuery]     = useState('')
-  const [prodSending,   setProdSending]   = useState(null)  // { id, modo } del producto que se está enviando
+  const [prodSending,   setProdSending]   = useState(null)      // { id, modo } del producto que se está enviando
+  const productos = prodCache[fuente] ?? null                  // null = cargando
 
   const loadHistorial = async (tel, idVenta) => {
     setHistorial(null); setHistError(false)
@@ -308,16 +316,15 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
     loadHistorial(activeConv.telefono, contactInfo?.idVenta)
   }, [activeConv, contactInfo])
 
-  // Cargar el catálogo la PRIMERA vez que se abre la pestaña Tienda (perezoso)
+  // Cargar el catálogo de la fuente activa la PRIMERA vez (perezoso, cacheado por fuente)
   useEffect(() => {
-    if (tab !== 'tienda' || productosLoaded) return
+    if (tab !== 'tienda' || prodCache[fuente]) return
     let cancel = false
-    setProductos(null)
-    fetchProductos().then(list => {
-      if (!cancel) { setProductos(list || []); setProductosLoaded(true) }
+    fetchProductos('', fuente).then(list => {
+      if (!cancel) setProdCache(prev => ({ ...prev, [fuente]: list || [] }))
     })
     return () => { cancel = true }
-  }, [tab, productosLoaded])
+  }, [tab, fuente, prodCache])
 
   if (!activeConv) return null
 
@@ -682,8 +689,22 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
         {/* ═══════════ TIENDA: CATÁLOGO SHOPIFY ═══════════ */}
         {tab === 'tienda' && (
           <div style={{ display:'flex', flexDirection:'column', minHeight:'100%' }}>
-            {/* Buscador */}
+            {/* Selector de fuente + buscador */}
             <div style={{ position:'sticky', top:0, zIndex:2, padding:'10px 12px', background:'#07111d', borderBottom:'1px solid #111c2a' }}>
+              <div style={{ display:'flex', gap:6, marginBottom:8 }}>
+                {[{ id:'shopify', label:CATALOGO_LABEL, icon:'🛍️' }, { id:'sucursal', label:'Sucursal', icon:'🏬' }].map(f => {
+                  const on = fuente === f.id
+                  return (
+                    <button key={f.id} onClick={() => setFuente(f.id)}
+                      style={{ flex:1, padding:'6px 8px', borderRadius:8, fontSize:11, fontWeight:800, cursor:'pointer', fontFamily:'inherit',
+                        border:`1px solid ${on ? 'rgba(37,211,102,.5)' : '#1e2d3d'}`,
+                        background: on ? 'rgba(37,211,102,.12)' : 'transparent',
+                        color: on ? '#25d366' : '#64748b', transition:'all .15s' }}>
+                      {f.icon} {f.label}
+                    </button>
+                  )
+                })}
+              </div>
               <div style={{ position:'relative' }}>
                 <span style={{ position:'absolute', left:9, top:'50%', transform:'translateY(-50%)', fontSize:12, color:'#475569' }}>🔍</span>
                 <input value={prodQuery} onChange={e => setProdQuery(e.target.value)} placeholder="Buscar producto…"
@@ -696,7 +717,7 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
               {productos !== null && (
                 <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:5 }}>
                   <span style={{ fontSize:9, color:'#475569' }}>{productosFiltrados.length} producto{productosFiltrados.length === 1 ? '' : 's'}</span>
-                  <span onClick={() => setProductosLoaded(false)} title="Recargar catálogo" style={{ marginLeft:'auto', color:'#475569', fontSize:12, cursor:'pointer', padding:'0 2px', lineHeight:1 }}>🔄</span>
+                  <span onClick={() => setProdCache(prev => { const n = { ...prev }; delete n[fuente]; return n })} title="Recargar catálogo" style={{ marginLeft:'auto', color:'#475569', fontSize:12, cursor:'pointer', padding:'0 2px', lineHeight:1 }}>🔄</span>
                 </div>
               )}
             </div>
