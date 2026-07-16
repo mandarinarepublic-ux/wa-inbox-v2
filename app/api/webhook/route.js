@@ -3,7 +3,7 @@ import { waitUntil } from '@vercel/functions'
 import { readSheet, appendRow } from '@/lib/sheets'
 import { registrarContactoEntrante, getContactos, updateEstado, updateModoIA } from '@/lib/contactos'
 import { dualWrite, usaSupabaseLectura } from '@/lib/supabase'
-import { guardarMensajeSupabase, existeWamidSupabase } from '@/lib/inbox-supabase'
+import { guardarMensajeSupabase, existeWamidSupabase, guardarEventoCrudoSupabase } from '@/lib/inbox-supabase'
 import { archivarFoto } from '@/lib/media-archive'
 import { parseLinkpago, crearLinkPago, mensajeLinkPago } from '@/lib/dlocal'
 
@@ -210,7 +210,7 @@ async function procesar(nuevos, origin) {
       () => guardarMensajeSupabase({
         id: m.wamid, telefono: m.telefono, nombre: m.nombre, tipo: m.tipo,
         mensaje: m.contenido, mediaUrl: '', timestamp: m.fecha, direccion: 'ENTRANTE',
-        mediaId: m.mediaId, contextoId: m.contextoId, referral: m.referral,
+        mediaId: m.mediaId, contextoId: m.contextoId, referral: m.referral, raw: m.raw,
       }),
       'msg.entrante',
     ).catch(e => console.error('[/api/webhook] guardar entrante:', e.message))
@@ -274,6 +274,12 @@ export async function POST(req) {
     const entries = body?.entry || []
     const origin = new URL(req.url).origin
 
+    // Respaldo crudo (histórico tipo Make): guarda el POST COMPLETO tal cual llegó,
+    // antes de parsear. En background: Meta recibe su 200 al instante. Best-effort.
+    if (usaSupabaseLectura() && entries.length) {
+      waitUntil(guardarEventoCrudoSupabase(body))
+    }
+
     const nuevos = []
     for (const entry of entries) {
       for (const change of entry?.changes || []) {
@@ -291,6 +297,7 @@ export async function POST(req) {
             telefono,
             nombre: nombreDe[telefono] || '',
             tipo, contenido, mediaId, contextoId, referral,
+            raw: msg, // respaldo: objeto crudo del mensaje tal cual de Meta
             fecha: msg.timestamp ? new Date(Number(msg.timestamp) * 1000).toISOString() : new Date().toISOString(),
           })
         }
