@@ -6,6 +6,7 @@ import { dualWrite, usaSupabaseLectura } from '@/lib/supabase'
 import { guardarMensajeSupabase, existeWamidSupabase, guardarEventoCrudoSupabase } from '@/lib/inbox-supabase'
 import { archivarFoto } from '@/lib/media-archive'
 import { parseLinkpago, crearLinkPago, mensajeLinkPago } from '@/lib/dlocal'
+import { getAutomatizaciones } from '@/lib/automatizaciones'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -180,6 +181,8 @@ async function procesar(nuevos, origin) {
   }
 
   const contactos = await getContactos().catch(() => [])
+  // Config de automatizaciones (saludos). Un fetch por ciclo. Si falla → sin saludos.
+  const auto = await getAutomatizaciones().catch(() => null)
   const modoIAde = (phone) => {
     const t = tail9(phone)
     const c = contactos.find(c => tail9(c.telefono) === t)
@@ -190,6 +193,45 @@ async function procesar(nuevos, origin) {
     const t = tail9(phone)
     const c = contactos.find(c => tail9(c.telefono) === t)
     return c ? String(c.estado || 'pendiente').toLowerCase().trim() : 'pendiente'
+  }
+  // ¿Contacto NUEVO? El mensaje ya se guardó (creando la conversación), así que no
+  // sirve el "creado" del registro: usamos el SNAPSHOT leído al inicio del ciclo —
+  // si no está ahí, es su primer mensaje de la historia.
+  const esNuevoDe = (phone) => !contactos.find(c => tail9(c.telefono) === tail9(phone))
+  // Marca de tiempo del ÚLTIMO entrante ANTERIOR (del snapshot) → detecta reactivación.
+  const ultimoEntranteAtDe = (phone) => {
+    const t = tail9(phone)
+    const c = contactos.find(c => tail9(c.telefono) === t)
+    return c?.ultimoEntranteAt ? new Date(c.ultimoEntranteAt).getTime() : 0
+  }
+  // Anti doble-saludo dentro del mismo lote de webhook.
+  const saludados = new Set()
+
+  // Saludo automático. Solo cuando la IA está APAGADA para el contacto (si está
+  // prendida, el propio agente saluda → evitamos doble mensaje). Nuevo → saludo de
+  // bienvenida; reactivación tras N horas de silencio → "hola de vuelta".
+  async function saludarSiCorresponde(phone, name) {
+    if (!auto || modoIAde(phone)) return
+    const t = tail9(phone)
+    if (saludados.has(t)) return
+    const nuevo = esNuevoDe(phone)
+    if (nuevo) {
+      const s = auto.saludo_nuevo
+      if (s?.activo && String(s.texto || '').trim()) {
+        saludados.add(t)
+        await enviarSaliente(origin, { Telefono: phone, Nombre: name || '', Mensaje: s.texto.trim() })
+      }
+      return
+    }
+    const s = auto.saludo_reactivacion
+    if (s?.activo && String(s.texto || '').trim()) {
+      const horas  = Number(s.horas) || 12
+      const prevMs = ultimoEntranteAtDe(phone)
+      if (prevMs && Date.now() - prevMs >= horas * 3600 * 1000) {
+        saludados.add(t)
+        await enviarSaliente(origin, { Telefono: phone, Nombre: name || '', Mensaje: s.texto.trim() })
+      }
+    }
   }
 
   // Archivado de fotos entrantes a Supabase Storage (URL estable en media_url).
@@ -232,6 +274,11 @@ async function procesar(nuevos, origin) {
       await updateEstado(m.telefono, 'PENDIENTE')
         .catch(e => console.error('[/api/webhook] reabrir a PENDIENTE:', e.message))
     }
+
+    // Saludo automático (bienvenida a nuevo / "hola de vuelta" al reactivarse).
+    // Va antes de LINKPAGO/IA y solo dispara con la IA apagada.
+    await saludarSiCorresponde(m.telefono, m.nombre)
+      .catch(e => console.error('[/api/webhook] saludo:', e.message))
 
     // LINKPAGO<monto> entrante → genera link dLocal y lo devuelve al remitente.
     // Funciona SIEMPRE (independiente del modo IA), como el flujo viejo de Make.

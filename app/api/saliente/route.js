@@ -39,6 +39,38 @@ const soloDigitos = (s) => String(s || '').replace(/\D/g, '')
 function construir(body) {
   const to = soloDigitos(body.Telefono)
 
+  // Plantilla (HSM) — único formato permitido FUERA de la ventana de 24h.
+  // El cliente manda: TemplateName, TemplateLang, y (según la plantilla) los
+  // parámetros de body/header. TemplatePreview = texto ya renderizado para el hilo.
+  if (body.TipoMensaje === 'template') {
+    const name = body.TemplateName
+    const code = body.TemplateLang || 'es'
+    let bodyParams = [], headerParams = []
+    try { bodyParams   = JSON.parse(body.TemplateBodyParams   || '[]') } catch {}
+    try { headerParams = JSON.parse(body.TemplateHeaderParams || '[]') } catch {}
+    const headerImage = body.TemplateHeaderImage || ''
+    const components = []
+    if (headerImage) {
+      components.push({ type: 'header', parameters: [{ type: 'image', image: { link: headerImage } }] })
+    } else if (headerParams.length) {
+      components.push({ type: 'header', parameters: headerParams.map((t) => ({ type: 'text', text: String(t) })) })
+    }
+    if (bodyParams.length) {
+      components.push({ type: 'body', parameters: bodyParams.map((t) => ({ type: 'text', text: String(t) })) })
+    }
+    return {
+      tipo: 'texto', // se registra como texto para que se vea en el hilo del chat
+      contenido: body.TemplatePreview || `📋 Plantilla: ${name}`,
+      mediaUrl: '', mediaId: '',
+      payload: {
+        messaging_product: 'whatsapp',
+        to,
+        type: 'template',
+        template: { name, language: { code }, ...(components.length ? { components } : {}) },
+      },
+    }
+  }
+
   // Botones interactivos
   if (body.TipoMensaje === 'interactive_buttons') {
     let buttons = []

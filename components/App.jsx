@@ -8,6 +8,8 @@ import SetupModal from '@/components/SetupModal'
 import GuideModal from '@/components/GuideModal'
 import RepublicInbox from '@/components/RepublicInbox'
 import SocialInbox from '@/components/SocialInbox'
+import Contactos, { PlantillaModal } from '@/components/Contactos'
+import Automatizaciones from '@/components/Automatizaciones'
 import { actualizarNoLeidos } from '@/lib/notif'
 
 const IMGBB_KEY    = '2307574d43689522feabd27cff3443df'
@@ -95,6 +97,8 @@ export default function App() {
   const [toast,        setToast]        = useState(null)
   const [showSidebar,  setShowSidebar]  = useState(true)
   const [showRight,    setShowRight]    = useState(false)
+  const [showTplModal, setShowTplModal] = useState(false) // plantilla desde el chat (fuera de 24h)
+  const [tplToast,     setTplToast]     = useState(null)
   const [imgFiles,     setImgFiles]     = useState([]) // array de { file, preview }
   const [imgUploading, setImgUploading] = useState(false)
   const [imgProgress,  setImgProgress]  = useState(0)
@@ -297,6 +301,15 @@ export default function App() {
     autoScroll.current = true
     prevMsgLen.current = 0
     setConvs(prev => prev.map(c => c.telefono === telefono ? { ...c, unread: 0 } : c))
+  }
+
+  // Desde la pestaña CONTACTOS: salta a la conversación en MANDI. El teléfono del
+  // directorio puede venir en otro formato → matcheamos por últimos 9 dígitos.
+  const abrirChatDesdeContactos = (telefono) => {
+    const t9 = String(telefono).replace(/\D/g, '').slice(-9)
+    const conv = convs.find(c => String(c.telefono).replace(/\D/g, '').slice(-9) === t9)
+    setLinea('MANDI')
+    openConv(conv ? conv.telefono : telefono)
   }
 
   // ── Derived state ─────────────────────────────────────────────
@@ -666,15 +679,17 @@ export default function App() {
           display:'flex', justifyContent:'center', alignItems:'center',
           flexShrink:0, height:38,
           background:'#080d14', borderBottom:'1px solid #162030',
-          zIndex:200,
+          zIndex:200, overflowX:'auto',
         }}>
           {[
             { id:'MANDI',    label:'MANDI',    icon:'📱', color:'#25d366', sub:'API' },
             { id:'REPUBLIC', label:'REPUBLIC', icon:'💬', color:'#f97316', sub:'WA Web' },
             { id:'SOCIAL',   label:'SOCIAL',   icon:'🌐', color:'#1877F2', sub:'FB · IG' },
+            { id:'CONTACTOS',label:'CONTACTOS',icon:'👥', color:'#38bdf8', sub:'Directorio' },
+            { id:'AUTO',     label:'AUTOS',    icon:'⚙️', color:'#f59e0b', sub:'Reglas' },
           ].map(({ id, label, icon, color, sub }) => (
             <button key={id} onClick={() => setLinea(id)} style={{
-              padding:'4px 28px', border:'none', cursor:'pointer',
+              padding:'4px 16px', border:'none', cursor:'pointer', flexShrink:0, whiteSpace:'nowrap',
               background: linea===id ? `${color}15` : 'transparent',
               borderBottom: linea===id ? `2px solid ${color}` : '2px solid transparent',
               borderTop: '2px solid transparent',
@@ -905,8 +920,12 @@ export default function App() {
 
             <div className="input-bar" style={{ position:'relative' }}>
               {!windowOpen && lastMsg && (
-                <div style={{ marginBottom:8, padding:'5px 12px', background:'rgba(245,158,11,.08)', border:'1px solid rgba(245,158,11,.2)', borderRadius:8, fontSize:11, color:'#fbbf24', textAlign:'center' }}>
-                  ⚠️ Ventana de 24h cerrada
+                <div style={{ marginBottom:8, padding:'7px 12px', background:'rgba(245,158,11,.08)', border:'1px solid rgba(245,158,11,.2)', borderRadius:8, fontSize:11, color:'#fbbf24', display:'flex', alignItems:'center', justifyContent:'center', gap:10, flexWrap:'wrap' }}>
+                  <span>⚠️ Ventana de 24h cerrada — solo plantilla</span>
+                  <button onClick={() => setShowTplModal(true)}
+                    style={{ background:'linear-gradient(135deg,#f59e0b,#f97316)', border:'none', color:'#0b1220', fontWeight:800, fontSize:11, padding:'4px 12px', borderRadius:7, cursor:'pointer', fontFamily:'Outfit,sans-serif' }}>
+                    📋 Enviar plantilla
+                  </button>
                 </div>
               )}
               {imgFiles.length > 0 && (
@@ -1085,8 +1104,36 @@ export default function App() {
           <SocialInbox active={linea === 'SOCIAL'} />
         </div>
 
+        {/* ══════ CONTACTOS ══════ — directorio + envío por ventana 24h */}
+        <div style={{ flex:1, display: linea === 'CONTACTOS' ? 'flex' : 'none', overflow:'hidden', height:'100%' }}>
+          <Contactos active={linea === 'CONTACTOS'} onOpenChat={abrirChatDesdeContactos} />
+        </div>
+
+        {/* ══════ AUTOMATIZACIONES ══════ — reglas on/off */}
+        <div style={{ flex:1, display: linea === 'AUTO' ? 'flex' : 'none', overflow:'hidden', height:'100%' }}>
+          <Automatizaciones active={linea === 'AUTO'} />
+        </div>
+
         </div>{/* fin app-shell */}
       </div>{/* fin wrapper */}
+
+      {/* Modal de plantilla desde el chat (cuando la ventana de 24h está cerrada) */}
+      {showTplModal && activeConv && (
+        <PlantillaModal
+          telefono={activeConv.telefono}
+          nombre={activeConv.nombre}
+          onClose={() => setShowTplModal(false)}
+          flash={(m) => { setTplToast(m); setTimeout(() => setTplToast(null), 3000) }}
+        />
+      )}
+      {tplToast && (
+        <div style={{
+          position:'fixed', bottom:24, left:'50%', transform:'translateX(-50%)',
+          background:'#0d1828', border:'1px solid #1e2d3d', color:'#e2e8f0',
+          padding:'10px 18px', borderRadius:10, fontSize:13, fontWeight:700, zIndex:600,
+          boxShadow:'0 8px 30px rgba(0,0,0,.5)', maxWidth:'86vw', textAlign:'center',
+        }}>{tplToast}</div>
+      )}
     </>
   )
 }
