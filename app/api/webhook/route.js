@@ -183,7 +183,7 @@ async function procesar(nuevos, origin) {
   const modoIAde = (phone) => {
     const t = tail9(phone)
     const c = contactos.find(c => tail9(c.telefono) === t)
-    return c ? c.modoIA !== false : true // contacto nuevo → IA prendida por defecto
+    return c ? c.modoIA !== false : false // contacto nuevo → IA APAGADA (la prende un humano)
   }
   // Estado de flujo actual del contacto (snapshot de este ciclo). Contacto nuevo → 'pendiente'.
   const estadoDe = (phone) => {
