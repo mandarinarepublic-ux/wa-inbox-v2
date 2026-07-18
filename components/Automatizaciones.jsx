@@ -53,6 +53,15 @@ export default function Automatizaciones({ active }) {
   const setBloque = (bloque, campo, valor) =>
     setConfig(prev => ({ ...prev, [bloque]: { ...(prev?.[bloque] || {}), [campo]: valor } }))
 
+  // Seguimientos: config anidada (global + por temperatura).
+  const setSegG = (campo, valor) =>
+    setConfig(prev => ({ ...prev, seguimientos: { ...(prev?.seguimientos || {}), [campo]: valor } }))
+  const setSegT = (sub, campo, valor) =>
+    setConfig(prev => ({ ...prev, seguimientos: {
+      ...(prev?.seguimientos || {}),
+      [sub]: { ...((prev?.seguimientos || {})[sub] || {}), [campo]: valor },
+    } }))
+
   const guardar = async () => {
     setSaving(true)
     const r = await saveAutomatizaciones(config)
@@ -71,6 +80,16 @@ export default function Automatizaciones({ active }) {
 
   const sn = config?.saludo_nuevo || {}
   const sr = config?.saludo_reactivacion || {}
+  const sg = config?.seguimientos || {}
+
+  // Config visual de las 3 temperaturas para el bloque de seguimientos.
+  const TEMPS = [
+    { key: 'caliente', icon: '🔥', label: 'Caliente', color: '#f97316', ayuda: 'Primero te AVISA a ti; si no actúas, manda un “sujeta-ventana” antes de las 24h.' },
+    { key: 'tibio',    icon: '🌤️', label: 'Tibio',    color: '#fbbf24', ayuda: 'Seguimiento suave a media ventana.' },
+    { key: 'frio',     icon: '❄️', label: 'Frío',     color: '#38bdf8', ayuda: 'Último toque opcional antes de cerrar la ventana.' },
+  ]
+  const inputNum = { width: 60, background: '#080d14', border: '1px solid #1e2d3d', borderRadius: 8, color: ORANGE, fontSize: 14, fontWeight: 800, padding: '6px 8px', textAlign: 'center', fontFamily: 'Outfit,sans-serif', outline: 'none' }
+  const inputTxt = { width: '100%', background: '#080d14', border: '1px solid #1e2d3d', borderRadius: 10, color: '#e2e8f0', fontSize: 13, padding: '10px 12px', fontFamily: 'Outfit,sans-serif', resize: 'vertical', outline: 'none', boxSizing: 'border-box' }
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', height: '100%', background: '#080d14' }}>
@@ -146,6 +165,67 @@ export default function Automatizaciones({ active }) {
                   color: '#e2e8f0', fontSize: 13, padding: '10px 12px', fontFamily: 'Outfit,sans-serif',
                   resize: 'vertical', outline: 'none', boxSizing: 'border-box',
                 }} />
+            </>)}
+          </Card>
+
+          {/* ── SEGUIMIENTO por temperatura del lead (cron) ── */}
+          <Card>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: sg.activo ? 14 : 0 }}>
+              <div style={{ fontSize: 26 }}>🌡️</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 15, fontWeight: 800, color: '#e2e8f0' }}>Seguimiento por temperatura</div>
+                <div style={{ fontSize: 12, color: '#64748b', marginTop: 3 }}>
+                  Escribe solo, según qué tan caliente esté el lead y cuánto lleva callado — <b style={{ color: '#94a3b8' }}>siempre dentro de la ventana de 24h</b> de WhatsApp. Máx 1 mensaje por ventana; se cancela si el cliente responde.
+                </div>
+              </div>
+              <Switch on={!!sg.activo} onClick={() => setSegG('activo', !sg.activo)} />
+            </div>
+
+            {sg.activo && (<>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, cursor: 'pointer' }}>
+                <Switch on={sg.solo_ia_apagada !== false} onClick={() => setSegG('solo_ia_apagada', !(sg.solo_ia_apagada !== false))} />
+                <span style={{ fontSize: 12, color: '#94a3b8' }}>Solo en chats con la <b style={{ color: '#cbd5e1' }}>IA apagada</b> (para no chocar con el agente)</span>
+              </label>
+
+              {TEMPS.map(({ key, icon, label, color, ayuda }) => {
+                const t = sg[key] || {}
+                return (
+                  <div key={key} style={{ border: `1px solid ${t.activo ? color + '44' : '#1e2d3d'}`, borderRadius: 12, padding: 12, marginBottom: 10, background: t.activo ? color + '0c' : 'transparent' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ fontSize: 18 }}>{icon}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 800, color: t.activo ? color : '#94a3b8' }}>{label}</div>
+                        <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{ayuda}</div>
+                      </div>
+                      <Switch on={!!t.activo} onClick={() => setSegT(key, 'activo', !t.activo)} />
+                    </div>
+                    {t.activo && (<>
+                      {key === 'caliente' && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
+                          <span style={{ fontSize: 12, color: '#94a3b8' }}>⏰ Avísame a las</span>
+                          <input type="number" min={1} max={24} value={t.alerta_horas ?? 20}
+                            onChange={e => setSegT(key, 'alerta_horas', Math.min(24, Math.max(1, Number(e.target.value) || 1)))}
+                            style={inputNum} />
+                          <span style={{ fontSize: 12, color: '#94a3b8' }}>h de silencio</span>
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '12px 0' }}>
+                        <span style={{ fontSize: 12, color: '#94a3b8' }}>{key === 'caliente' ? 'Y si no actúo, envía a las' : 'Envía a las'}</span>
+                        <input type="number" min={1} max={24} value={t.horas ?? (key === 'tibio' ? 12 : key === 'frio' ? 22 : 23)}
+                          onChange={e => setSegT(key, 'horas', Math.min(24, Math.max(1, Number(e.target.value) || 1)))}
+                          style={inputNum} />
+                        <span style={{ fontSize: 12, color: '#94a3b8' }}>h de silencio</span>
+                      </div>
+                      <textarea value={t.texto || ''} onChange={e => setSegT(key, 'texto', e.target.value)}
+                        rows={3} placeholder={`Mensaje de seguimiento para leads ${label.toLowerCase()}…`} style={inputTxt} />
+                    </>)}
+                  </div>
+                )
+              })}
+
+              <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, lineHeight: 1.5 }}>
+                ⚠️ Pasadas las 24h la ventana se cierra y ya no se envía gratis (reenganche por plantilla = próximamente). La temperatura la pones solo tú desde el chat.
+              </div>
             </>)}
           </Card>
 

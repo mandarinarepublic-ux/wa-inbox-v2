@@ -97,7 +97,8 @@ function IABadge({ modoIA }) {
 }
 
 // ── CONTACT ROW ──────────────────────────────────────────────────
-export function ContactRow({ conv, isActive, onClick, search = '', estado, modoIA, msgSnippet = null }) {
+const TEMP_ICON = { caliente: '🔥', tibio: '🌤️', frio: '❄️' }
+export function ContactRow({ conv, isActive, onClick, search = '', estado, modoIA, temp = '', alerta = false, msgSnippet = null }) {
   const [hovered, setHovered] = useState(false)
   const searching = String(search || '').trim().length > 0
   const info = ESTADO_INFO[estado] || null
@@ -122,6 +123,8 @@ export function ContactRow({ conv, isActive, onClick, search = '', estado, modoI
             {highlight(conv.nombre, search)}
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+            {alerta && <span title="🔥 Caliente — cerca de cerrar la ventana de 24h" style={{ fontSize: 12, animation: 'pulse 2s infinite' }}>⏰</span>}
+            {temp && TEMP_ICON[temp] && <span title={`Lead ${temp}`} style={{ fontSize: 12 }}>{TEMP_ICON[temp]}</span>}
             <IABadge modoIA={modoIA} />
             <span style={{ fontSize: 11, color: '#94a3b8' }}>
               {fmtTime(conv.last?.timestamp)}
@@ -566,6 +569,8 @@ export function MessageBubble({ msg, allMsgs }) {
 // ── TOAST NOTIFICATION ───────────────────────────────────────────
 export function Toast({ result }) {
   if (!result) return null
+  // Si trae `msg`, muestra ese texto tal cual (lo usan los cambios de estado/temperatura).
+  const custom = typeof result.msg === 'string' ? result.msg : null
   return (
     <div style={{ display: 'flex', justifyContent: 'center', marginTop: 8, animation: 'up .2s ease' }}>
       <span style={{
@@ -574,11 +579,13 @@ export function Toast({ result }) {
         color: result.ok ? '#4ade80' : '#f87171',
         border: `1px solid ${result.ok ? 'rgba(34,197,94,.2)' : 'rgba(239,68,68,.2)'}`,
       }}>
-        {result.ok
-          ? result.demo
-            ? '✓ Enviado (demo) — activa tus webhooks de Make para envío real'
-            : '✓ Mensaje enviado por WhatsApp vía Make'
-          : '✗ Error al enviar — revisa tu escenario en Make'}
+        {custom
+          ? custom
+          : result.ok
+            ? result.demo
+              ? '✓ Enviado (demo) — activa tus webhooks de Make para envío real'
+              : '✓ Mensaje enviado por WhatsApp vía Make'
+            : '✗ Error al enviar — revisa tu escenario en Make'}
       </span>
     </div>
   )

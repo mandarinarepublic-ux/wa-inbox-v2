@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
-import { updateEstado, updateModoIA, updateNotas, updateAlias, updateIdVenta } from '@/lib/contactos'
+import { updateEstado, updateModoIA, updateNotas, updateAlias, updateIdVenta, updateTemperatura } from '@/lib/contactos'
 
 // PATCH /api/contactos/estado
 // Body: { telefono, campo, valor }
-// campo: 'estado' | 'modoIA' | 'notas' | 'alias'
+// campo: 'estado' | 'modoIA' | 'notas' | 'alias' | 'idVenta' | 'temperatura'
 export async function PATCH(req) {
   try {
     const { telefono, campo, valor } = await req.json()
@@ -27,6 +27,9 @@ export async function PATCH(req) {
         break
       case 'idVenta':
         result = await updateIdVenta(telefono, valor)
+        break
+      case 'temperatura':
+        result = await updateTemperatura(telefono, valor) // 'caliente'|'tibio'|'frio'|''
         break
       default:
         return NextResponse.json({ error: `Campo desconocido: ${campo}` }, { status: 400 })
