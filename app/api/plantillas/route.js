@@ -1,14 +1,13 @@
 import { NextResponse } from 'next/server'
+import { getWabaId, GRAPH } from '@/lib/whatsapp'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 // Lista las PLANTILLAS aprobadas de tu WABA. Necesarias para escribir a un cliente
 // FUERA de la ventana de 24h (Meta solo permite plantillas ahí). Reutiliza META_TOKEN.
-// META_WABA_ID = id de la cuenta de WhatsApp Business (NO el phone id). Config en Vercel.
-const META_TOKEN   = process.env.META_TOKEN || ''
-const META_WABA_ID = process.env.META_WABA_ID || ''
-const GRAPH_VER    = 'v22.0'
+// El WABA ID se descubre solo desde el token (lib/whatsapp), con override META_WABA_ID.
+const META_TOKEN = process.env.META_TOKEN || ''
 
 const contarVars = (txt) => {
   const m = String(txt || '').match(/\{\{\s*\d+\s*\}\}/g)
@@ -41,10 +40,11 @@ function simplificar(t) {
 }
 
 export async function GET() {
-  if (!META_TOKEN)   return NextResponse.json({ ok: false, needsEnv: 'META_TOKEN', templates: [] })
-  if (!META_WABA_ID) return NextResponse.json({ ok: false, needsEnv: 'META_WABA_ID', templates: [] })
+  if (!META_TOKEN) return NextResponse.json({ ok: false, needsEnv: 'META_TOKEN', templates: [] })
+  const { id: wabaId, error: wabaErr } = await getWabaId()
+  if (!wabaId) return NextResponse.json({ ok: false, needsEnv: 'META_WABA_ID', wabaError: wabaErr, templates: [] })
   try {
-    const url = `https://graph.facebook.com/${GRAPH_VER}/${META_WABA_ID}/message_templates` +
+    const url = `${GRAPH}/${wabaId}/message_templates` +
       `?fields=name,status,category,language,components&limit=200`
     const res = await fetch(url, { headers: { Authorization: `Bearer ${META_TOKEN}` } })
     const data = await res.json().catch(() => ({}))
