@@ -17,15 +17,18 @@ export async function GET(req) {
   if (searchParams.get('k') !== KEY) return NextResponse.json({ ok: false, error: 'no autorizado' }, { status: 403 })
   if (!META_TOKEN) return NextResponse.json({ ok: false, error: 'sin META_TOKEN' })
 
-  const [me, dbg, accounts, phone, ownWaba, cliWaba, businesses] = await Promise.all([
-    j(`${GRAPH}/me?fields=id,name&access_token=${tok()}`),
-    j(`${GRAPH}/debug_token?input_token=${tok()}&access_token=${tok()}`),
-    j(`${GRAPH}/me/accounts?fields=id,name&access_token=${tok()}`),
-    j(`${GRAPH}/${META_PHONE_ID}?fields=id,display_phone_number,verified_name,whatsapp_business_account&access_token=${tok()}`),
-    j(`${GRAPH}/me/owned_whatsapp_business_accounts?access_token=${tok()}`),
-    j(`${GRAPH}/me/client_whatsapp_business_accounts?access_token=${tok()}`),
-    j(`${GRAPH}/me/businesses?fields=id,name&access_token=${tok()}`),
+  const APP_ID = '931686799639248'
+  const [meBiz, phoneDefault, assigned, appNode] = await Promise.all([
+    j(`${GRAPH}/me?fields=id,name,business{id,name}&access_token=${tok()}`),
+    j(`${GRAPH}/${META_PHONE_ID}?access_token=${tok()}`),
+    j(`${GRAPH}/me/assigned_whatsapp_business_accounts?fields=id,name&access_token=${tok()}`),
+    j(`${GRAPH}/${APP_ID}?fields=id,name,owner_business{id,name}&access_token=${tok()}`),
   ])
 
-  return NextResponse.json({ ok: true, me, tokenData: dbg?.data || dbg, accounts, phone, ownWaba, cliWaba, businesses })
+  // Si sacamos un business, listamos sus WABAs propias.
+  const bizId = meBiz?.business?.id || appNode?.owner_business?.id
+  let ownedWabas = null
+  if (bizId) ownedWabas = await j(`${GRAPH}/${bizId}/owned_whatsapp_business_accounts?fields=id,name&access_token=${tok()}`)
+
+  return NextResponse.json({ ok: true, meBiz, phoneDefault, assigned, appNode, bizId: bizId || null, ownedWabas })
 }
