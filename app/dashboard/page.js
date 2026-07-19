@@ -5,14 +5,6 @@ const C = {
   bg: '#080d14', card: '#0d1420', border: '#1e2d3d', text: '#e2e8f0', dim: '#64748b',
   orange: '#f97316', green: '#4ade80', red: '#f87171', amber: '#f59e0b', emerald: '#10b981', violet: '#a78bfa', slate: '#64748b', blue: '#60a5fa',
 }
-const ESTADOS = [
-  { key: 'pendiente',    label: 'Pendientes',  color: C.red },
-  { key: 'ventaproceso', label: 'En proceso',  color: C.amber },
-  { key: 'atendido',     label: 'Atendidos',   color: C.green },
-  { key: 'venta',        label: 'Ventas',      color: C.emerald },
-  { key: 'soporte',      label: 'Soporte',     color: C.violet },
-  { key: 'archivado',    label: 'Archivados',  color: C.slate },
-]
 const money = (v) => '$' + Number(v || 0).toLocaleString('es-EC', { maximumFractionDigits: 0 })
 
 function Tile({ label, value, sub, color }) {
@@ -43,6 +35,24 @@ function BarChart({ title, months, values, color, fmt = (v) => v }) {
           )
         })}
       </div>
+    </div>
+  )
+}
+
+function BarList({ title, rows }) {
+  const max = Math.max(1, ...rows.map(r => r.value || 0))
+  return (
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px 18px' }}>
+      <div style={{ fontSize: 12, color: C.text, fontWeight: 700, marginBottom: 14 }}>{title}</div>
+      {rows.map(r => (
+        <div key={r.label} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+          <div style={{ width: 100, fontSize: 12, color: C.dim, flexShrink: 0 }}>{r.label}</div>
+          <div style={{ flex: 1, height: 20, background: '#0a0f18', borderRadius: 6, overflow: 'hidden' }}>
+            <div style={{ width: `${(r.value / max) * 100}%`, height: '100%', background: r.color, borderRadius: 6, transition: 'width .4s' }} />
+          </div>
+          <div style={{ width: 40, textAlign: 'right', fontSize: 13, fontWeight: 700, color: r.color }}>{r.value}</div>
+        </div>
+      ))}
     </div>
   )
 }
@@ -119,6 +129,7 @@ export default function Dashboard() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 20 }}>
             <Tile label={`Ventas (${meses} meses)`} value={D.ventasTotal} color={accent} sub="pedidos creados" />
             <Tile label={`Monto vendido (${meses} meses)`} value={money(D.ventasMonto)} color={accent} sub="del CRM" />
+            <Tile label="% Leídos" value={D.readRate != null ? `${D.readRate}%` : '—'} color={C.blue} sub="✓✓ de mensajes rastreados" />
           </div>
 
           {/* Charts */}
@@ -129,24 +140,20 @@ export default function Dashboard() {
             <BarChart title="✨ Leads nuevos por mes" months={data.months} values={D.leadsPorMes} color={C.amber} />
           </div>
 
-          {/* Estados */}
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px 18px', marginBottom: 26 }}>
-            <div style={{ fontSize: 12, color: C.text, fontWeight: 700, marginBottom: 14 }}>Estado actual de las bandejas</div>
-            {(() => {
-              const max = Math.max(1, ...ESTADOS.map(e => D.estados[e.key] || 0))
-              return ESTADOS.map(e => {
-                const v = D.estados[e.key] || 0
-                return (
-                  <div key={e.key} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                    <div style={{ width: 90, fontSize: 12, color: C.dim, flexShrink: 0 }}>{e.label}</div>
-                    <div style={{ flex: 1, height: 20, background: '#0a0f18', borderRadius: 6, overflow: 'hidden' }}>
-                      <div style={{ width: `${(v / max) * 100}%`, height: '100%', background: e.color, borderRadius: 6, transition: 'width .4s' }} />
-                    </div>
-                    <div style={{ width: 40, textAlign: 'right', fontSize: 13, fontWeight: 700, color: e.color }}>{v}</div>
-                  </div>
-                )
-              })
-            })()}
+          {/* Estados: bandeja (Eje 1) + temperatura del lead (Eje 2) */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 14, marginBottom: 26 }}>
+            <BarList title="Estado de las bandejas" rows={[
+              { label: 'Pendientes', color: C.red,     value: D.estados.pendiente },
+              { label: 'Atendidos',  color: C.green,   value: D.estados.atendido },
+              { label: 'Soporte',    color: C.violet,  value: D.estados.soporte },
+              { label: 'Archivados', color: C.slate,   value: D.estados.archivado },
+              { label: '💰 Ventas',  color: C.emerald, value: D.ventasInbox },
+            ]} />
+            <BarList title="🌡️ Temperatura de leads" rows={[
+              { label: '🔥 Caliente', color: C.orange, value: D.temperatura.caliente },
+              { label: '🌤️ Tibio',    color: C.amber,  value: D.temperatura.tibio },
+              { label: '❄️ Frío',     color: C.blue,   value: D.temperatura.frio },
+            ]} />
           </div>
         </>)}
 

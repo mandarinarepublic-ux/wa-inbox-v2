@@ -1,19 +1,11 @@
 import { NextResponse } from 'next/server'
-import { readSheetFrom } from '@/lib/sheets'
+import { getSupabase } from '@/lib/supabase'
 import { readCrmPedidos } from '@/lib/crm'
-import { parseDate } from '@/lib/utils'
 
-// Dashboard COMBINADO: lee la hoja de MANDI y la de IND (misma Service Account) +
-// las ventas del CRM (por TIENDA_ID). Devuelve métricas por tienda y el total.
-// Filtro: ?meses=3|6|12 (ventana de tiempo).
+// Dashboard COMBINADO (Mandarina + IND + total). Métricas del INBOX salen de Supabase
+// (RPCs de agregación, frescas), y las VENTAS ($) del CRM (Sheet nativo, cacheado).
+// Filtro: ?meses=3|6|12.
 export const dynamic = 'force-dynamic'
-
-const MANDI_SHEET = process.env.SHEET_ID || '1ZQ_vIhKsDBnAUjitOB3zP-4MDbdmsv7hdDgnqNbOkak'
-const IND_SHEET   = process.env.IND_SHEET_ID || '1ObNIff1ypeFW7PfuAjeoiGBJCDyZU4etIsbGpyB-Nqk'
-const TIENDAS = [
-  { id: 'MANDARINA', label: 'Mandarina', sheet: MANDI_SHEET },
-  { id: 'INDSTORE',  label: 'IND Store', sheet: IND_SHEET },
-]
 
 const MES_ABR = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
 const ym = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
@@ -25,72 +17,12 @@ function parseFechaCrm(s) {
   return mes == null ? null : new Date(Number(m[3]), mes, Number(m[1]))
 }
 
-const ESTADO_KEYS = ['pendiente', 'atendido', 'ventaproceso', 'venta', 'soporte', 'archivado']
-
-// Calcula todas las métricas de UNA tienda
-function computeTienda(contRows, msgRows, pedidos, tiendaId, monthKeys) {
-  const zero = () => Object.fromEntries(monthKeys.map(k => [k, 0]))
-  const inRange = (k) => monthKeys.includes(k)
-
-  // Estados actuales (CONTACTOS: A=Tel D=Estado)
-  const estados = Object.fromEntries(ESTADO_KEYS.map(k => [k, 0]))
-  let totalContactos = 0
-  for (const r of contRows) {
-    const tel = r[0]; if (!tel || tel === 'Telefono' || tel === 'telefono') continue
-    totalContactos++
-    const e = String(r[3] || 'pendiente').replace(/[\s ]+/g, ' ').trim().toLowerCase() || 'pendiente'
-    if (estados[e] != null) estados[e]++
-  }
-
-  // Mensajes (MENSAJES: B=Tel G=Fecha H=Direccion)
-  const salientesPorMes = zero()
-  const firstMsg = {}, byTel = {}
-  for (const r of msgRows) {
-    const tel = r[1]; if (!tel || tel === 'Telefono') continue
-    const dir = String(r[7] || '').toUpperCase()
-    const d = parseDate(r[6])
-    if (!d || isNaN(d.getTime())) continue
-    const k = ym(d)
-    if (dir === 'SALIENTE' && inRange(k)) salientesPorMes[k]++
-    if (!firstMsg[tel] || d < firstMsg[tel]) firstMsg[tel] = d
-    ;(byTel[tel] ||= []).push({ d, dir })
-  }
-  const leadsPorMes = zero()
-  for (const t in firstMsg) { const k = ym(firstMsg[t]); if (inRange(k)) leadsPorMes[k]++ }
-
-  // Tiempo de respuesta + sin responder >24h
-  let sumRespMs = 0, nResp = 0, sinResponder = 0
-  const nowMs = Date.now()
-  for (const t in byTel) {
-    const arr = byTel[t].sort((a, b) => a.d - b.d)
-    const iIn = arr.findIndex(x => x.dir === 'ENTRANTE')
-    if (iIn >= 0) { const out = arr.slice(iIn + 1).find(x => x.dir === 'SALIENTE'); if (out) { sumRespMs += (out.d - arr[iIn].d); nResp++ } }
-    const last = arr[arr.length - 1]
-    if (last && last.dir === 'ENTRANTE' && (nowMs - last.d) > 24 * 3600 * 1000) sinResponder++
-  }
-
-  // Ventas (CRM, filtrado por TIENDA_ID)
-  const ventasNPorMes = zero(), ventasMontoPorMes = zero()
-  let ventasTotal = 0, ventasMonto = 0
-  for (const p of pedidos) {
-    if (String(p.TIENDA_ID || '').toUpperCase() !== tiendaId) continue
-    const d = parseFechaCrm(p.FECHA_PEDIDO); if (!d) continue
-    const k = ym(d); if (!inRange(k)) continue
-    const monto = Number(p.MONTO_TOTAL || 0) || 0
-    ventasNPorMes[k]++; ventasMontoPorMes[k] += monto
-    ventasTotal++; ventasMonto += monto
-  }
-
-  return {
-    totalContactos, estados,
-    salientesPorMes, leadsPorMes,
-    ventasNPorMes,
-    ventasMontoPorMes: Object.fromEntries(Object.entries(ventasMontoPorMes).map(([k, v]) => [k, Math.round(v * 100) / 100])),
-    ventasTotal, ventasMonto: Math.round(ventasMonto * 100) / 100,
-    tiempoRespMin: nResp ? Math.round(sumRespMs / nResp / 60000) : null,
-    sinResponder,
-  }
-}
+// Tienda del CRM ↔ cuenta del inbox
+const TIENDAS = [
+  { id: 'MANDARINA', cuenta: 'MANDI', label: 'Mandarina' },
+  { id: 'INDSTORE',  cuenta: 'IND',   label: 'IND Store' },
+]
+const n = (v) => Number(v || 0)
 
 export async function GET(req) {
   try {
@@ -104,38 +36,102 @@ export async function GET(req) {
       months.push({ key: ym(d), label: `${MES_ABR[d.getMonth()]} ${String(d.getFullYear()).slice(2)}` })
     }
     const monthKeys = months.map(m => m.key)
+    const desdeISO = new Date(now.getFullYear(), now.getMonth() - (meses - 1), 1).toISOString()
 
-    const pedidos = await readCrmPedidos().catch(() => [])
+    const sb = getSupabase()
+    const [convRes, serieRes, resumenRes, pedidos] = await Promise.all([
+      sb.rpc('dashboard_conversaciones'),
+      sb.rpc('dashboard_series', { p_desde: desdeISO }),
+      sb.rpc('dashboard_resumen', { p_desde: desdeISO }),
+      readCrmPedidos().catch(() => []),
+    ])
+    if (convRes.error) throw convRes.error
+    if (serieRes.error) throw serieRes.error
+    if (resumenRes.error) throw resumenRes.error
+
+    const convByCuenta   = Object.fromEntries((convRes.data || []).map(r => [r.cuenta, r]))
+    const resumByCuenta  = Object.fromEntries((resumenRes.data || []).map(r => [r.cuenta, r]))
+    // series: { cuenta: { mes: {salientes, leads} } }
+    const serieByCuenta = {}
+    for (const r of (serieRes.data || [])) {
+      (serieByCuenta[r.cuenta] ||= {})[r.mes] = { salientes: n(r.salientes), leads: n(r.leads) }
+    }
+
+    const zero = () => Object.fromEntries(monthKeys.map(k => [k, 0]))
+
+    function computeTienda(cuenta, tiendaId) {
+      const c = convByCuenta[cuenta] || {}
+      const s = resumByCuenta[cuenta] || {}
+      const serie = serieByCuenta[cuenta] || {}
+
+      const salientesPorMes = zero(), leadsPorMes = zero()
+      for (const k of monthKeys) {
+        salientesPorMes[k] = serie[k]?.salientes || 0
+        leadsPorMes[k]     = serie[k]?.leads || 0
+      }
+
+      // Ventas ($) desde el CRM, filtradas por TIENDA_ID.
+      const ventasNPorMes = zero(), ventasMontoPorMes = zero()
+      let ventasTotal = 0, ventasMonto = 0
+      for (const p of pedidos) {
+        if (String(p.TIENDA_ID || '').toUpperCase() !== tiendaId) continue
+        const d = parseFechaCrm(p.FECHA_PEDIDO); if (!d) continue
+        const k = ym(d); if (!monthKeys.includes(k)) continue
+        const monto = n(p.MONTO_TOTAL)
+        ventasNPorMes[k]++; ventasMontoPorMes[k] += monto
+        ventasTotal++; ventasMonto += monto
+      }
+
+      const rastreados = n(s.rastreados), leidos = n(s.leidos)
+      return {
+        totalContactos: n(c.total),
+        estados:     { pendiente: n(c.pendiente), atendido: n(c.atendido), soporte: n(c.soporte), archivado: n(c.archivado) },
+        temperatura: { caliente: n(c.caliente), tibio: n(c.tibio), frio: n(c.frio) },
+        ventasInbox: n(c.ventas),        // conversaciones con pedido creado
+        sinResponder: n(c.sin_responder), // backlog reciente (<30d) sin responder >24h
+        tiempoRespMin: n(s.resp_n) ? Math.round(n(s.resp_avg_seg) / 60) : null,
+        readRate: rastreados ? Math.round((leidos / rastreados) * 100) : null,
+        rastreados, leidos,
+        salientesPorMes, leadsPorMes,
+        ventasNPorMes,
+        ventasMontoPorMes: Object.fromEntries(Object.entries(ventasMontoPorMes).map(([k, v]) => [k, Math.round(v * 100) / 100])),
+        ventasTotal, ventasMonto: Math.round(ventasMonto * 100) / 100,
+      }
+    }
+
     const porTienda = {}
-    await Promise.all(TIENDAS.map(async (t) => {
-      const [cont, msgs] = await Promise.all([
-        readSheetFrom(t.sheet, 'CONTACTOS').catch(() => []),
-        readSheetFrom(t.sheet, 'MENSAJES').catch(() => []),
-      ])
-      porTienda[t.id] = { label: t.label, ...computeTienda(cont, msgs, pedidos, t.id, monthKeys) }
-    }))
+    for (const t of TIENDAS) porTienda[t.id] = { label: t.label, ...computeTienda(t.cuenta, t.id) }
 
     // Total combinado
-    const zero = () => Object.fromEntries(monthKeys.map(k => [k, 0]))
     const total = {
-      totalContactos: 0, estados: Object.fromEntries(ESTADO_KEYS.map(k => [k, 0])),
+      totalContactos: 0,
+      estados:     { pendiente: 0, atendido: 0, soporte: 0, archivado: 0 },
+      temperatura: { caliente: 0, tibio: 0, frio: 0 },
+      ventasInbox: 0, sinResponder: 0,
       salientesPorMes: zero(), leadsPorMes: zero(), ventasNPorMes: zero(), ventasMontoPorMes: zero(),
-      ventasTotal: 0, ventasMonto: 0, sinResponder: 0,
+      ventasTotal: 0, ventasMonto: 0, rastreados: 0, leidos: 0,
     }
+    let respSegSum = 0, respN = 0
     for (const id of Object.keys(porTienda)) {
       const t = porTienda[id]
       total.totalContactos += t.totalContactos
-      total.ventasTotal += t.ventasTotal; total.ventasMonto += t.ventasMonto; total.sinResponder += t.sinResponder
-      for (const e of ESTADO_KEYS) total.estados[e] += t.estados[e]
+      total.ventasInbox += t.ventasInbox; total.sinResponder += t.sinResponder
+      total.ventasTotal += t.ventasTotal; total.ventasMonto += t.ventasMonto
+      total.rastreados += t.rastreados; total.leidos += t.leidos
+      for (const e of Object.keys(total.estados)) total.estados[e] += t.estados[e]
+      for (const e of Object.keys(total.temperatura)) total.temperatura[e] += t.temperatura[e]
       for (const k of monthKeys) {
         total.salientesPorMes[k] += t.salientesPorMes[k]
         total.leadsPorMes[k] += t.leadsPorMes[k]
         total.ventasNPorMes[k] += t.ventasNPorMes[k]
         total.ventasMontoPorMes[k] += t.ventasMontoPorMes[k]
       }
+      if (t.tiempoRespMin != null) { respSegSum += t.tiempoRespMin; respN++ }
     }
     total.ventasMonto = Math.round(total.ventasMonto * 100) / 100
     total.ventasMontoPorMes = Object.fromEntries(Object.entries(total.ventasMontoPorMes).map(([k, v]) => [k, Math.round(v * 100) / 100]))
+    total.tiempoRespMin = respN ? Math.round(respSegSum / respN) : null
+    total.readRate = total.rastreados ? Math.round((total.leidos / total.rastreados) * 100) : null
 
     return NextResponse.json({ generadoEn: new Date().toISOString(), meses, months, porTienda, total })
   } catch (err) {
