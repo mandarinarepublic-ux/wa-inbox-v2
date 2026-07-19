@@ -48,6 +48,23 @@ export function StatusPill({ estado }) {
   )
 }
 
+// Read receipts estilo WhatsApp para mensajes SALIENTES.
+// sent → ✓ gris · delivered → ✓✓ gris · read → ✓✓ azul · failed → ⚠ rojo.
+export function Ticks({ estado }) {
+  if (estado === 'failed') {
+    return <span title="No se pudo entregar" style={{ fontSize: 11, color: '#f87171', fontWeight: 700 }}>⚠</span>
+  }
+  const doble = estado === 'read' || estado === 'delivered'
+  const azul  = estado === 'read'
+  const label = { sent: 'Enviado', delivered: 'Entregado', read: 'Leído' }[estado] || 'Enviado'
+  return (
+    <span title={label} style={{
+      fontSize: 13, lineHeight: 1, letterSpacing: '-3px', paddingRight: 2,
+      color: azul ? '#53bdeb' : '#8aa0b3', fontWeight: 700,
+    }}>{doble ? '✓✓' : '✓'}</span>
+  )
+}
+
 // ── Resaltar coincidencias de búsqueda ───────────────────────────
 function highlight(text, query) {
   const t = String(text ?? '')
@@ -559,7 +576,7 @@ export function MessageBubble({ msg, allMsgs }) {
               return `${d.getDate()}${['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][d.getMonth()]} ${timeStr}`
             })()}
           </span>
-          {isMe && <StatusPill estado={msg.estado} />}
+          {isMe && <Ticks estado={msg.estadoEntrega} />}
         </div>
       </div>
     </div>

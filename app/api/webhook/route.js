@@ -3,7 +3,7 @@ import { waitUntil } from '@vercel/functions'
 import { readSheet, appendRow } from '@/lib/sheets'
 import { registrarContactoEntrante, getContactos, updateEstado, updateModoIA } from '@/lib/contactos'
 import { dualWrite, usaSupabaseLectura } from '@/lib/supabase'
-import { guardarMensajeSupabase, existeWamidSupabase, guardarEventoCrudoSupabase } from '@/lib/inbox-supabase'
+import { guardarMensajeSupabase, existeWamidSupabase, guardarEventoCrudoSupabase, actualizarEstadoEntregaSupabase } from '@/lib/inbox-supabase'
 import { archivarFoto } from '@/lib/media-archive'
 import { parseLinkpago, crearLinkPago, mensajeLinkPago } from '@/lib/dlocal'
 import { getAutomatizaciones } from '@/lib/automatizaciones'
@@ -314,6 +314,16 @@ async function procesar(nuevos, origin) {
   if (archivos.length) await Promise.allSettled(archivos)
 }
 
+// Read receipts: procesa los value.statuses[] de Meta (sent/delivered/read/failed)
+// y actualiza estado_entrega del mensaje saliente por wamid. Solo en modo supabase.
+async function procesarStatuses(statuses) {
+  if (!usaSupabaseLectura()) return
+  for (const s of statuses) {
+    await actualizarEstadoEntregaSupabase(s.wamid, s.estado)
+      .catch(e => console.error('[webhook status]', e.message))
+  }
+}
+
 // ── Recepción de mensajes (POST) — responde 200 YA, procesa en background ──────
 export async function POST(req) {
   try {
@@ -328,12 +338,18 @@ export async function POST(req) {
     }
 
     const nuevos = []
+    const statuses = [] // read receipts: {wamid, estado}
     for (const entry of entries) {
       for (const change of entry?.changes || []) {
         const value    = change?.value || {}
         const contacts = value?.contacts || []
         const nombreDe = {}
         for (const c of contacts) nombreDe[c.wa_id] = c.profile?.name || ''
+
+        // Estados de entrega (✓✓) de mensajes que ENVIAMOS.
+        for (const st of value?.statuses || []) {
+          if (st?.id && st?.status) statuses.push({ wamid: String(st.id), estado: String(st.status).toLowerCase() })
+        }
 
         for (const msg of value?.messages || []) {
           if (!marcarNuevo(msg.id)) continue // reintento rápido de Meta → ignorar
@@ -353,6 +369,7 @@ export async function POST(req) {
 
     // Meta exige un 200 rápido: lo damos YA y hacemos hoja+IA en segundo plano.
     if (nuevos.length) waitUntil(procesar(nuevos, origin))
+    if (statuses.length) waitUntil(procesarStatuses(statuses))
     return NextResponse.json({ ok: true })
   } catch (err) {
     console.error('[/api/webhook]', err)
