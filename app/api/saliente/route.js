@@ -26,9 +26,34 @@ const MAKE_SEND_WEBHOOK = process.env.MAKE_SEND_WEBHOOK || 'https://hook.us2.mak
 // 200 pero luego muere con el status `failed` code 131053 "Media upload error"
 // → la foto nunca llega y el vendedor no se entera. Subiendo los bytes nosotros,
 // Meta ya no depende de terceros.
+// Descarga la imagen con User-Agent de navegador, timeout y reintentos.
+// imgbb (i.ibb.co) y algunos CDNs responden lento o con 5xx/403 a los fetch
+// server-side "pelados": un único intento hacía que la conversión a media id
+// fallara y cayéramos al envío por LINK, que Meta luego NO podía bajar y el
+// mensaje moría con status `failed` (131053). Con reintentos la conversión casi
+// siempre gana, así el envío va por media id (que nunca falla).
+async function descargarImagen(url, intentos = 3) {
+  let ultimoError
+  for (let i = 0; i < intentos; i++) {
+    try {
+      const ctrl = new AbortController()
+      const t = setTimeout(() => ctrl.abort(), 15000)
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; MandarinaInbox/1.0)', Accept: 'image/*' },
+        signal: ctrl.signal,
+      }).finally(() => clearTimeout(t))
+      if (res.ok) return res
+      ultimoError = new Error(`HTTP ${res.status}`)
+    } catch (e) {
+      ultimoError = e
+    }
+    if (i < intentos - 1) await new Promise(r => setTimeout(r, 400 * (i + 1))) // backoff 400ms, 800ms
+  }
+  throw new Error(`no se pudo descargar la imagen (${ultimoError?.message || 'desconocido'})`)
+}
+
 async function subirImagenAMeta(url) {
-  const img = await fetch(url)
-  if (!img.ok) throw new Error(`no se pudo descargar la imagen (HTTP ${img.status})`)
+  const img = await descargarImagen(url)
   const buf  = await img.arrayBuffer()
   const mime = img.headers.get('content-type') || 'image/jpeg'
   const ext  = mime.includes('png') ? 'png' : mime.includes('webp') ? 'webp' : 'jpg'
