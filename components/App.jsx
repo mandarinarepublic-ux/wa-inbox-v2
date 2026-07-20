@@ -1,6 +1,6 @@
 'use client'
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { fetchRows, fetchContacts, sendReply, updateContact, updateTemperatura, isDemo, sendInteractiveButtons, toggleIAMode, sendVideo } from '@/lib/api-client'
+import { fetchRows, fetchContacts, sendReply, updateContact, updateTemperatura, isDemo, sendInteractiveButtons, toggleIAMode, sendVideo, sendImageFile } from '@/lib/api-client'
 import { buildConvs, fmtDate, parseDate } from '@/lib/utils'
 import { Spinner, Avatar, ContactRow, MessageBubble, Toast } from '@/components/Components'
 import RightPanel from '@/components/RightPanel'
@@ -583,11 +583,17 @@ export default function App() {
         allOk = result.ok
       } else {
         for (let i = 0; i < imgFiles.length; i++) {
-          const fd = new FormData(); fd.append('image', imgFiles[i].file)
-          const res  = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`, { method:'POST', body:fd })
-          const data = await res.json()
-          if (!data.success) { allOk = false; continue }
-          const ok = await sendImageUrl(data.data.url)
+          // imgbb solo nos da la url permanente para el historial del hilo. Si falla,
+          // NO cancelamos el envío: subimos el archivo a Meta y mandamos por media id.
+          let url = ''
+          try {
+            const fd = new FormData(); fd.append('image', imgFiles[i].file)
+            const res  = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`, { method:'POST', body:fd })
+            const data = await res.json()
+            if (data.success) url = data.data.url
+          } catch { /* seguimos por media id */ }
+
+          const { ok } = await sendImageFile(activeConv.telefono, activeConv.nombre, imgFiles[i].file, url)
           if (!ok) allOk = false
           setImgProgress(i + 1)
           if (i < imgFiles.length - 1) await new Promise(r => setTimeout(r, 800))

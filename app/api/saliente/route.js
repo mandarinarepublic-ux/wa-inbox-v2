@@ -20,6 +20,33 @@ const GRAPH_URL     = `https://graph.facebook.com/v19.0/${META_PHONE_ID}/message
 // token, esta ruta pasa sola a enviar DIRECTO a Meta y Make queda bypasseado.
 const MAKE_SEND_WEBHOOK = process.env.MAKE_SEND_WEBHOOK || 'https://hook.us2.make.com/2j5dzq4gjqkjjnyxiyb46bons15awy2k'
 
+// Sube una imagen a Meta DESDE EL SERVIDOR y devuelve el media id.
+// Motivo: mandar `image.link` obliga a Meta a descargar la foto del hosting
+// (imgbb). Cuando ese hosting le responde 500 a Meta, el mensaje se acepta con
+// 200 pero luego muere con el status `failed` code 131053 "Media upload error"
+// → la foto nunca llega y el vendedor no se entera. Subiendo los bytes nosotros,
+// Meta ya no depende de terceros.
+async function subirImagenAMeta(url) {
+  const img = await fetch(url)
+  if (!img.ok) throw new Error(`no se pudo descargar la imagen (HTTP ${img.status})`)
+  const buf  = await img.arrayBuffer()
+  const mime = img.headers.get('content-type') || 'image/jpeg'
+  const ext  = mime.includes('png') ? 'png' : mime.includes('webp') ? 'webp' : 'jpg'
+
+  const fd = new FormData()
+  fd.append('file', new Blob([buf], { type: mime }), `imagen.${ext}`)
+  fd.append('messaging_product', 'whatsapp')
+
+  const res  = await fetch(`https://graph.facebook.com/v19.0/${META_PHONE_ID}/media`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${META_TOKEN}` },
+    body: fd,
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!data?.id) throw new Error(data?.error?.message || `upload a Meta falló (HTTP ${res.status})`)
+  return data.id
+}
+
 async function enviarPorMake(body) {
   try {
     const res = await fetch(MAKE_SEND_WEBHOOK, {
@@ -110,6 +137,24 @@ function construir(body) {
     }
   }
 
+  // Imagen por MediaID (subida antes vía /api/media/upload — camino sin terceros)
+  if (body.ImagenMediaId) {
+    return {
+      tipo: 'imagen',
+      contenido: body.Caption || '',
+      mediaUrl: body.ImagenURL || '',   // url pública solo para pintar el hilo
+      mediaId: body.ImagenMediaId,
+      payload: {
+        messaging_product: 'whatsapp',
+        to,
+        type: 'image',
+        image: body.Caption
+          ? { id: body.ImagenMediaId, caption: body.Caption }
+          : { id: body.ImagenMediaId },
+      },
+    }
+  }
+
   // Imagen por URL pública
   if (body.ImagenURL) {
     return {
@@ -162,7 +207,22 @@ export async function POST(req) {
     // Sin token todavía → no cortamos el servicio: enviamos por Make (temporal).
     if (!META_TOKEN) return enviarPorMake(body)
 
-    const { payload, tipo, contenido, mediaUrl, mediaId, botones } = construir(body)
+    const construido = construir(body)
+    const { payload, tipo, contenido, mediaUrl, botones } = construido
+    let mediaId = construido.mediaId
+
+    // Imagen por link (respuestas rápidas, catálogo, fotos ya subidas a imgbb):
+    // la convertimos a media id ANTES de enviar, así Meta no descarga de terceros.
+    // Si la conversión falla, seguimos con el link de siempre (mejor eso que nada).
+    if (payload.type === 'image' && payload.image?.link) {
+      try {
+        const id = await subirImagenAMeta(payload.image.link)
+        payload.image = payload.image.caption ? { id, caption: payload.image.caption } : { id }
+        mediaId = id
+      } catch (e) {
+        console.error('[/api/saliente] no se pudo subir la imagen a Meta, se envía por link:', e.message)
+      }
+    }
 
     const res  = await fetch(GRAPH_URL, {
       method: 'POST',

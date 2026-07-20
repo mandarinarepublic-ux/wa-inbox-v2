@@ -600,9 +600,9 @@ export function Toast({ result }) {
           ? custom
           : result.ok
             ? result.demo
-              ? '✓ Enviado (demo) — activa tus webhooks de Make para envío real'
-              : '✓ Mensaje enviado por WhatsApp vía Make'
-            : '✗ Error al enviar — revisa tu escenario en Make'}
+              ? '✓ Enviado (demo) — configura META_TOKEN para envío real'
+              : '✓ Mensaje enviado por WhatsApp'
+            : '✗ Error al enviar — intenta de nuevo'}
       </span>
     </div>
   )
