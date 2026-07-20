@@ -4,7 +4,6 @@ import { Avatar } from '@/components/Components'
 import { fetchRepliesFromSheet, writeReply, saveNotes, setIdVenta, fetchProductos } from '@/lib/api-client'
 import { parseDate } from '@/lib/utils'
 
-const IMGBB_KEY = '2307574d43689522feabd27cff3443df'
 const MAX_IMGS  = 10
 
 // Extrae todas las urls de imagen de un reply (imageUrl, imageUrl2..imageUrl10)
@@ -38,25 +37,27 @@ async function toJpeg(file) {
   })
 }
 
+// Sube un archivo a NUESTRO bucket (Supabase Storage) y devuelve la url pública.
+// Antes iba a imgbb: un tercero que, cuando le fallaba a los servidores de Meta,
+// tumbaba el envío de fotos. Ahora la url es nuestra y estable.
+async function subirFoto(file) {
+  const converted = await toJpeg(file)
+  const fd = new FormData()
+  fd.append('file', converted, converted.name || 'imagen.jpg')
+  const res  = await fetch('/api/upload-foto', { method: 'POST', body: fd })
+  const data = await res.json()
+  if (!data.url) throw new Error(data.error || 'No se pudo subir la foto')
+  return data.url
+}
+
 const uploadImg = async (file, setUrl, setPrev, setLoading) => {
   setLoading(true)
   try {
-    const converted = await toJpeg(file)
-    const fd = new FormData()
-    fd.append('image', converted)
-    const res  = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`, { method: 'POST', body: fd })
-    const data = await res.json()
-    if (data.success) { setUrl(data.data.url); setPrev(data.data.url) }
+    const url = await subirFoto(file)
+    setUrl(url); setPrev(url)
+  } catch (e) {
+    console.error('[RightPanel] subirFoto:', e)
   } finally { setLoading(false) }
-}
-
-// Sube un archivo a imgbb y devuelve la url (para el editor multi-foto)
-async function uploadToImgbb(file) {
-  const converted = await toJpeg(file)
-  const fd = new FormData(); fd.append('image', converted)
-  const res  = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_KEY}`, { method: 'POST', body: fd })
-  const data = await res.json()
-  return data.success ? data.data.url : ''
 }
 
 // ── MultiImgEditor — editor de hasta 10 fotos ────────────────────
@@ -68,7 +69,7 @@ function MultiImgEditor({ urls, onChange }) {
     const f = e.target.files[0]; if (!f) return
     setUploading(p => ({ ...p, [idx]: true }))
     try {
-      const url = await uploadToImgbb(f)
+      const url = await subirFoto(f).catch(e => { console.error('[RightPanel] subirFoto:', e); return '' })
       if (url) {
         const next = [...urls]
         next[idx] = url
