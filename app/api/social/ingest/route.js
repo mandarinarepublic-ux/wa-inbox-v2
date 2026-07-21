@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { guardarSocialMensajeSupabase } from '@/lib/social-supabase'
+import { guardarSocialMensajeSupabase, getIngestSecret } from '@/lib/social-supabase'
 
 // Ingesta de eventos ENTRANTES del Social Inbox (FB Messenger / IG).
 // Lo llama el escenario de Make (EscuchaFacebook / EscuchaInstagram) en lugar de
@@ -14,7 +14,6 @@ import { guardarSocialMensajeSupabase } from '@/lib/social-supabase'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-const SECRET = process.env.SOCIAL_INGEST_SECRET || ''
 
 async function leerBody(req) {
   const ct = req.headers.get('content-type') || ''
@@ -40,7 +39,8 @@ export async function POST(req) {
   try {
     const url = new URL(req.url)
     const token = req.headers.get('x-ingest-secret') || url.searchParams.get('token') || ''
-    if (!SECRET || token !== SECRET) {
+    const secret = await getIngestSecret()
+    if (!secret || token !== secret) {
       return NextResponse.json({ error: 'no autorizado' }, { status: 401 })
     }
 
