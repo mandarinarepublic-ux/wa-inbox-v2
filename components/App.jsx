@@ -156,6 +156,7 @@ export default function App() {
   const pendingRef = useRef({})
   const hilosRef   = useRef({})   // telefono → historial completo ya descargado (carga por chat)
   const activeRef  = useRef(null) // teléfono del chat abierto (para no borrar su hilo del cache)
+  const backGuardRef = useRef(false) // móvil: entrada de historial empujada al abrir un chat (el "atrás" del celu vuelve a la lista en vez de salir de la app)
 
   // ── Cargar datos ──────────────────────────────────────────────
   const load = useCallback(async () => {
@@ -355,6 +356,13 @@ export default function App() {
     setActive(telefono)
     activeRef.current = telefono
     setShowSidebar(false)
+    // En móvil, empujamos una entrada de historial: así el botón "atrás" del celular
+    // vuelve a la lista de chats en vez de salir de la app. Una sola entrada mientras
+    // estemos navegando chats (backGuardRef evita duplicar al saltar de chat en chat).
+    if (typeof window !== 'undefined' && window.matchMedia?.('(max-width: 767px)').matches && !backGuardRef.current) {
+      window.history.pushState({ inbox: 'chat' }, '')
+      backGuardRef.current = true
+    }
     autoScroll.current = true
     prevMsgLen.current = 0
     setConvs(prev => prev.map(c => c.telefono === telefono ? { ...c, unread: 0 } : c))
@@ -393,6 +401,21 @@ export default function App() {
   // ── Derived state ─────────────────────────────────────────────
   const activeConv  = convs.find(c => c.telefono === active) || null
   const totalUnread = convs.reduce((s, c) => s + c.unread, 0)
+  // Botón "atrás" del celular: si abrimos un chat empujamos una entrada de historial
+  // (en openConv), y acá la consumimos para VOLVER A LA LISTA en vez de salir de la app.
+  // Solo actúa si nosotros empujamos la entrada (backGuardRef), así en desktop el back
+  // sigue navegando normal.
+  useEffect(() => {
+    const onPop = () => {
+      if (backGuardRef.current) {
+        backGuardRef.current = false
+        setShowSidebar(true)   // muestra la lista de chats (no sale de la app)
+      }
+    }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
+
   // Búsqueda por mensaje: server-side sobre TODO el historial (antes solo miraba lo
   // cargado en el navegador). Debounce 350ms; en modo 'contacto' o con <2 chars se limpia.
   useEffect(() => {
