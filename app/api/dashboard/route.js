@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import { getSupabase } from '@/lib/supabase'
-import { readCrmPedidos } from '@/lib/crm'
 
 // Dashboard COMBINADO (Mandarina + IND + total). Inbox desde Supabase (RPCs); ventas ($)
 // del CRM (Sheet cacheado). Filtros estilo Meta por rango de fecha + sección "HOY" fija.
@@ -87,6 +86,9 @@ export async function GET(req) {
     // Rango "HOY" (siempre, independiente del filtro)
     const t = ecParts(new Date())
     const hoyDesde = ecDayStart(t.y, t.m, t.d), hoyHasta = new Date(hoyDesde.getTime() + H)
+    // Ventana de pedidos a traer del CRM (Supabase): cubre el rango seleccionado y HOY.
+    const ventasLo = new Date(Math.min(desde.getTime(), hoyDesde.getTime()))
+    const ventasHi = new Date(Math.max(hasta.getTime(), hoyHasta.getTime()))
 
     const sb = getSupabase()
     const [convRes, serieRes, perRes, hoyRes, pedidos] = await Promise.all([
@@ -94,9 +96,21 @@ export async function GET(req) {
       sb.rpc('dashboard_series',  { p_desde: desde.toISOString(), p_hasta: hasta.toISOString(), p_gran: gran }),
       sb.rpc('dashboard_periodo', { p_desde: desde.toISOString(), p_hasta: hasta.toISOString() }),
       sb.rpc('dashboard_periodo', { p_desde: hoyDesde.toISOString(), p_hasta: hoyHasta.toISOString() }),
-      readCrmPedidos().catch(() => []),
+      // Ventas ($) del CRM — ahora desde Supabase (schema crm), no del Google Sheet.
+      sb.schema('crm').from('pedidos')
+        .select('tienda_id, fecha_pedido, monto_total')
+        .gte('fecha_pedido', ventasLo.toISOString())
+        .lt('fecha_pedido', ventasHi.toISOString())
+        .then(r => r?.data || [], () => []),
     ])
     for (const r of [convRes, serieRes, perRes, hoyRes]) if (r.error) throw r.error
+
+    // Pedidos del CRM normalizados: tienda + monto + fecha (en día de Ecuador).
+    const pedidosVentas = (pedidos || []).map(p => ({
+      tienda: String(p.tienda_id || '').toUpperCase(),
+      monto:  n(p.monto_total),
+      f:      p.fecha_pedido ? ecParts(new Date(p.fecha_pedido)) : null,
+    }))
 
     const convBy = Object.fromEntries((convRes.data || []).map(r => [r.cuenta, r]))
     const perBy  = Object.fromEntries((perRes.data  || []).map(r => [r.cuenta, r]))
@@ -118,10 +132,10 @@ export async function GET(req) {
       // Ventas del CRM (por TIENDA_ID): total del rango, por periodo, y HOY.
       const ventasNPorPeriodo = zero(), ventasMontoPorPeriodo = zero()
       let ventasTotal = 0, ventasMonto = 0, ventasHoy = 0, ventasMontoHoy = 0
-      for (const p of pedidos) {
-        if (String(p.TIENDA_ID || '').toUpperCase() !== tiendaId) continue
-        const f = parseFechaCrm(p.FECHA_PEDIDO); if (!f) continue
-        const monto = n(p.MONTO_TOTAL)
+      for (const p of pedidosVentas) {
+        if (p.tienda !== tiendaId) continue
+        const f = p.f; if (!f) continue
+        const monto = p.monto
         if (esHoy(f)) { ventasHoy++; ventasMontoHoy += monto }
         if (!enRango(f)) continue
         const k = periodKey(f)
