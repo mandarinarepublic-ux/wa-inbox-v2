@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server'
-import { appendRow } from '@/lib/sheets'
+import { guardarSocialMensajeSupabase } from '@/lib/social-supabase'
 
 // Envío saliente del Social Inbox (FB Messenger / IG).
 // Reemplaza al escenario Make SOCIAL_SALIENTE (que dependía de una conexión rota).
 // El token de PÁGINA vive server-side en process.env.FB_PAGE_TOKEN. Usa preferentemente
 // un token de Usuario del Sistema (no expira); un token de página normal caduca ~60 días.
+// El registro del saliente va a Supabase (inbox.social_mensajes), NO a la hoja SOCIAL.
 export const dynamic = 'force-dynamic'
 
 const FB_PAGE_TOKEN = process.env.FB_PAGE_TOKEN || ''
@@ -41,13 +42,20 @@ export async function POST(req) {
       )
     }
 
-    // Registra el saliente en la hoja SOCIAL para que aparezca en el inbox al refrescar
-    // (col G = MensajeSalida). Si falla el log, el mensaje YA se envió → no es fatal.
+    // Registra el saliente en Supabase para que aparezca en el inbox al refrescar.
+    // Al responder, la conversación queda ATENDIDA. Si el log falla, el mensaje YA se
+    // envió → no es fatal.
     try {
-      const fecha = new Date().toISOString().slice(0, 19).replace('T', ' ')
-      await appendRow('SOCIAL', ['', canal || '', String(sender_id), String(sender_id), '', fecha, String(message), 'ATENDIDO', 'TRUE'])
+      await guardarSocialMensajeSupabase({
+        canal: canal || 'FB',
+        sender_id: String(sender_id),
+        direccion: 'SALIENTE',
+        texto: String(message),
+        msg_id: data.message_id || '',
+        estado: 'ATENDIDO',
+      })
     } catch (e) {
-      console.error('[/api/social/saliente] no se pudo registrar en SOCIAL:', e.message)
+      console.error('[/api/social/saliente] no se pudo registrar en Supabase:', e.message)
     }
 
     return NextResponse.json({ ok: true, id: data.message_id || '' })

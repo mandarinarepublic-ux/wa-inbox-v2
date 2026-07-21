@@ -2,11 +2,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 
 // ── CONFIG ──────────────────────────────────────────────────────────────────
-const SHEET_ID   = '1ZQ_vIhKsDBnAUjitOB3zP-4MDbdmsv7hdDgnqNbOkak'
-const SHEET_NAME = 'SOCIAL'
-const SHEET_URL  = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${SHEET_NAME}`
-
-const SOCIAL_SALIENTE_WEBHOOK = 'https://hook.us2.make.com/h58ntr47fibrop55pb42d5waejphay32'
+// Los datos ya NO se leen de la hoja SOCIAL de Google Sheets: vienen de Supabase
+// vía /api/social/lista (entrantes los ingesta Make → /api/social/ingest).
 
 // ── HELPERS ──────────────────────────────────────────────────────────────────
 const CHANNEL_META = {
@@ -19,81 +16,6 @@ const STATUS_COLORS = {
   VENTAPROCESO:  { bg: 'rgba(245,158,11,.15)',  color: '#f59e0b' },
   ATENDIDO:      { bg: 'rgba(74,222,128,.15)',   color: '#4ade80' },
   ARCHIVADO:     { bg: 'rgba(100,116,139,.15)',  color: '#64748b' },
-}
-
-function parseCSV(text) {
-  const lines = []
-  let cur = '', inQ = false
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i]
-    if (ch === '"') { inQ = !inQ }
-    else if ((ch === '\n' || ch === '\r') && !inQ) {
-      if (cur || lines.length > 0) lines.push(cur)
-      cur = ''
-      if (ch === '\r' && text[i+1] === '\n') i++
-    } else cur += ch
-  }
-  if (cur) lines.push(cur)
-  if (lines.length < 2) return []
-  const parseRow = (line) => {
-    const vals = []
-    let c = '', q = false
-    for (const ch of line) {
-      if (ch === '"') { q = !q }
-      else if (ch === ',' && !q) { vals.push(c.replace(/^"|"$/g, '').trim()); c = '' }
-      else c += ch
-    }
-    vals.push(c.replace(/^"|"$/g, '').trim())
-    return vals
-  }
-  const headers = parseRow(lines[0])
-  return lines.slice(1).filter(l => l.trim()).map(line => {
-    const vals = parseRow(line)
-    const obj = {}
-    headers.forEach((h, i) => { obj[h] = vals[i] || '' })
-    return obj
-  })
-}
-
-function groupByConversation(rows) {
-  const map = {}
-  rows.forEach(row => {
-    const senderId = (row.Sender_ID || '').trim()
-    const canal    = (row.CANAL || 'FB').trim()
-    if (!senderId) return
-    // Clave única = canal + sender para evitar mezclar FB e IG
-    const key = `${canal}__${senderId}`
-    if (!map[key]) {
-      map[key] = {
-        sender_id: senderId,
-        nombre: (row.Nombre || senderId).trim(),
-        canal,
-        status: (row.EstadoReal || 'PENDIENTE').trim(),
-        mandi_active: (row.MANDI_Activo || '').trim() === 'TRUE',
-        messages: [],
-        last_time: row.Fecha || '',
-        unread: 0,
-        // Pauta: de qué anuncio/publicación viene el cliente. Llega solo en la fila de
-        // origen (primer mensaje desde un anuncio / comentario en una publicación).
-        // FB: Ad_ID/Pauta(título)/Ref del referral CTM. IG: Ad_ID=media.id, Ref=tipo (AD/REELS/FEED).
-        pautaAdId:  '',
-        pautaTitle: '',
-        pautaRef:   '',
-      }
-    }
-    // Captura la primera aparición no vacía de cada campo de pauta
-    if (!map[key].pautaAdId  && (row.Ad_ID || '').trim()) map[key].pautaAdId  = (row.Ad_ID || '').trim()
-    if (!map[key].pautaTitle && (row.Pauta || '').trim()) map[key].pautaTitle = (row.Pauta || '').trim()
-    if (!map[key].pautaRef   && (row.Ref   || '').trim()) map[key].pautaRef   = (row.Ref   || '').trim()
-    const msg   = (row.Mensaje || '').trim()
-    const reply = (row.MensajeSalida || '').trim()
-    if (msg)   map[key].messages.push({ id: row.ID || Date.now(), from: 'user',  text: msg,   time: row.Fecha || '' })
-    if (reply) map[key].messages.push({ id: (row.ID || Date.now()) + '_r', from: 'mandi', text: reply, time: row.Fecha || '' })
-    map[key].last_time = row.Fecha || ''
-    map[key].status    = (row.EstadoReal || map[key].status).trim()
-    if (row.Nombre && row.Nombre.trim()) map[key].nombre = row.Nombre.trim()
-  })
-  return Object.values(map).sort((a, b) => new Date(b.last_time) - new Date(a.last_time))
 }
 
 // Devuelve la info de pauta lista para mostrar, o null si la conversación no vino
@@ -222,7 +144,7 @@ function MsgBubble({ msg, channel }) {
 // ── COMPONENTE PRINCIPAL ──────────────────────────────────────────────────────
 export default function SocialInbox({ active: isVisible }) {
   const [convs, setConvs]       = useState([])
-  const [selected, setSelected] = useState(null)
+  const [selected, setSelected] = useState(null) // clave compuesta: `${canal}__${sender_id}`
   const [filter, setFilter]     = useState('Todas')
   const [loading, setLoading]   = useState(true)
   const [input, setInput]       = useState('')
@@ -230,22 +152,36 @@ export default function SocialInbox({ active: isVisible }) {
   const [lastSync, setLastSync] = useState(null)
   const [quickReplies, setQuickReplies] = useState([]) // mismas respuestas que WhatsApp (RESPUESTAS_RAPIDAS)
   const [showQR, setShowQR]     = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
   const bottomRef = useRef(null)
   const pollRef   = useRef(null)
+  const backGuardRef = useRef(false) // móvil: entrada de historial empujada al abrir un chat
+
+  const convKey = (c) => `${c.canal}__${c.sender_id}`
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch(SHEET_URL)
-      const text = await res.text()
-      const rows = parseCSV(text)
-      const grouped = groupByConversation(rows)
-      setConvs(grouped)
-      setLastSync(new Date())
+      const res = await fetch('/api/social/lista')
+      const data = await res.json()
+      if (Array.isArray(data)) {
+        setConvs(data)
+        setLastSync(new Date())
+      }
     } catch (e) {
       console.error('SocialInbox load error:', e)
     } finally {
       setLoading(false)
     }
+  }, [])
+
+  // ¿Pantalla de celular? (mismo umbral que el inbox de WhatsApp: 767px)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const mq = window.matchMedia('(max-width: 767px)')
+    const apply = () => setIsMobile(mq.matches)
+    apply()
+    mq.addEventListener?.('change', apply)
+    return () => mq.removeEventListener?.('change', apply)
   }, [])
 
   useEffect(() => {
@@ -256,7 +192,6 @@ export default function SocialInbox({ active: isVisible }) {
   }, [isVisible, load])
 
   // Respuestas rápidas: las MISMAS que WhatsApp (hoja RESPUESTAS_RAPIDAS vía /api/respuestas).
-  // Cambian poco → se cargan una vez al abrir el Social Inbox.
   useEffect(() => {
     if (!isVisible) return
     fetch('/api/respuestas')
@@ -265,11 +200,41 @@ export default function SocialInbox({ active: isVisible }) {
       .catch(() => {})
   }, [isVisible])
 
+  const selectedConv = convs.find(c => convKey(c) === selected) || null
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [selected, convs])
 
-  const selectedConv = convs.find(c => c.sender_id === selected) || null
+  // Botón "atrás" del celular: al abrir un chat empujamos una entrada de historial y
+  // acá la consumimos para VOLVER A LA LISTA en vez de salir de la app.
+  useEffect(() => {
+    const onPop = () => {
+      if (backGuardRef.current) {
+        backGuardRef.current = false
+        setSelected(null)
+      }
+    }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
+
+  const openConv = (conv) => {
+    setSelected(convKey(conv))
+    setShowQR(false)
+    if (isMobile && !backGuardRef.current) {
+      window.history.pushState({ social: 'chat' }, '')
+      backGuardRef.current = true
+    }
+  }
+
+  const goBack = () => {
+    if (backGuardRef.current) {
+      window.history.back() // dispara popstate → setSelected(null)
+    } else {
+      setSelected(null)
+    }
+  }
 
   const filtered = convs.filter(c => {
     if (filter === 'FB') return c.canal === 'FB'
@@ -305,10 +270,10 @@ export default function SocialInbox({ active: isVisible }) {
         alert('❌ No se pudo enviar: ' + (data.error || `HTTP ${res.status}`))
         return
       }
-      // Optimistic update
+      // Optimistic update: agrega el saliente y marca ATENDIDO (como en el server).
       setConvs(prev => prev.map(c =>
-        c.sender_id === selected && c.canal === selectedConv.canal
-          ? { ...c, messages: [...c.messages, { id: Date.now(), from: 'mandi', text, time: new Date().toISOString() }] }
+        convKey(c) === selected
+          ? { ...c, status: 'ATENDIDO', messages: [...c.messages, { id: Date.now(), from: 'mandi', text, time: new Date().toISOString() }] }
           : c
       ))
     } catch (e) {
@@ -319,13 +284,34 @@ export default function SocialInbox({ active: isVisible }) {
     }
   }
 
+  const cambiarEstado = async (nuevo) => {
+    if (!selectedConv || selectedConv.status === nuevo) return
+    const { canal, sender_id } = selectedConv
+    setConvs(prev => prev.map(c => convKey(c) === selected ? { ...c, status: nuevo } : c))
+    try {
+      await fetch('/api/social/estado', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ canal, sender_id, estado: nuevo }),
+      })
+    } catch (e) {
+      console.error('Estado error:', e)
+    }
+  }
+
   const FILTERS = ['Todas', 'FB', 'IG', 'PENDIENTE', 'VENTAPROCESO']
 
+  // En móvil mostramos UNA sola vista: lista o chat (nunca las dos apretadas, que era
+  // lo que "tapaba la pantalla" y no dejaba responder).
+  const mostrarSidebar = !isMobile || !selectedConv
+  const mostrarChat    = !isMobile || !!selectedConv
+
   return (
-    <div style={{ display:'flex', flex:1, height:'100%', overflow:'hidden', fontFamily:'Outfit,sans-serif' }}>
+    <div style={{ display:'flex', flex:1, height:'100%', minHeight:0, overflow:'hidden', fontFamily:'Outfit,sans-serif' }}>
 
       {/* ── SIDEBAR ── */}
-      <div style={{ width:300, flexShrink:0, background:'#0d1520', borderRight:'1px solid #162030', display:'flex', flexDirection:'column', height:'100%', overflow:'hidden' }}>
+      {mostrarSidebar && (
+      <div style={{ width: isMobile ? '100%' : 300, flexShrink:0, background:'#0d1520', borderRight: isMobile ? 'none' : '1px solid #162030', display:'flex', flexDirection:'column', height:'100%', minHeight:0, overflow:'hidden' }}>
         {/* Header */}
         <div style={{ padding:'14px 14px 10px', borderBottom:'1px solid #162030', flexShrink:0 }}>
           <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
@@ -359,8 +345,8 @@ export default function SocialInbox({ active: isVisible }) {
           ) : filtered.length === 0 ? (
             <div style={{ padding:28, textAlign:'center', color:'#2a3f55', fontSize:12 }}>Sin conversaciones</div>
           ) : filtered.map(conv => (
-            <ConvRow key={conv.sender_id} conv={conv} isActive={selected === conv.sender_id}
-              onClick={() => setSelected(conv.sender_id)} />
+            <ConvRow key={convKey(conv)} conv={conv} isActive={selected === convKey(conv)}
+              onClick={() => openConv(conv)} />
           ))}
         </div>
 
@@ -370,19 +356,23 @@ export default function SocialInbox({ active: isVisible }) {
           <button onClick={load} style={{ background:'rgba(37,211,102,.1)', border:'1px solid rgba(37,211,102,.25)', color:'#25d366', borderRadius:7, width:28, height:28, cursor:'pointer', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center' }}>↻</button>
         </div>
       </div>
+      )}
 
       {/* ── CHAT ── */}
-      {selectedConv ? (
-        <div style={{ flex:1, display:'flex', flexDirection:'column', minWidth:0, overflow:'hidden', background:'#080d14' }}>
+      {mostrarChat && (selectedConv ? (
+        <div style={{ flex:1, display:'flex', flexDirection:'column', minWidth:0, minHeight:0, overflow:'hidden', background:'#080d14' }}>
           {/* Header chat */}
           <div style={{ padding:'8px 14px', background:'#0a0f1a', borderBottom:'1px solid #111c2a', display:'flex', alignItems:'center', gap:10, flexShrink:0 }}>
+            {isMobile && (
+              <button onClick={goBack} title="Volver" style={{ flexShrink:0, width:34, height:34, borderRadius:9, background:'#111c2a', border:'1px solid #1e2d3d', color:'#94a3b8', fontSize:18, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>‹</button>
+            )}
             <SocialAvatar name={selectedConv.nombre} channel={selectedConv.canal} />
             <div style={{ flex:1, minWidth:0 }}>
               <div style={{ display:'flex', alignItems:'center', gap:6 }}>
                 <span style={{ fontSize:14, fontWeight:800, color:'#e2e8f0', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{selectedConv.nombre}</span>
                 <ChannelBadge channel={selectedConv.canal} />
               </div>
-              <div style={{ fontSize:10, color:'#475569' }}>{CHANNEL_META[selectedConv.canal]?.label} · {selectedConv.sender_id}</div>
+              <div style={{ fontSize:10, color:'#475569', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{CHANNEL_META[selectedConv.canal]?.label} · {selectedConv.sender_id}</div>
               <PautaBadge conv={selectedConv} />
             </div>
             <div style={{ display:'flex', gap:4, flexShrink:0 }}>
@@ -390,7 +380,7 @@ export default function SocialInbox({ active: isVisible }) {
                 const sc = STATUS_COLORS[s]
                 const isActive = selectedConv.status === s
                 return (
-                  <button key={s} title={s} style={{
+                  <button key={s} title={s} onClick={() => cambiarEstado(s)} style={{
                     padding:'3px 6px', fontSize:8, fontWeight:700, borderRadius:5, cursor:'pointer',
                     background: isActive ? sc.bg : 'transparent',
                     border: `1px solid ${isActive ? sc.color + '60' : '#1a2d40'}`,
@@ -403,7 +393,7 @@ export default function SocialInbox({ active: isVisible }) {
           </div>
 
           {/* Mensajes */}
-          <div style={{ flex:1, overflowY:'auto', padding:'16px 20px' }}>
+          <div style={{ flex:1, overflowY:'auto', minHeight:0, padding:'16px 20px' }}>
             <div style={{ textAlign:'center', marginBottom:16 }}>
               <span style={{ fontSize:10, background: CHANNEL_META[selectedConv.canal]?.bg, color: CHANNEL_META[selectedConv.canal]?.color, padding:'3px 10px', borderRadius:20, fontWeight:700 }}>
                 {CHANNEL_META[selectedConv.canal]?.icon} Conversación de {CHANNEL_META[selectedConv.canal]?.label}
@@ -438,14 +428,14 @@ export default function SocialInbox({ active: isVisible }) {
                 style={{ width:42, height:42, flexShrink:0, borderRadius:11, background: showQR ? '#f59e0b' : '#111c2a', border:`1px solid ${showQR ? '#f59e0b' : '#1e2d3d'}`, color: showQR ? '#fff' : '#64748b', fontSize:17, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
                 ⚡
               </button>
-              <div style={{ flex:1, background:'#111c2a', border:'1px solid #1e2d3d', borderRadius:13, padding:'9px 13px' }}>
+              <div style={{ flex:1, minWidth:0, background:'#111c2a', border:'1px solid #1e2d3d', borderRadius:13, padding:'9px 13px' }}>
                 <textarea
                   value={input}
                   onChange={e => setInput(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }}
-                  placeholder={`Responder por ${CHANNEL_META[selectedConv.canal]?.label}... (Enter para enviar)`}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !isMobile) { e.preventDefault(); handleSend() } }}
+                  placeholder={`Responder por ${CHANNEL_META[selectedConv.canal]?.label}...`}
                   rows={2}
-                  style={{ width:'100%', background:'transparent', border:'none', outline:'none', color:'#e2e8f0', fontSize:13, resize:'none', lineHeight:1.5, minHeight:40, maxHeight:100, overflowY:'auto', fontFamily:'Outfit,sans-serif' }}
+                  style={{ width:'100%', background:'transparent', border:'none', outline:'none', color:'#e2e8f0', fontSize:16, resize:'none', lineHeight:1.5, minHeight:40, maxHeight:100, overflowY:'auto', fontFamily:'Outfit,sans-serif' }}
                 />
               </div>
               <button onClick={handleSend} disabled={!input.trim() || sending} style={{
@@ -454,7 +444,9 @@ export default function SocialInbox({ active: isVisible }) {
                 color:'#fff', fontSize:17, display:'flex', alignItems:'center', justifyContent:'center', transition:'all .2s',
               }}>{sending ? '⏳' : '➤'}</button>
             </div>
-            <div style={{ fontSize:9, color:'#2a3f55', marginTop:4, textAlign:'right' }}>Enter · Shift+Enter nueva línea</div>
+            <div style={{ fontSize:9, color:'#2a3f55', marginTop:4, textAlign:'right' }}>
+              {isMobile ? 'Toca ➤ para enviar' : 'Enter · Shift+Enter nueva línea'}
+            </div>
           </div>
         </div>
       ) : (
@@ -465,7 +457,7 @@ export default function SocialInbox({ active: isVisible }) {
             <div style={{ fontSize:11 }}>Selecciona una conversación de FB o IG</div>
           </div>
         </div>
-      )}
+      ))}
     </div>
   )
 }
