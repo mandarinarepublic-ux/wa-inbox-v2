@@ -1,18 +1,19 @@
 import { NextResponse } from 'next/server'
-import { guardarSocialMensajeSupabase } from '@/lib/social-supabase'
+import { guardarSocialMensajeSupabase, getFbPageToken } from '@/lib/social-supabase'
 
 // Envío saliente del Social Inbox (FB Messenger / IG).
 // Reemplaza al escenario Make SOCIAL_SALIENTE (que dependía de una conexión rota).
-// El token de PÁGINA vive server-side en process.env.FB_PAGE_TOKEN. Usa preferentemente
-// un token de Usuario del Sistema (no expira); un token de página normal caduca ~60 días.
+// El token de PÁGINA sale de env FB_PAGE_TOKEN o, si no está, de inbox.app_config
+// (getFbPageToken). Usa preferentemente un token de Usuario del Sistema (no expira);
+// un token de página normal caduca ~60 días.
 // El registro del saliente va a Supabase (inbox.social_mensajes), NO a la hoja SOCIAL.
 export const dynamic = 'force-dynamic'
 
-const FB_PAGE_TOKEN = process.env.FB_PAGE_TOKEN || ''
 const GRAPH = 'https://graph.facebook.com/v19.0'
 
 export async function POST(req) {
   try {
+    const FB_PAGE_TOKEN = await getFbPageToken()
     if (!FB_PAGE_TOKEN) {
       return NextResponse.json({ error: 'FB_PAGE_TOKEN no configurado en el servidor' }, { status: 500 })
     }
