@@ -162,6 +162,22 @@ function construir(body) {
     }
   }
 
+  // Video por URL pública (Supabase Storage). El navegador sube el archivo DIRECTO
+  // a Supabase (sin el muro de 4.5 MB de Vercel) y Meta lo descarga del link.
+  // Permite hasta 16 MB. Supabase es un host confiable → Meta no falla al bajarlo.
+  if (body.VideoURL) {
+    return {
+      tipo: 'video',
+      contenido: body.Caption || '', mediaUrl: body.VideoURL, mediaId: '',
+      payload: {
+        messaging_product: 'whatsapp',
+        to,
+        type: 'video',
+        video: body.Caption ? { link: body.VideoURL, caption: body.Caption } : { link: body.VideoURL },
+      },
+    }
+  }
+
   // Imagen por MediaID (subida antes vía /api/media/upload — camino sin terceros)
   if (body.ImagenMediaId) {
     return {
@@ -216,7 +232,7 @@ export async function POST(req) {
     // Si el ejecutivo escribe "LINKPAGO35" en el chat, NO enviamos ese texto:
     // generamos un link de cobro dLocal por ese monto y enviamos el mensaje de
     // pago al cliente. (Recupera la herramienta que vivía en Make.)
-    if (!body.TipoMensaje && !body.ImagenURL && !body.VideoMediaId) {
+    if (!body.TipoMensaje && !body.ImagenURL && !body.VideoMediaId && !body.VideoURL) {
       const monto = parseLinkpago(body.Mensaje)
       if (monto) {
         try {

@@ -576,9 +576,11 @@ export default function App() {
     setImgUploading(true); setImgResult(null); setImgProgress(0)
     try {
       let allOk = true
+      let sendErr = ''
       if (isVideo) {
         const result = await sendVideo(activeConv.telefono, activeConv.nombre, imgFiles[0].file)
         allOk = result.ok
+        if (!result.ok) sendErr = result.error || ''
       } else {
         for (let i = 0; i < imgFiles.length; i++) {
           // URL permanente para pintar el hilo. La guardamos en NUESTRO Supabase
@@ -599,7 +601,7 @@ export default function App() {
           if (i < imgFiles.length - 1) await new Promise(r => setTimeout(r, 800))
         }
       }
-      setImgResult({ ok: allOk })
+      setImgResult({ ok: allOk, error: sendErr })
       await changeStatus(activeConv.telefono, estadoAlResponder(currentStatus))
       setTimeout(() => { setImgFiles([]); setImgResult(null); setIsVideo(false); setImgProgress(0); if (fileRef.current) fileRef.current.value = '' }, 1500)
       setTimeout(load, 4000)
@@ -1089,8 +1091,8 @@ export default function App() {
                       {imgUploading
                         ? `Enviando ${imgProgress}/${imgFiles.length}...`
                         : imgResult
-                          ? imgResult.ok ? `✓ ${imgFiles.length} enviada${imgFiles.length>1?'s':''}` : '✗ Error al enviar'
-                          : `${imgFiles.length} foto${imgFiles.length>1?'s':''} seleccionada${imgFiles.length>1?'s':''}`
+                          ? imgResult.ok ? (isVideo ? '✓ video enviado' : `✓ ${imgFiles.length} enviada${imgFiles.length>1?'s':''}`) : `✗ ${imgResult.error || 'Error al enviar'}`
+                          : isVideo ? '1 video seleccionado' : `${imgFiles.length} foto${imgFiles.length>1?'s':''} seleccionada${imgFiles.length>1?'s':''}`
                       }
                     </span>
                     {!imgResult && (
