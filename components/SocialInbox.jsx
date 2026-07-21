@@ -215,8 +215,12 @@ export default function SocialInbox({ active: isVisible }) {
     const mediaId = selectedConv?.pautaAdId
     if (!selectedConv || selectedConv.canal !== 'IG' || !mediaId) return
     if (mediaCacheRef.current[mediaId]) { setMediaInfo(mediaCacheRef.current[mediaId]); return }
+    // id del comentario del cliente → fallback para anuncios (dark posts) que no se
+    // leen como media suelto, pero sí expandiendo el media desde el comentario.
+    const lastUser = [...selectedConv.messages].reverse().find(m => m.from === 'user')
+    const commentId = lastUser?.id || ''
     let cancel = false
-    fetch(`/api/social/media?id=${encodeURIComponent(mediaId)}`)
+    fetch(`/api/social/media?id=${encodeURIComponent(mediaId)}&comment=${encodeURIComponent(commentId)}`)
       .then(r => (r.ok ? r.json() : null))
       .then(d => {
         if (cancel || !d || d.error) return
