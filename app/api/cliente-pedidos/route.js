@@ -1,115 +1,117 @@
 import { NextResponse } from 'next/server'
-import { readCrmPedidos, readCrmDetalle, readCrmClientes } from '@/lib/crm'
+import { getSupabase } from '@/lib/supabase'
 
-// La caché real vive en unstable_cache (60s dentro de lib/crm). La ruta es dinámica
-// porque filtra por el teléfono del request.
+// Historial de pedidos del cliente — FUENTE: Supabase, schema `crm` (pedidos /
+// clientes / detalle_pedido / cliente_conversacion). NO Google Sheets (legado).
+// Match del teléfono → cliente_id por dos vías:
+//   · crm.cliente_conversacion.telefono  (formato inbox 593…, ya vinculado)
+//   · crm.clientes.celular               (formato 09…)
+// Ambos por los últimos 9 dígitos, que coinciden en los dos formatos.
 export const dynamic = 'force-dynamic'
 
 const digits = (s) => String(s || '').replace(/\D/g, '')
-// Núcleo local del número Ecuador: sin país (593) ni cero inicial → 9 dígitos.
-const tail9  = (s) => digits(s).replace(/^593/, '').replace(/^0+/, '').slice(-9)
+const tail9  = (s) => digits(s).slice(-9)
 
-function telefonoCoincide(a, b) {
-  const da = digits(a), db = digits(b)
-  if (!da || !db) return false
-  if (da.includes(db) || db.includes(da)) return true
-  const ta = tail9(a), tb = tail9(b)
-  return ta.length >= 8 && ta === tb
+const MES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+function fechaCorta(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  return `${d.getDate()} ${MES[d.getMonth()]} ${d.getFullYear()}`
 }
 
-// Fecha del CRM: "14Jun2026 20:53:00" → Date
-const MESES = { ene:0, feb:1, mar:2, abr:3, may:4, jun:5, jul:6, ago:7, sep:8, oct:9, nov:10, dic:11 }
-const MES_ABR = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
-function parseFechaCrm(s) {
-  const m = String(s || '').match(/^(\d{1,2})([A-Za-z]{3})(\d{4})/)
-  if (!m) return null
-  const mes = MESES[m[2].toLowerCase()]
-  if (mes == null) return null
-  return new Date(Number(m[3]), mes, Number(m[1]))
-}
-function fechaCorta(s) {
-  const d = parseFechaCrm(s)
-  if (!d) return String(s || '').split(' ')[0] || ''
-  return `${d.getDate()} ${MES_ABR[d.getMonth()]} ${d.getFullYear()}`
-}
+const COLS_PEDIDO = 'pedido_id, cliente_id, fecha_pedido, estado_pedido, estado_pago, monto_total'
 
 export async function GET(req) {
   const { searchParams } = new URL(req.url)
   const telefono = searchParams.get('telefono') || ''
-  const idVenta  = searchParams.get('idVenta')  || ''
+  const idVenta  = String(searchParams.get('idVenta') || '').trim()
   if (!telefono && !idVenta) {
     return NextResponse.json({ error: 'Falta el parámetro telefono' }, { status: 400 })
   }
 
-  let pedidos, detalle, clientes
   try {
-    [pedidos, detalle, clientes] = await Promise.all([
-      readCrmPedidos(), readCrmDetalle(), readCrmClientes(),
-    ])
+    const crm = getSupabase().schema('crm')
+    const t9  = tail9(telefono)
+
+    // 1) cliente_id(s) del teléfono (puente conversación→cliente + celular)
+    const clienteIds = new Set()
+    if (t9.length >= 8) {
+      const [cc, cl] = await Promise.all([
+        crm.from('cliente_conversacion').select('cliente_id').like('telefono', `%${t9}`),
+        crm.from('clientes').select('cliente_id').like('celular', `%${t9}`),
+      ])
+      ;(cc.data || []).forEach(r => r.cliente_id && clienteIds.add(String(r.cliente_id)))
+      ;(cl.data || []).forEach(r => r.cliente_id && clienteIds.add(String(r.cliente_id)))
+    }
+
+    // 2) pedidos por cliente_id, más el pedido cuyo id == idVenta guardado en el inbox
+    const ids = [...clienteIds]
+    const pedidos = []
+    const vistos = new Set()
+    const push = (arr) => (arr || []).forEach(p => {
+      const k = String(p.pedido_id || '')
+      if (k && !vistos.has(k)) { vistos.add(k); pedidos.push(p) }
+    })
+    if (ids.length) {
+      const { data } = await crm.from('pedidos').select(COLS_PEDIDO).in('cliente_id', ids)
+      push(data)
+    }
+    if (idVenta) {
+      const { data } = await crm.from('pedidos').select(COLS_PEDIDO).eq('pedido_id', idVenta)
+      push(data)
+    }
+
+    // 3) ítems por pedido (excluye eliminados)
+    const pedidoIds = pedidos.map(p => String(p.pedido_id))
+    const itemsByPedido = {}
+    if (pedidoIds.length) {
+      const { data: det } = await crm.from('detalle_pedido')
+        .select('pedido_id, producto_nombre, talla, color, cantidad, precio_unit, subtotal, eliminado, subestado')
+        .in('pedido_id', pedidoIds)
+      ;(det || []).forEach(d => {
+        if (d.eliminado === true || String(d.subestado || '').toUpperCase() === 'ELIMINADO') return
+        ;(itemsByPedido[d.pedido_id] ||= []).push({
+          producto: d.producto_nombre || '',
+          talla:    d.talla || '',
+          color:    d.color || '',
+          cantidad: Number(d.cantidad || 1) || 1,
+          precio:   Number(d.precio_unit || d.subtotal || 0) || 0,
+        })
+      })
+    }
+
+    const CRM_URL = (process.env.MANDARINACRM_URL || 'https://mandarina-pro-sales.vercel.app').replace(/\/$/, '')
+
+    const out = pedidos
+      .map(p => {
+        const pid = String(p.pedido_id || '')
+        return {
+          id:         pid,
+          fecha:      fechaCorta(p.fecha_pedido),
+          _ts:        p.fecha_pedido ? new Date(p.fecha_pedido).getTime() : 0,
+          estado:     p.estado_pedido || '',
+          estadoPago: p.estado_pago || '',
+          total:      Number(p.monto_total || 0) || 0,
+          url:        pid ? `${CRM_URL}/dashboard/pedido/${encodeURIComponent(pid)}` : '',
+          items:      itemsByPedido[pid] || [],
+        }
+      })
+      .sort((a, b) => b._ts - a._ts)
+
+    const totalGastado = out.reduce((s, p) => s + (p.total || 0), 0)
+
+    return NextResponse.json({
+      telefono,
+      totalPedidos: out.length,
+      totalGastado: Math.round(totalGastado * 100) / 100,
+      pedidos: out.map(({ _ts, ...p }) => p),
+    })
   } catch (err) {
-    console.error('[/api/cliente-pedidos] no se pudo leer MANDARINACRM:', err?.message || err)
+    console.error('[/api/cliente-pedidos] (crm supabase):', err?.message || err)
     return NextResponse.json(
-      {
-        error: 'No se pudo leer MANDARINACRM. Comparte el Sheet (lectura) con la Service Account del inbox.',
-        compartirCon: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || '(GOOGLE_SERVICE_ACCOUNT_EMAIL no definido)',
-        detalle: String(err?.message || err).slice(0, 200),
-      },
+      { error: 'No se pudo leer el CRM (Supabase)', detalle: String(err?.message || err).slice(0, 200) },
       { status: 502 },
     )
   }
-
-  // 1. CLIENTE_IDs cuyo CELULAR coincide con el teléfono buscado
-  const clienteIds = new Set(
-    clientes
-      .filter(c => telefonoCoincide(c.CELULAR, telefono))
-      .map(c => String(c.CLIENTE_ID || '').trim())
-      .filter(Boolean)
-  )
-
-  // 2. Pedidos del cliente (por CLIENTE_ID) o cuyo PEDIDO_ID == idVenta guardado en el inbox
-  const idV = String(idVenta || '').trim()
-  const mios = pedidos.filter(p => {
-    const cid = String(p.CLIENTE_ID || '').trim()
-    const pid = String(p.PEDIDO_ID || '').trim()
-    return (cid && clienteIds.has(cid)) || (idV && pid && pid === idV)
-  })
-
-  // 3. Items activos por pedido (SUBESTADO != ELIMINADO), vinculados por PEDIDO_ID
-  const detActivo = detalle.filter(d => String(d.SUBESTADO || '').toUpperCase() !== 'ELIMINADO')
-  const itemsDe = (pid) => detActivo
-    .filter(d => String(d.PEDIDO_ID || '').trim() === pid)
-    .map(d => ({
-      producto: d.PRODUCTO_NOMBRE || '',
-      talla:    d.TALLA || '',
-      color:    d.COLOR || '',
-      cantidad: Number(d.CANTIDAD || 1) || 1,
-      precio:   Number(d.PRECIO_UNIT || d.SUBTOTAL || 0) || 0,
-    }))
-
-  const CRM_URL = (process.env.MANDARINACRM_URL || 'https://mandarina-pro-sales.vercel.app').replace(/\/$/, '')
-
-  const out = mios
-    .map(p => {
-      const pid = String(p.PEDIDO_ID || '').trim()
-      return {
-        id:         pid,
-        fecha:      fechaCorta(p.FECHA_PEDIDO),
-        _ts:        parseFechaCrm(p.FECHA_PEDIDO)?.getTime() || 0,
-        estado:     p.ESTADO_PEDIDO || '',
-        estadoPago: p.ESTADO_PAGO || '',
-        total:      Number(p.MONTO_TOTAL || 0) || 0,
-        url:        pid ? `${CRM_URL}/dashboard/pedido/${encodeURIComponent(pid)}` : '',
-        items:      itemsDe(pid),
-      }
-    })
-    .sort((a, b) => b._ts - a._ts)
-
-  const totalGastado = out.reduce((s, p) => s + (p.total || 0), 0)
-
-  return NextResponse.json({
-    telefono,
-    totalPedidos: out.length,
-    totalGastado: Math.round(totalGastado * 100) / 100,
-    pedidos: out.map(({ _ts, ...p }) => p),
-  })
 }
