@@ -835,6 +835,10 @@ export default function App() {
           .chat-actions::-webkit-scrollbar{ display:none; }
           .msg-bubble{ max-width:86% !important; }
           .order-btn-mob{ display:flex !important; }
+          /* Pestañas más compactas en celular para que entren las 5 sin cortar CONTACTOS */
+          .tab-selector > button{ padding:3px 7px !important; }
+          .tab-selector > button > div{ letter-spacing:.2px !important; }
+          .tab-selector > button > div:first-child{ font-size:9px !important; }
         }
       `}</style>
 
@@ -846,7 +850,7 @@ export default function App() {
       <div style={{ display:'flex', flexDirection:'column', height:'100dvh', overflow:'hidden' }}>
 
         {/* ══════ SELECTOR MANDI | REPUBLIC ══════ */}
-        <div style={{
+        <div className="tab-selector" style={{
           // 'safe center': centra las pestañas si entran, pero si NO entran (celular)
           // alinea al inicio en vez de cortar la primera (MANDI) y dejarla inalcanzable.
           display:'flex', justifyContent:'safe center', alignItems:'center',
