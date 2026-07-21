@@ -1,6 +1,4 @@
 import { NextResponse } from 'next/server'
-import { appendRow } from '@/lib/sheets'
-import { dualWrite } from '@/lib/supabase'
 import { guardarMensajeSupabase } from '@/lib/inbox-supabase'
 import { parseLinkpago, crearLinkPago, mensajeLinkPago } from '@/lib/dlocal'
 
@@ -287,19 +285,12 @@ export async function POST(req) {
     // Botones (interactivos) serializados para la columna M / campo Supabase.
     const botonesStr = botones && botones.length ? JSON.stringify(botones) : ''
     try {
-      // Dual-write del saliente (Sheets 13 cols + Supabase idempotente por wamid).
-      await dualWrite(
-        () => appendRow('MENSAJES', [
-          wamid, telSal, body.Nombre || '', tipo, contenido, mediaUrl,
-          fechaSal, 'SALIENTE', mediaId, '', '', '', botonesStr,
-        ]),
-        () => guardarMensajeSupabase({
-          id: wamid, telefono: telSal, nombre: body.Nombre || '', tipo,
-          mensaje: contenido, mediaUrl, timestamp: fechaSal, direccion: 'SALIENTE', mediaId,
-          botones: botonesStr,
-        }),
-        'msg.saliente',
-      )
+      // Registro del saliente en Supabase (idempotente por wamid).
+      await guardarMensajeSupabase({
+        id: wamid, telefono: telSal, nombre: body.Nombre || '', tipo,
+        mensaje: contenido, mediaUrl, timestamp: fechaSal, direccion: 'SALIENTE', mediaId,
+        botones: botonesStr,
+      })
     } catch (e) {
       // El mensaje YA se envió por WhatsApp; si falla el log no revertimos.
       console.error('[/api/saliente] Enviado pero no se pudo registrar:', e.message)
