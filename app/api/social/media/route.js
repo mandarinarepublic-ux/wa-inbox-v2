@@ -1,13 +1,8 @@
 import { NextResponse } from 'next/server'
 
 // Devuelve la publicación/anuncio de Instagram sobre el que comentó el cliente,
-// para que el vendedor vea A QUÉ producto se refiere (el comentario suele ser un
-// "precio?" suelto sin contexto). Usa el token de página (mismo que /api/social/saliente).
-//
-// Estrategia (los anuncios "dark post" no se leen como media suelto):
-//  1) media node directo:  GET /{mediaId}?fields=...
-//  2) fallback por comentario: GET /{commentId}?fields=media{...}  ← funciona para ads,
-//     porque el comentario está en NUESTRA cuenta.
+// para que el vendedor vea A QUÉ producto se refiere. Usa el token de página.
+// Estrategia: 1) media node directo; 2) fallback expandiendo el media del comentario.
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
@@ -30,7 +25,7 @@ function normaliza(m) {
 async function graphGet(path, fields) {
   const res = await fetch(`${GRAPH}/${encodeURIComponent(path)}?fields=${fields}&access_token=${encodeURIComponent(FB_PAGE_TOKEN)}`, { cache: 'no-store' })
   const data = await res.json().catch(() => ({}))
-  return { ok: res.ok && !data.error, status: res.status, data, err: data?.error?.message }
+  return { ok: res.ok && !data.error, status: res.status, data }
 }
 
 export async function GET(req) {
@@ -39,24 +34,28 @@ export async function GET(req) {
     const id = sp.get('id') || ''
     const comment = sp.get('comment') || ''
     if (!id && !comment) return NextResponse.json({ error: 'falta id' }, { status: 400 })
-    if (!FB_PAGE_TOKEN) return NextResponse.json({ error: 'sin token' }, { status: 200 })
+    if (!FB_PAGE_TOKEN) { console.log('[media] SIN FB_PAGE_TOKEN'); return NextResponse.json({ error: 'sin token' }, { status: 200 }) }
+
+    const diag = { id, comment }
 
     // 1) media node directo
     if (id) {
       const r = await graphGet(id, MEDIA_FIELDS)
+      diag.node = r.data?.error ? r.data.error : Object.keys(r.data || {})
       const info = r.ok ? normaliza(r.data) : null
-      if (info) return NextResponse.json(info)
-      if (r.err) console.error('[/api/social/media] media node falló:', id, r.err)
+      if (info) { console.log('[media] OK node', JSON.stringify(diag)); return NextResponse.json(info) }
     }
 
     // 2) fallback: leer el comentario y expandir su media
     if (comment) {
       const r = await graphGet(comment, `media{${MEDIA_FIELDS}}`)
+      diag.comment_res = r.data?.error ? r.data.error : Object.keys(r.data || {})
+      diag.comment_media = r.data?.media ? Object.keys(r.data.media) : null
       const info = r.ok ? normaliza(r.data?.media) : null
-      if (info) return NextResponse.json(info)
-      if (r.err) console.error('[/api/social/media] comment→media falló:', comment, r.err)
+      if (info) { console.log('[media] OK comment', JSON.stringify(diag)); return NextResponse.json(info) }
     }
 
+    console.log('[media] NO RESUELTO', JSON.stringify(diag))
     return NextResponse.json({ error: 'no resuelto' }, { status: 200 })
   } catch (err) {
     console.error('[/api/social/media]', err)

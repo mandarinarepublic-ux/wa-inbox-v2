@@ -256,10 +256,14 @@ export default function SocialInbox({ active: isVisible }) {
   }
 
   const goBack = () => {
+    // Volver SIEMPRE a la lista de forma directa (no depender de popstate, que en
+    // algunos webviews de celular no dispara). Si empujamos una entrada de historial
+    // al abrir el chat, la consumimos para dejar el historial limpio.
+    setShowQR(false)
+    setSelected(null)
     if (backGuardRef.current) {
-      window.history.back() // dispara popstate → setSelected(null)
-    } else {
-      setSelected(null)
+      backGuardRef.current = false
+      try { window.history.back() } catch {}
     }
   }
 
