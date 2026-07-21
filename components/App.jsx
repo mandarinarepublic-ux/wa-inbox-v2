@@ -835,10 +835,13 @@ export default function App() {
           .chat-actions::-webkit-scrollbar{ display:none; }
           .msg-bubble{ max-width:86% !important; }
           .order-btn-mob{ display:flex !important; }
-          /* Pestañas más compactas en celular para que entren las 5 sin cortar CONTACTOS */
-          .tab-selector > button{ padding:3px 7px !important; }
-          .tab-selector > button > div{ letter-spacing:.2px !important; }
-          .tab-selector > button > div:first-child{ font-size:9px !important; }
+          /* En celular las 5 pestañas se reparten el ancho en partes iguales → entran
+             todas completas sin scroll ni cortes, sea cual sea el ancho del equipo. */
+          .tab-selector{ overflow-x:hidden !important; }
+          .tab-selector > button{ flex:1 1 0 !important; min-width:0 !important; padding:3px 2px !important; }
+          .tab-selector > button > div{ letter-spacing:0 !important; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+          .tab-selector > button > div:first-child{ font-size:8.5px !important; }
+          .tab-selector > button > div:last-child{ font-size:7px !important; }
         }
       `}</style>
 
