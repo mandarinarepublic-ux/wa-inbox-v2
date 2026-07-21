@@ -8,10 +8,33 @@ import { guardarSocialMensajeSupabase } from '@/lib/social-supabase'
 //
 // Seguridad: token compartido en SOCIAL_INGEST_SECRET (Vercel) que Make manda como
 // ?token=... o header x-ingest-secret. Sin token válido → 401.
+//
+// Acepta JSON o application/x-www-form-urlencoded (Make manda urlencoded para que el
+// texto del cliente —con comillas/saltos— no rompa el body).
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 const SECRET = process.env.SOCIAL_INGEST_SECRET || ''
+
+async function leerBody(req) {
+  const ct = req.headers.get('content-type') || ''
+  if (ct.includes('application/json')) {
+    return await req.json().catch(() => ({}))
+  }
+  // urlencoded o multipart → FormData
+  try {
+    const fd = await req.formData()
+    const obj = {}
+    for (const [k, v] of fd.entries()) obj[k] = typeof v === 'string' ? v : ''
+    return obj
+  } catch {
+    // último recurso: intentar parsear texto como querystring
+    try {
+      const txt = await req.text()
+      return Object.fromEntries(new URLSearchParams(txt))
+    } catch { return {} }
+  }
+}
 
 export async function POST(req) {
   try {
@@ -21,7 +44,7 @@ export async function POST(req) {
       return NextResponse.json({ error: 'no autorizado' }, { status: 401 })
     }
 
-    const b = await req.json().catch(() => ({}))
+    const b = await leerBody(req)
     const sender_id = String(b.sender_id || '').trim()
     if (!sender_id) {
       return NextResponse.json({ error: 'falta sender_id' }, { status: 400 })
