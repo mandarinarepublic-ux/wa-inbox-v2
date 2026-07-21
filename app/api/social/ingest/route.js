@@ -3,37 +3,9 @@ import { guardarSocialMensajeSupabase, getIngestSecret } from '@/lib/social-supa
 
 // Ingesta de eventos ENTRANTES del Social Inbox (FB Messenger / IG).
 // Lo llama el escenario de Make (EscuchaFacebook / EscuchaInstagram) en lugar de
-// escribir a la hoja SOCIAL: Make sigue recibiendo el webhook de Meta y contesta el
-// saludo automático; solo cambia el destino de los datos → Supabase.
-//
-// Seguridad: token compartido en SOCIAL_INGEST_SECRET (Vercel) que Make manda como
-// ?token=... o header x-ingest-secret. Sin token válido → 401.
-//
-// Acepta JSON o application/x-www-form-urlencoded (Make manda urlencoded para que el
-// texto del cliente —con comillas/saltos— no rompa el body).
+// escribir a la hoja SOCIAL. Acepta JSON o application/x-www-form-urlencoded.
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
-
-
-async function leerBody(req) {
-  const ct = req.headers.get('content-type') || ''
-  if (ct.includes('application/json')) {
-    return await req.json().catch(() => ({}))
-  }
-  // urlencoded o multipart → FormData
-  try {
-    const fd = await req.formData()
-    const obj = {}
-    for (const [k, v] of fd.entries()) obj[k] = typeof v === 'string' ? v : ''
-    return obj
-  } catch {
-    // último recurso: intentar parsear texto como querystring
-    try {
-      const txt = await req.text()
-      return Object.fromEntries(new URLSearchParams(txt))
-    } catch { return {} }
-  }
-}
 
 export async function POST(req) {
   try {
@@ -44,16 +16,32 @@ export async function POST(req) {
       return NextResponse.json({ error: 'no autorizado' }, { status: 401 })
     }
 
-    const b = await leerBody(req)
-    const sender_id = String(b.sender_id || '').trim()
+    // Leer el cuerpo crudo (una sola vez) y parsear según content-type.
+    const ct = req.headers.get('content-type') || ''
+    const raw = await req.text()
+    let b = {}
+    if (ct.includes('application/json')) {
+      try { b = JSON.parse(raw || '{}') } catch {}
+    } else {
+      b = Object.fromEntries(new URLSearchParams(raw))
+    }
+    console.log('[ingest] ct=%s body=%s', ct, (raw || '').slice(0, 400))
+
+    const canal = (b.canal || 'FB')
+    const nombre = String(b.nombre || '').trim()
+    // IG a veces NO manda el id del que comenta (from.id), solo el username → usamos
+    // el username como identidad de la conversación para no perder el mensaje.
+    let sender_id = String(b.sender_id || '').trim()
+    if (!sender_id) sender_id = nombre
     if (!sender_id) {
+      console.log('[ingest] SIN sender_id ni nombre — descartado')
       return NextResponse.json({ error: 'falta sender_id' }, { status: 400 })
     }
 
     await guardarSocialMensajeSupabase({
-      canal:     b.canal || 'FB',
+      canal,
       sender_id,
-      nombre:    b.nombre || '',
+      nombre,
       direccion: 'ENTRANTE',
       texto:     b.texto || b.message || '',
       msg_id:    b.msg_id || b.id || '',
