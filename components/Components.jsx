@@ -318,14 +318,18 @@ function MediaContent({ tipo, mediaUrl, mediaId }) {
   }
 
   if (has && isVideo) return (
-    <a href={src} target="_blank" rel="noreferrer" style={{
-      display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6,
-      background: 'rgba(99,102,241,.1)', border: '1px solid rgba(99,102,241,.2)',
-      borderRadius: 10, padding: '10px 14px', textDecoration: 'none',
-    }}>
-      <span style={{ fontSize: 22 }}>🎬</span>
-      <span style={{ fontSize: 13, color: '#818cf8', fontWeight: 600 }}>Ver video en Drive</span>
-    </a>
+    <div style={{ marginBottom: 6, maxWidth: '100%' }}>
+      <video
+        controls
+        preload="metadata"
+        src={src}
+        style={{ maxWidth: '100%', maxHeight: 260, borderRadius: 10, display: 'block', border: '1px solid rgba(255,255,255,.06)' }}
+      />
+      {/* Respaldo: si el reproductor inline falla, abre el video en pestaña nueva. */}
+      <a href={src} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 4, fontSize: 11, color: '#818cf8', textDecoration: 'none', fontWeight: 600 }}>
+        🎬 Abrir video ↗
+      </a>
+    </div>
   )
 
   if (has && isDocument) return (
