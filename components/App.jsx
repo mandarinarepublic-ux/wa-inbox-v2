@@ -1,6 +1,6 @@
 'use client'
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { fetchRows, fetchContacts, sendReply, updateContact, updateTemperatura, isDemo, sendInteractiveButtons, toggleIAMode, sendVideo, sendImageFile } from '@/lib/api-client'
+import { fetchRows, fetchLista, fetchHilo, buscarEnMensajes, fetchContacts, sendReply, updateContact, updateTemperatura, isDemo, sendInteractiveButtons, toggleIAMode, sendVideo, sendImageFile } from '@/lib/api-client'
 import { buildConvs, fmtDate, parseDate } from '@/lib/utils'
 import { Spinner, Avatar, ContactRow, MessageBubble, Toast } from '@/components/Components'
 import RightPanel from '@/components/RightPanel'
@@ -124,6 +124,7 @@ export default function App() {
   const [isVideo,      setIsVideo]      = useState(false)
   const [filter,       setFilter]       = useState('pendiente')
   const [searchMode,   setSearchMode]   = useState('contacto') // 'contacto' | 'mensaje'
+  const [msgHits,      setMsgHits]      = useState(null)        // búsqueda por mensaje (server-side): mensajes que casan en TODO el historial
   // Ancho del panel derecho (notas / respuestas rápidas), redimensionable con el mouse
   const [rightWidth,   setRightWidth]   = useState(340)
   const rightWidthRef  = useRef(340)
@@ -153,15 +154,22 @@ export default function App() {
 
   // Mensajes optimistas pendientes (por teléfono) hasta que Make los registre en la hoja
   const pendingRef = useRef({})
+  const hilosRef   = useRef({})   // telefono → historial completo ya descargado (carga por chat)
+  const activeRef  = useRef(null) // teléfono del chat abierto (para no borrar su hilo del cache)
 
   // ── Cargar datos ──────────────────────────────────────────────
   const load = useCallback(async () => {
-    const [rows, ctList] = await Promise.all([fetchRows(), fetchContacts()])
-    // Si un poll falla (null) o viene vacío por glitch, NO pisamos los datos
-    // previos: evita que el panel parpadee a blanco y bloquee responder. Los
-    // mensajes son append-only, así que un resultado vacío es un error transitorio.
-    if (Array.isArray(rows) && rows.length > 0) {
-      const convsData = buildConvs(rows)
+    const [lista, rows, ctList] = await Promise.all([fetchLista(), fetchRows(), fetchContacts()])
+    // Combinamos 3 fuentes (buildConvs deduplica por id de mensaje):
+    //  · lista → ÚLTIMO msg de CADA conversación sobre TODO el historial → aparecen
+    //            también los chats viejos que la ventana de 3000 ocultaba (el bug de
+    //            "no aparece el cliente / se borraron los mensajes").
+    //  · rows  → ventana reciente: mantiene el hilo abierto al día y da los no leídos.
+    //  · hilos → historiales completos ya descargados al abrir cada chat.
+    // null = ERROR (no "vacío"): conservamos lo previo para no parpadear a blanco.
+    if (Array.isArray(lista) || Array.isArray(rows)) {
+      const hilos = Object.values(hilosRef.current).flat()
+      const convsData = buildConvs([...(lista || []), ...(rows || []), ...hilos])
       // Conservar los mensajes optimistas que Make aún no registró en la hoja, para
       // que no "desaparezcan" entre el envío y el logueo (sensación de "no se envió").
       const pend = pendingRef.current
@@ -321,12 +329,36 @@ export default function App() {
     }
   }, [])
 
+  // Historial completo del chat, bajo demanda. La lista lateral solo trae el último
+  // mensaje de cada conversación; sin esto un chat viejo se vería con una sola burbuja
+  // (el síntoma de "se borraron los mensajes"). Cachea los últimos 5 hilos y se
+  // re-inyectan en cada poll (load) para que no se pierdan entre refrescos.
+  const cargarHilo = useCallback(async (telefono) => {
+    if (!telefono) return
+    const msgs = await fetchHilo(telefono)
+    if (!Array.isArray(msgs) || !msgs.length) return
+    hilosRef.current[telefono] = msgs
+    const abiertos = Object.keys(hilosRef.current)
+    if (abiertos.length > 5) {
+      abiertos.slice(0, abiertos.length - 5)
+        .filter(t => t !== activeRef.current)
+        .forEach(t => { delete hilosRef.current[t] })
+    }
+    setConvs(prev => prev.map(c => {
+      if (c.telefono !== telefono) return c
+      const merged = buildConvs([...c.msgs, ...msgs])[0]
+      return merged ? { ...c, msgs: merged.msgs, last: merged.last } : c
+    }))
+  }, [])
+
   const openConv = (telefono) => {
     setActive(telefono)
+    activeRef.current = telefono
     setShowSidebar(false)
     autoScroll.current = true
     prevMsgLen.current = 0
     setConvs(prev => prev.map(c => c.telefono === telefono ? { ...c, unread: 0 } : c))
+    cargarHilo(telefono)
   }
 
   // Desde la pestaña CONTACTOS: salta a la conversación en MANDI. El teléfono del
@@ -361,6 +393,19 @@ export default function App() {
   // ── Derived state ─────────────────────────────────────────────
   const activeConv  = convs.find(c => c.telefono === active) || null
   const totalUnread = convs.reduce((s, c) => s + c.unread, 0)
+  // Búsqueda por mensaje: server-side sobre TODO el historial (antes solo miraba lo
+  // cargado en el navegador). Debounce 350ms; en modo 'contacto' o con <2 chars se limpia.
+  useEffect(() => {
+    const term = search.trim()
+    if (searchMode !== 'mensaje' || term.length < 2) { setMsgHits(null); return }
+    let vivo = true
+    const t = setTimeout(async () => {
+      const hits = await buscarEnMensajes(term)
+      if (vivo) setMsgHits(Array.isArray(hits) ? hits : [])
+    }, 350)
+    return () => { vivo = false; clearTimeout(t) }
+  }, [search, searchMode])
+
   const demo        = isDemo()
 
   // "Venta" = tiene un PEDIDO CREADO (idVenta en col H, lo setea CREAR PEDIDO).
@@ -402,12 +447,24 @@ export default function App() {
   const isSearching = q.length > 0
   const searchingMsgs = isSearching && searchMode === 'mensaje'
 
-  // Fragmento del mensaje más reciente que contiene la búsqueda (para el modo Mensajes)
+  const tel9 = (t) => String(t || '').replace(/\D/g, '').slice(-9)
+  // Índice de la búsqueda por mensaje (server-side, TODO el historial): últimos 9
+  // dígitos → mensaje que casa (el primero = más reciente, buscarEnMensajes viene desc).
+  const msgHitMap = {}
+  ;(msgHits || []).forEach(m => {
+    const k = tel9(m.telefono)
+    if (k && !msgHitMap[k]) msgHitMap[k] = m
+  })
+
+  // Fragmento del mensaje que casa (modo Mensajes). Usa primero el hit del servidor
+  // (todo el historial) y cae al mensaje ya cargado si hiciera falta.
   const matchSnippet = (c) => {
-    const m = [...(c.msgs || [])].reverse().find(m => (m.mensaje || '').toLowerCase().includes(q))
+    const hit = msgHitMap[tel9(c.telefono)]
+    const m = hit || [...(c.msgs || [])].reverse().find(m => (m.mensaje || '').toLowerCase().includes(q))
     if (!m) return ''
     const t = String(m.mensaje || '')
     const i = t.toLowerCase().indexOf(q)
+    if (i < 0) return t.slice(0, 70) + (t.length > 70 ? '…' : '')
     const start = Math.max(0, i - 28)
     const end   = i + q.length + 42
     return (start > 0 ? '…' : '') + t.slice(start, end) + (end < t.length ? '…' : '')
@@ -415,7 +472,7 @@ export default function App() {
 
   const searched = !isSearching ? convs
     : searchingMsgs
-      ? convs.filter(c => (c.msgs || []).some(m => (m.mensaje || '').toLowerCase().includes(q)))
+      ? convs.filter(c => msgHitMap[tel9(c.telefono)])   // matches sobre TODO el historial (server-side)
       : convs.filter(c => {
           const alias = (contacts[c.telefono]?.alias || '').toLowerCase()
           return c.nombre.toLowerCase().includes(q) ||
