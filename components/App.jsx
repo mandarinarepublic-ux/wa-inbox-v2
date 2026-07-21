@@ -819,7 +819,7 @@ export default function App() {
         .show-mobile{ display:none !important; }
         .overlay    { display:none; }
         @media (max-width:767px){
-          .sidebar{ position:fixed !important; left:0; top:0; bottom:0; z-index:100; width:88% !important; max-width:310px; box-shadow:4px 0 32px rgba(0,0,0,.6); transform:translateX(-100%); transition:transform .25s ease; }
+          .sidebar{ position:fixed !important; left:0; top:0; bottom:0; z-index:100; width:100% !important; max-width:100% !important; box-shadow:4px 0 32px rgba(0,0,0,.6); transform:translateX(-100%); transition:transform .25s ease; }
           .sidebar.open{ transform:translateX(0); }
           .right-col{ position:fixed !important; right:0; top:0; bottom:0; z-index:100; width:88% !important; max-width:300px; box-shadow:-4px 0 32px rgba(0,0,0,.6); animation:slideR .25s ease; }
           .desktop-right{ display:none !important; }
@@ -847,7 +847,9 @@ export default function App() {
 
         {/* ══════ SELECTOR MANDI | REPUBLIC ══════ */}
         <div style={{
-          display:'flex', justifyContent:'center', alignItems:'center',
+          // 'safe center': centra las pestañas si entran, pero si NO entran (celular)
+          // alinea al inicio en vez de cortar la primera (MANDI) y dejarla inalcanzable.
+          display:'flex', justifyContent:'safe center', alignItems:'center',
           flexShrink:0, height:38,
           background:'#080d14', borderBottom:'1px solid #162030',
           zIndex:200, overflowX:'auto',
