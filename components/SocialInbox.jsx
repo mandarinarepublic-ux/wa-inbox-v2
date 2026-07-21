@@ -153,8 +153,10 @@ export default function SocialInbox({ active: isVisible }) {
   const [quickReplies, setQuickReplies] = useState([]) // mismas respuestas que WhatsApp (RESPUESTAS_RAPIDAS)
   const [showQR, setShowQR]     = useState(false)
   const [isMobile, setIsMobile] = useState(false)
+  const [mediaInfo, setMediaInfo] = useState(null) // publicación/anuncio que comentó el cliente
   const bottomRef = useRef(null)
   const pollRef   = useRef(null)
+  const mediaCacheRef = useRef({}) // cache por media id → info de la publicación
   const backGuardRef = useRef(false) // móvil: entrada de historial empujada al abrir un chat
 
   const convKey = (c) => `${c.canal}__${c.sender_id}`
@@ -205,6 +207,27 @@ export default function SocialInbox({ active: isVisible }) {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [selected, convs])
+
+  // Trae la publicación/anuncio de Instagram que comentó el cliente, para ver A QUÉ
+  // producto se refiere (el comentario suele ser un "precio?" sin contexto).
+  useEffect(() => {
+    setMediaInfo(null)
+    const mediaId = selectedConv?.pautaAdId
+    if (!selectedConv || selectedConv.canal !== 'IG' || !mediaId) return
+    if (mediaCacheRef.current[mediaId]) { setMediaInfo(mediaCacheRef.current[mediaId]); return }
+    let cancel = false
+    fetch(`/api/social/media?id=${encodeURIComponent(mediaId)}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => {
+        if (cancel || !d || d.error) return
+        if (!d.image && !d.permalink && !d.caption) return
+        mediaCacheRef.current[mediaId] = d
+        setMediaInfo(d)
+      })
+      .catch(() => {})
+    return () => { cancel = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected, selectedConv?.canal, selectedConv?.pautaAdId])
 
   // Botón "atrás" del celular: al abrir un chat empujamos una entrada de historial y
   // acá la consumimos para VOLVER A LA LISTA en vez de salir de la app.
@@ -399,6 +422,24 @@ export default function SocialInbox({ active: isVisible }) {
                 {CHANNEL_META[selectedConv.canal]?.icon} Conversación de {CHANNEL_META[selectedConv.canal]?.label}
               </span>
             </div>
+
+            {/* Publicación/anuncio sobre el que comentó el cliente (para ver el producto) */}
+            {mediaInfo && (mediaInfo.image || mediaInfo.permalink || mediaInfo.caption) && (
+              <a href={mediaInfo.permalink || undefined} target="_blank" rel="noreferrer"
+                style={{ display:'flex', gap:10, alignItems:'center', textDecoration:'none', margin:'0 auto 16px', maxWidth:360,
+                  background:'#0d1520', border:'1px solid #1e2d3d', borderRadius:12, padding:8, cursor: mediaInfo.permalink ? 'pointer' : 'default' }}>
+                {mediaInfo.image
+                  ? <img src={mediaInfo.image} alt="" style={{ width:52, height:52, borderRadius:8, objectFit:'cover', flexShrink:0 }} />
+                  : <div style={{ width:52, height:52, borderRadius:8, background:'#111c2a', display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, flexShrink:0 }}>🖼️</div>}
+                <div style={{ minWidth:0, flex:1 }}>
+                  <div style={{ fontSize:10, fontWeight:800, color:'#E1306C', marginBottom:2 }}>📸 Comentó en esta publicación</div>
+                  <div style={{ fontSize:11, color:'#cbd5e1', lineHeight:1.35, display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden' }}>
+                    {mediaInfo.caption || 'Ver publicación en Instagram'}
+                  </div>
+                  {mediaInfo.permalink && <div style={{ fontSize:9, color:'#475569', marginTop:2 }}>Toca para abrir en Instagram ↗</div>}
+                </div>
+              </a>
+            )}
             {selectedConv.messages.map((msg, i) => (
               <MsgBubble key={msg.id || i} msg={msg} channel={selectedConv.canal} />
             ))}
