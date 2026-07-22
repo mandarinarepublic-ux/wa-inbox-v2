@@ -1,6 +1,6 @@
 'use client'
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { fetchRows, fetchLista, fetchHilo, buscarEnMensajes, fetchContacts, sendReply, updateContact, updateTemperatura, isDemo, sendInteractiveButtons, toggleIAMode, sendVideo, sendImageFile } from '@/lib/api-client'
+import { fetchInboxSync, fetchHilo, buscarEnMensajes, sendReply, updateContact, updateTemperatura, isDemo, sendInteractiveButtons, toggleIAMode, sendVideo, sendImageFile } from '@/lib/api-client'
 import { buildConvs, fmtDate, parseDate } from '@/lib/utils'
 import { Spinner, Avatar, ContactRow, MessageBubble, Toast } from '@/components/Components'
 import RightPanel from '@/components/RightPanel'
@@ -160,7 +160,12 @@ export default function App() {
 
   // ── Cargar datos ──────────────────────────────────────────────
   const load = useCallback(async () => {
-    const [lista, rows, ctList] = await Promise.all([fetchLista(), fetchRows(), fetchContacts()])
+    // UN request por ciclo (antes 3: lista+mensajes+contactos → /api/inbox-sync).
+    // null (error) → se conservan los datos previos, no parpadea a blanco.
+    const sync   = await fetchInboxSync()
+    const lista  = sync?.lista ?? null
+    const rows   = sync?.rows ?? null
+    const ctList = sync?.contactos ?? null
     // Combinamos 3 fuentes (buildConvs deduplica por id de mensaje):
     //  · lista → ÚLTIMO msg de CADA conversación sobre TODO el historial → aparecen
     //            también los chats viejos que la ventana de 3000 ocultaba (el bug de
@@ -221,12 +226,14 @@ export default function App() {
   }
 
   useEffect(() => {
-    // Polling inteligente: solo mientras la pestaña esté VISIBLE. Una pestaña en
-    // segundo plano dejaba de leer datos útiles pero seguía golpeando la cuota de
-    // Sheets cada 8s. Al volver a la pestaña, refrescamos al instante.
+    // Polling inteligente de DOS velocidades y solo con la pestaña VISIBLE:
+    //  · chat abierto (active) → 10s: la conversación se siente casi en vivo.
+    //  · sin chat abierto      → 25s: solo lista/contactos, mucho más barato.
+    // En segundo plano se pausa; al volver a la pestaña refresca al instante.
+    const ms = active ? 10000 : 25000
     const start = () => {
       if (pollRef.current) return
-      pollRef.current = setInterval(load, 8000)
+      pollRef.current = setInterval(load, ms)
     }
     const stop = () => { clearInterval(pollRef.current); pollRef.current = null }
     const onVisibility = () => {
@@ -237,7 +244,7 @@ export default function App() {
     start()
     document.addEventListener('visibilitychange', onVisibility)
     return () => { stop(); document.removeEventListener('visibilitychange', onVisibility) }
-  }, [load])
+  }, [load, active])
 
   // ── Scroll inteligente ────────────────────────────────────────
   useEffect(() => {
