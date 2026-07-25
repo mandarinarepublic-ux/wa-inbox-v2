@@ -128,9 +128,22 @@ export default function Dashboard() {
         {hoy && (
           <div style={{ background: `linear-gradient(90deg, ${accent}22, ${C.card})`, border: `1px solid ${accent}55`, borderRadius: 16, padding: '16px 20px', marginBottom: 22 }}>
             <div style={{ fontSize: 11, fontWeight: 800, color: accent, letterSpacing: '2px', marginBottom: 8 }}>📌 HOY</div>
-            <div style={{ fontSize: 20, fontWeight: 800, marginBottom: 12 }}>
-              Te faltan <span style={{ color: hoy.porContestar ? C.red : C.green }}>{hoy.porContestar}</span> por contestar
-              {hoy.calientes > 0 && <span style={{ fontSize: 15, color: C.orange, fontWeight: 700 }}>{'  '}· 🔥 {hoy.calientes} caliente{hoy.calientes === 1 ? '' : 's'}</span>}
+            <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 10 }}>
+              Por contestar <span style={{ color: C.dim, fontWeight: 600, fontSize: 11.5 }}>(el cliente escribió y no respondiste)</span>
+              {hoy.calientes > 0 && <span style={{ fontSize: 13, color: C.orange, fontWeight: 700 }}>{'   '}· 🔥 {hoy.calientes} caliente{hoy.calientes === 1 ? '' : 's'}</span>}
+            </div>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
+              {[
+                { label: 'Hoy', v: hoy.pcHoy, color: C.red },
+                { label: 'Ayer', v: hoy.pcAyer, color: C.amber },
+                { label: 'Esta semana', v: hoy.pcSemana, color: C.amber },
+                { label: 'Más viejo', v: hoy.pcViejo, color: C.slate },
+              ].map(b => (
+                <div key={b.label} style={{ background: '#0a0f18', border: `1px solid ${C.border}`, borderRadius: 10, padding: '8px 14px', minWidth: 82 }}>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: b.v ? b.color : C.dim, lineHeight: 1 }}>{b.v}</div>
+                  <div style={{ fontSize: 10.5, color: C.dim, marginTop: 3 }}>{b.label}</div>
+                </div>
+              ))}
             </div>
             <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', fontSize: 13.5 }}>
               <span>✨ <b>{hoy.nuevos}</b> <span style={{ color: C.dim }}>chats nuevos</span></span>

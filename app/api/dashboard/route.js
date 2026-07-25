@@ -150,7 +150,8 @@ export async function GET(req) {
         ventasMontoPorPeriodo: Object.fromEntries(Object.entries(ventasMontoPorPeriodo).map(([k, v]) => [k, Math.round(v * 100) / 100])),
         // HOY (siempre)
         hoy: {
-          porContestar: n(c.pendiente),
+          // Por contestar agrupado por antigüedad del último mensaje del cliente sin responder
+          pcHoy: n(c.pc_hoy), pcAyer: n(c.pc_ayer), pcSemana: n(c.pc_semana), pcViejo: n(c.pc_viejo),
           nuevos: n(hoy.leads),
           entrantes: n(hoy.entrantes),
           salientes: n(hoy.salientes),
@@ -170,7 +171,7 @@ export async function GET(req) {
       leads: 0, leadsContestados: 0, salientes: 0, entrantes: 0, rastreados: 0, leidos: 0,
       ventasTotal: 0, ventasMonto: 0,
       salientesPorPeriodo: zero(), leadsPorPeriodo: zero(), ventasNPorPeriodo: zero(), ventasMontoPorPeriodo: zero(),
-      hoy: { porContestar: 0, nuevos: 0, entrantes: 0, salientes: 0, ventas: 0, ventasMonto: 0, calientes: 0 },
+      hoy: { pcHoy: 0, pcAyer: 0, pcSemana: 0, pcViejo: 0, nuevos: 0, entrantes: 0, salientes: 0, ventas: 0, ventasMonto: 0, calientes: 0 },
     }
     let respSeg = 0, respN = 0
     for (const id of Object.keys(porTienda)) {

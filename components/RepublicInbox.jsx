@@ -27,33 +27,65 @@ function setServerUrl(url) {
   try { localStorage.setItem('republic_server_url', url); } catch {}
 }
 
+// ─── Lanzar el launcher via protocolo custom republic:// ─────
+// El navegador (aunque la app esté en Vercel) le pide a Windows que
+// abra el protocolo, que ejecuta START_HIDDEN.vbs → node launcher.js.
+// Requiere registrar el protocolo UNA vez con REGISTRAR_PROTOCOLO.bat.
+function startLauncherViaProtocol() {
+  try { window.location.href = 'republic://start'; } catch {}
+}
+
 // ─── Panel de control del launcher ───────────────────────────
-function LauncherPanel({ onConnected }) {
+function LauncherPanel({ active, onConnected }) {
   const [status,    setStatus]    = useState(null);
   const [starting,  setStarting]  = useState(false);
   const [logs,      setLogs]      = useState([]);
   const [showLogs,  setShowLogs]  = useState(false);
-  const pollRef = useRef(null);
+  const [slow,      setSlow]      = useState(false); // launcher tarda → ayuda 1a vez
+  const pollRef      = useRef(null);
+  const attemptedRef = useRef(false); // protocolo disparado una sola vez
+  const slowTimerRef = useRef(null);
+  const activeRef    = useRef(active);
+  activeRef.current  = active;
+
+  // Dispara el protocolo una sola vez (no molestar si estás en MANDI)
+  const autoStart = () => {
+    if (attemptedRef.current) return;
+    attemptedRef.current = true;
+    startLauncherViaProtocol();
+    slowTimerRef.current = setTimeout(() => setSlow(true), 12000);
+  };
 
   const fetchStatus = async () => {
     const s = await launcherCall('/launcher/status');
     if (s) {
       setStatus(s);
       setLogs(s.logs || []);
+      setSlow(false);
+      if (slowTimerRef.current) { clearTimeout(slowTimerRef.current); slowTimerRef.current = null; }
       if (s.tunnelUrl) {
         setServerUrl(s.tunnelUrl);
         if (s.serverReady) onConnected();
       }
     } else {
       setStatus(null);
+      if (activeRef.current) autoStart(); // launcher caído + línea activa → levantarlo
     }
   };
 
   useEffect(() => {
     fetchStatus();
     pollRef.current = setInterval(fetchStatus, 3000);
-    return () => clearInterval(pollRef.current);
+    return () => {
+      clearInterval(pollRef.current);
+      if (slowTimerRef.current) clearTimeout(slowTimerRef.current);
+    };
   }, []);
+
+  // Si la línea se activa DESPUÉS del primer render y el launcher no está → arrancar
+  useEffect(() => {
+    if (active && status === null) autoStart();
+  }, [active, status]);
 
   const handleStart = async () => {
     setStarting(true);
@@ -78,7 +110,7 @@ function LauncherPanel({ onConnected }) {
         <div style={{ padding:'20px 24px 16px', borderBottom:'1px solid #1e2d3d' }}>
           <div style={{ fontSize:11, fontWeight:800, color:'#f97316', letterSpacing:'2px', marginBottom:4 }}>⬡ REPUBLIC — PANEL DE CONTROL</div>
           <div style={{ fontSize:12, color:'#475569' }}>
-            {launcherRunning ? 'Launcher detectado en localhost:3098' : 'Launcher no detectado — ejecuta INICIAR.bat'}
+            {launcherRunning ? 'Launcher detectado en localhost:3098' : 'Arrancando el launcher automáticamente…'}
           </div>
         </div>
 
@@ -98,13 +130,29 @@ function LauncherPanel({ onConnected }) {
 
         <div style={{ padding:'16px 24px', display:'flex', flexDirection:'column', gap:10 }}>
           {!launcherRunning ? (
-            <div style={{ background:'#111c2a', border:'1px solid #1e2d3d', borderRadius:12, padding:'14px 16px' }}>
-              <div style={{ fontSize:11, color:'#f97316', fontWeight:700, marginBottom:8 }}>📋 Para activar REPUBLIC:</div>
-              <div style={{ fontSize:12, color:'#64748b', lineHeight:1.8 }}>
-                1. Ve a la carpeta <span style={{color:'#e2e8f0', fontFamily:'monospace'}}>republic-server</span> en tu PC<br/>
-                2. Doble clic en <span style={{color:'#4ade80', fontFamily:'monospace'}}>INICIAR.bat</span><br/>
-                3. Esta pantalla se actualiza sola
+            <div style={{ background:'#111c2a', border:'1px solid #1e2d3d', borderRadius:12, padding:'16px' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                <span style={{ fontSize:20 }}>⏳</span>
+                <div>
+                  <div style={{ fontSize:12, color:'#f97316', fontWeight:700 }}>Iniciando REPUBLIC…</div>
+                  <div style={{ fontSize:11, color:'#64748b', marginTop:2 }}>Levantando el launcher en tu PC</div>
+                </div>
               </div>
+              <button
+                onClick={startLauncherViaProtocol}
+                style={{ width:'100%', marginTop:14, padding:'10px', borderRadius:10, border:'none', background:'linear-gradient(135deg,#f97316,#ea580c)', color:'#fff', fontSize:13, fontWeight:700, cursor:'pointer' }}
+              >
+                ▶ Iniciar REPUBLIC ahora
+              </button>
+              {slow && (
+                <div style={{ marginTop:14, borderTop:'1px solid #1e2d3d', paddingTop:12, fontSize:11, color:'#64748b', lineHeight:1.7 }}>
+                  <div style={{ color:'#f59e0b', fontWeight:700, marginBottom:4 }}>¿No arranca?</div>
+                  Si es la <strong style={{color:'#e2e8f0'}}>primera vez</strong>, registra el acceso una sola vez:
+                  ejecuta <span style={{color:'#4ade80', fontFamily:'monospace'}}>REGISTRAR_PROTOCOLO.bat</span> en la carpeta
+                  <span style={{color:'#e2e8f0', fontFamily:'monospace'}}> republic-server</span>, y si Chrome pregunta, marca
+                  <em style={{color:'#94a3b8'}}> “Recordar / Siempre”</em> y Permitir. Luego vuelve a tocar el botón de arriba.
+                </div>
+              )}
             </div>
           ) : (
             <>
@@ -570,6 +618,7 @@ export default function RepublicInbox({ active = false }) {
   if (showLauncher) {
     return (
       <LauncherPanel
+        active={active}
         onConnected={() => {
           setShowLauncher(false);
           setBridgeOk(true);
