@@ -638,6 +638,13 @@ export default function App() {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ Telefono: activeConv.telefono, Nombre: activeConv.nombre, ImagenURL: imageUrl }),
     })
+    // Si la foto no se pudo enviar (p. ej. pesa más de los 5 MB que acepta
+    // WhatsApp), decirlo: antes moría en Meta y nadie se enteraba.
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      setToast({ ok: false, msg: `✗ ${data?.error || 'No se pudo enviar la foto'}` })
+      setTimeout(() => setToast(null), 6000)
+    }
     return res.ok
   }
 
