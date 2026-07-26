@@ -209,6 +209,12 @@ export async function POST(req) {
     const { payload, tipo, contenido, mediaUrl, botones } = construido
     let mediaId = construido.mediaId
 
+    // ── Responder citando un mensaje ─────────────────────────────────────────
+    // Meta acepta `context.message_id` en CUALQUIER tipo de mensaje, así que se
+    // agrega acá una sola vez en vez de en cada rama de construir().
+    const contextoId = String(body.ContextoId || '').trim()
+    if (contextoId) payload.context = { message_id: contextoId }
+
     // Imagen por link (respuestas rápidas, catálogo, fotos ya subidas a imgbb):
     // la convertimos a media id ANTES de enviar, así Meta no descarga de terceros.
     // `resolverMediaId` primero mira la caché: si esta foto ya se subió alguna vez,
@@ -261,6 +267,18 @@ export async function POST(req) {
       }
     }
 
+    // LA CITA NUNCA PUEDE COSTAR UN ENVÍO. Si Meta la rechaza (mensaje viejo, id que
+    // ya no reconoce), reintentamos UNA vez sin ella: al cliente le llega la respuesta
+    // sin el recuadrito, que es infinitamente mejor a que no le llegue nada.
+    let citaAplicada = Boolean(contextoId)
+    if (!res.ok && contextoId && payload.context) {
+      console.warn('[/api/saliente] Meta rechazó la cita, se reenvía sin ella:', data?.error?.message || `HTTP ${res.status}`)
+      delete payload.context
+      citaAplicada = false
+      res  = await enviar()
+      data = await res.json().catch(() => ({}))
+    }
+
     if (!res.ok || !data?.messages?.[0]?.id) {
       const msg = data?.error?.message || `HTTP ${res.status}`
       console.error('[/api/saliente] Meta rechazó el envío:', msg)
@@ -281,6 +299,9 @@ export async function POST(req) {
         id: wamid, telefono: telSal, nombre: body.Nombre || '', tipo,
         mensaje: contenido, mediaUrl, timestamp: fechaSal, direccion: 'SALIENTE', mediaId,
         botones: botonesStr,
+        // Solo si la cita SALIÓ de verdad: si Meta la rechazó y reenviamos sin ella,
+        // guardarla pintaría en el hilo una cita que el cliente nunca vio.
+        contextoId: citaAplicada ? contextoId : '',
       })
     } catch (e) {
       // El mensaje YA se envió por WhatsApp; si falla el log no revertimos.
@@ -297,7 +318,8 @@ export async function POST(req) {
         .catch(e => console.error('[/api/saliente] limpiar enfriamiento push:', e.message))
     }
 
-    return NextResponse.json({ ok: true, wamid })
+    // citaOmitida = el mensaje SÍ se envió, pero sin la cita. La UI lo avisa.
+    return NextResponse.json({ ok: true, wamid, citaOmitida: Boolean(contextoId) && !citaAplicada })
   } catch (err) {
     console.error('[/api/saliente]', err)
     return NextResponse.json({ ok: false, error: err.message }, { status: 500 })

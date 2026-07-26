@@ -499,8 +499,19 @@ function QuotedMessage({ contextoId, allMsgs }) {
 }
 
 // ── MESSAGE BUBBLE ───────────────────────────────────────────────
-export function MessageBubble({ msg, allMsgs }) {
+// `onResponder` (opcional): al tocar la burbuja aparece "↩ Responder" SOLO en ese
+// mensaje. Nada visible hasta que el usuario toca — a propósito: una flecha fija en
+// cada burbuja ensucia el hilo entero.
+export function MessageBubble({ msg, allMsgs, onResponder }) {
+  const [accion, setAccion] = useState(false)
   const isMe     = msg.direccion === 'SALIENTE'
+
+  // Un clic sobre una foto, un link o un botón hace LO SUYO, no abre el "Responder".
+  const alTocar = (e) => {
+    if (!onResponder) return
+    if (e.target.closest('a, button, img, video, audio')) return
+    setAccion(v => !v)
+  }
   // Los entrantes de Meta (audio/video/doc) llegan SOLO con mediaId (sin mediaUrl):
   // sin incluir mediaId aquí, la burbuja no pintaba el reproductor (audios "mudos").
   const hasMedia = !!(msg.mediaUrl || msg.mediaId)
@@ -511,13 +522,17 @@ export function MessageBubble({ msg, allMsgs }) {
       display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start',
       marginBottom: 4, animation: 'up .2s ease',
     }}>
-      <div className="msg-bubble" style={{
+      <div className="msg-bubble"
+        onClick={alTocar}
+        title={onResponder ? 'Toca para responder a este mensaje' : undefined}
+        style={{
         maxWidth: '68%',
         background: isMe ? '#0d4f3c' : '#111c2a',
         borderRadius: isMe ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
         padding: '10px 14px',
         boxShadow: '0 2px 8px rgba(0,0,0,.3)',
         border: isMe ? '1px solid rgba(37,211,102,.1)' : '1px solid #1e2d3d',
+        cursor: onResponder ? 'pointer' : 'default',
       }}>
 
         {msg.referral && <ReferralCard referral={msg.referral} />}
@@ -582,6 +597,19 @@ export function MessageBubble({ msg, allMsgs }) {
           </span>
           {isMe && <Ticks estado={msg.estadoEntrega} />}
         </div>
+
+        {/* Aparece SOLO en el mensaje que tocaste. Se va al usarlo o al tocar de nuevo. */}
+        {accion && onResponder && (
+          <div style={{ display:'flex', justifyContent: isMe ? 'flex-start' : 'flex-end', marginTop: 6 }}>
+            <button
+              onClick={(e) => { e.stopPropagation(); setAccion(false); onResponder(msg) }}
+              style={{
+                background:'rgba(37,211,102,.12)', border:'1px solid rgba(37,211,102,.45)',
+                color:'#25d366', borderRadius:14, padding:'3px 12px',
+                fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:'inherit',
+              }}>↩ Responder</button>
+          </div>
+        )}
       </div>
     </div>
   )
