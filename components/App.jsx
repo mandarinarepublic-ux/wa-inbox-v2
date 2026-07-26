@@ -106,7 +106,10 @@ export default function App() {
   const [contacts,     setContacts]     = useState({}) // telefono → {alias, estado}
   const [active,       setActive]       = useState(null)
   const [input,        setInput]        = useState('')
-  const [sending,      setSending]      = useState(false)
+  // Envíos en fila por chat: { telefono: cuántos esperan turno o están saliendo }.
+  // Reemplaza al viejo booleano `sending`, que además de mostrar "Enviando..."
+  // BLOQUEABA el botón — ahora se puede encolar sin esperar.
+  const [colaLen,      setColaLen]      = useState({})
   const [loading,      setLoading]      = useState(true)
   const [lastSync,     setLastSync]     = useState(null)
   const [search,       setSearch]       = useState('')
@@ -154,6 +157,12 @@ export default function App() {
 
   // Mensajes optimistas pendientes (por teléfono) hasta que Make los registre en la hoja
   const pendingRef = useRef({})
+  // Fila de salida POR CONVERSACIÓN. Como los envíos ya no bloquean la interfaz, el
+  // vendedor puede disparar una respuesta rápida de 4 fotos y, encima, mandar la foto
+  // de otro producto: sin fila, esa foto se colaba ENTRE las de la respuesta rápida y
+  // al cliente le llegaba todo mezclado. Acá lo que se clickea primero sale primero y
+  // COMPLETO antes de que empiece lo siguiente. Chats distintos no se esperan entre sí.
+  const colaRef = useRef({})
   const hilosRef   = useRef({})   // telefono → historial completo ya descargado (carga por chat)
   const activeRef  = useRef(null) // teléfono del chat abierto (para no borrar su hilo del cache)
   const backGuardRef = useRef(false) // móvil: entrada de historial empujada al abrir un chat (el "atrás" del celu vuelve a la lista en vez de salir de la app)
@@ -592,35 +601,67 @@ export default function App() {
     await updateContact(tel, activeConv.nombre, currentStatus, alias)
   }
 
+  /**
+   * Pone `tarea` al final de la fila de ese chat y devuelve su promesa.
+   * Si la fila está vacía (el caso normal) arranca al instante: esto no agrega
+   * demora, solo impide que dos envíos al MISMO cliente se pisen.
+   */
+  const encolar = (telefono, tarea) => {
+    const anterior = colaRef.current[telefono] || Promise.resolve()
+    const actual   = anterior.then(tarea)   // `anterior` nunca rechaza: se guarda ya "atrapada"
+    const marca    = actual.catch(() => {}) // un envío que falla no debe trabar la fila
+    colaRef.current[telefono] = marca
+    setColaLen(p => ({ ...p, [telefono]: (p[telefono] || 0) + 1 }))
+    marca.then(() => {
+      // Limpiar cuando esta tarea era la última: si no, quedaría una promesa por contacto.
+      if (colaRef.current[telefono] === marca) delete colaRef.current[telefono]
+      setColaLen(p => {
+        const n = (p[telefono] || 1) - 1
+        const c = { ...p }
+        if (n > 0) c[telefono] = n; else delete c[telefono]
+        return c
+      })
+    })
+    return actual
+  }
+
   // ── Enviar texto ──────────────────────────────────────────────
   const handleSend = async (text) => {
     const t = (text || input).trim()
-    if (!t || !activeConv || sending) return
-    setInput(''); setSending(true); setToast(null); autoScroll.current = true
-    const tmpMsg = {
-      id: 'tmp_' + Date.now(), telefono: activeConv.telefono,
-      nombre: activeConv.nombre, mensaje: t,
-      direccion: 'SALIENTE', timestamp: new Date().toISOString(), estado: 'enviado',
-    }
-    setConvs(prev => prev.map(c =>
-      c.telefono === activeConv.telefono ? { ...c, msgs: [...c.msgs, tmpMsg], last: tmpMsg } : c
-    ))
-    // Registrar como pendiente para que sobreviva a los polls hasta que Make lo registre
-    pendingRef.current[activeConv.telefono] = [...(pendingRef.current[activeConv.telefono] || []), tmpMsg]
-    // Dar tiempo a React para renderizar el tmpMsg antes de hacer el fetch
-    await new Promise(r => setTimeout(r, 0))
-    const [result] = await Promise.all([
-      sendReply(activeConv.telefono, activeConv.nombre, t),
-      changeStatus(activeConv.telefono, estadoAlResponder(currentStatus)),
-    ])
-    setSending(false); setToast(result)
-    setTimeout(() => setToast(null), 4000)
-    setTimeout(load, 4000)
+    if (!t || !activeConv) return
+    const telefono = activeConv.telefono
+    const nombre   = activeConv.nombre
+    const estadoDestino = estadoAlResponder(currentStatus)
+    // El input se limpia YA aunque el mensaje espere turno: el vendedor sigue
+    // escribiendo el siguiente sin quedarse mirando el cursor.
+    setInput(''); setToast(null); autoScroll.current = true
+
+    return encolar(telefono, async () => {
+      // La burbuja optimista se pinta cuando REALMENTE le toca salir, no al hacer
+      // clic: así el hilo en pantalla queda en el mismo orden en que llega al cliente.
+      const tmpMsg = {
+        id: 'tmp_' + Date.now(), telefono, nombre, mensaje: t,
+        direccion: 'SALIENTE', timestamp: new Date().toISOString(), estado: 'enviado',
+      }
+      setConvs(prev => prev.map(c =>
+        c.telefono === telefono ? { ...c, msgs: [...c.msgs, tmpMsg], last: tmpMsg } : c
+      ))
+      // Registrar como pendiente para que sobreviva a los polls hasta que se registre
+      pendingRef.current[telefono] = [...(pendingRef.current[telefono] || []), tmpMsg]
+      // Dar tiempo a React para renderizar el tmpMsg antes de hacer el fetch
+      await new Promise(r => setTimeout(r, 0))
+      const [result] = await Promise.all([
+        sendReply(telefono, nombre, t),
+        changeStatus(telefono, estadoDestino),
+      ])
+      setToast(result)
+      setTimeout(() => setToast(null), 4000)
+      setTimeout(load, 4000)
+    })
   }
 
-  // Desde RightPanel: enviar texto o copiar al input.
-  // No pasa por handleSend: ese se autobloquea con el `sending` del compositor, y
-  // entonces mandar la info de un producto mientras salía otra cosa NO hacía nada.
+  // Desde RightPanel: enviar texto o copiar al input. Va por la fila del chat, así
+  // no se cuela en medio de una respuesta rápida que todavía está saliendo.
   const handleSendText = async (text, copyToInput) => {
     if (copyToInput !== undefined) { setInput(copyToInput); return }
     const t = String(text || '').trim()
@@ -628,9 +669,11 @@ export default function App() {
     const telefono = activeConv.telefono
     const nombre   = activeConv.nombre
     const estadoDestino = estadoAlResponder(currentStatus)
-    await enviarTextoSuelto(telefono, nombre, t)
-    changeStatus(telefono, estadoDestino)
-    setTimeout(load, 4000)
+    return encolar(telefono, async () => {
+      await enviarTextoSuelto(telefono, nombre, t)
+      changeStatus(telefono, estadoDestino)
+      setTimeout(load, 4000)
+    })
   }
 
   const handleKey = (e) => {
@@ -685,36 +728,44 @@ export default function App() {
 
   const handleSendImage = async () => {
     if (!imgFiles.length || !activeConv) return
+    const telefono = activeConv.telefono
+    const nombre   = activeConv.nombre
+    const estadoDestino = estadoAlResponder(currentStatus)
+    const archivos = imgFiles
     setImgUploading(true); setImgResult(null); setImgProgress(0)
     try {
+      // Toda la tanda entra como UNA sola tarea en la fila: las fotos del computador
+      // tampoco deben intercalarse con las de una respuesta rápida en curso.
+      await encolar(telefono, async () => {
       let allOk = true
       let sendErr = ''
       if (isVideo) {
-        const result = await sendVideo(activeConv.telefono, activeConv.nombre, imgFiles[0].file)
+        const result = await sendVideo(telefono, nombre, archivos[0].file)
         allOk = result.ok
         if (!result.ok) sendErr = result.error || ''
       } else {
-        for (let i = 0; i < imgFiles.length; i++) {
+        for (let i = 0; i < archivos.length; i++) {
           // URL permanente para pintar el hilo. La guardamos en NUESTRO Supabase
           // Storage (vía /api/upload-foto), no en imgbb: imgbb respondía lento/5xx a
           // los fetch server-side y las fotos que se enviaban por link terminaban en
           // `failed`. Si falla, NO cancelamos: el envío real va por media id igual.
           let url = ''
           try {
-            const fd = new FormData(); fd.append('file', imgFiles[i].file)
+            const fd = new FormData(); fd.append('file', archivos[i].file)
             const res  = await fetch('/api/upload-foto', { method:'POST', body:fd })
             const data = await res.json()
             if (res.ok && data.url) url = data.url
           } catch { /* seguimos por media id */ }
 
-          const { ok } = await sendImageFile(activeConv.telefono, activeConv.nombre, imgFiles[i].file, url)
+          const { ok } = await sendImageFile(telefono, nombre, archivos[i].file, url)
           if (!ok) allOk = false
           setImgProgress(i + 1)
-          if (i < imgFiles.length - 1) await new Promise(r => setTimeout(r, 800))
+          if (i < archivos.length - 1) await new Promise(r => setTimeout(r, 800))
         }
       }
       setImgResult({ ok: allOk, error: sendErr })
-      await changeStatus(activeConv.telefono, estadoAlResponder(currentStatus))
+      await changeStatus(telefono, estadoDestino)
+      })
       setTimeout(() => { setImgFiles([]); setImgResult(null); setIsVideo(false); setImgProgress(0); if (fileRef.current) fileRef.current.value = '' }, 1500)
       setTimeout(load, 4000)
     } catch { setImgResult({ ok: false }) }
@@ -727,10 +778,9 @@ export default function App() {
     if (fileRef.current) fileRef.current.value = ''
   }
 
-  // Burbuja optimista + envío de texto, SIN pasar por el `sending` global del
-  // compositor. handleSend() se autobloquea (`if (... || sending) return`), así que
-  // usarlo desde una respuesta rápida hacía que, si ya había otra saliendo, el texto
-  // se descartara en silencio. Esto manda siempre, y deja el compositor libre.
+  // Burbuja optimista + envío de texto. Se usa DENTRO de una tarea ya encolada
+  // (no encola por su cuenta), para que el texto de una respuesta rápida y sus
+  // fotos cuenten como un solo bloque indivisible en la fila.
   const enviarTextoSuelto = async (telefono, nombre, texto) => {
     const tmpMsg = {
       id: 'tmp_' + Date.now(), telefono, nombre, mensaje: texto,
@@ -759,12 +809,16 @@ export default function App() {
     let hechas = 0
     const avanzar = () => { hechas += 1; onProgress?.(hechas, total) }
 
-    // Arranca YA la resolución de las fotos a media id, las N en paralelo y sin
-    // esperar: mientras se manda el texto, las imágenes se van preparando. La
-    // segunda vez que se usa esta respuesta rápida esto responde de la caché y es
-    // instantáneo. Antes cada foto se descargaba y se subía a Meta en su turno.
+    // Arranca YA la resolución de las fotos a media id, las N en paralelo, y FUERA
+    // de la fila a propósito: aunque esta respuesta rápida tenga que esperar turno,
+    // sus fotos se van preparando mientras tanto y cuando le toque salir ya están
+    // listas. La segunda vez esto responde de la caché y es instantáneo; antes cada
+    // foto se descargaba y se subía a Meta recién en su turno.
     const idsPromesa = imgs.length ? precacheMedia(imgs) : Promise.resolve({})
 
+    // Toda la respuesta rápida es UNA tarea: nada puede meterse entre su texto y
+    // sus fotos, ni entre una foto y la siguiente.
+    return encolar(telefono, async () => {
     const botones = (reply.botones || []).filter(Boolean).slice(0, 3)
     if (botones.length && reply.text) {
       // Respuesta rápida CON botones interactivos → mensaje + botones
@@ -794,18 +848,43 @@ export default function App() {
 
     changeStatus(telefono, estadoDestino)
     setTimeout(load, 4000)
+    })
   }
 
   // ── Enviar foto de producto (Tienda: Shopify / sucursal) ─────
   // Las fotos del catálogo también tienen URL fija, así que la primera vez que se
   // manda un producto queda su media id en caché y a partir de ahí sale al toque.
+  // Va por la fila: si hay una respuesta rápida saliendo, esta foto espera a que
+  // termine en vez de meterse en el medio.
   const handleSendAIImage = async (imageUrl) => {
     if (!activeConv || !imageUrl) return
     const telefono = activeConv.telefono
     const nombre   = activeConv.nombre
     const estadoDestino = estadoAlResponder(currentStatus)
-    const ok = await sendImageUrl(telefono, nombre, imageUrl)
-    if (ok) changeStatus(telefono, estadoDestino)
+    return encolar(telefono, async () => {
+      const ok = await sendImageUrl(telefono, nombre, imageUrl)
+      if (ok) changeStatus(telefono, estadoDestino)
+    })
+  }
+
+  /**
+   * Producto de la Tienda: 'foto' manda solo la imagen, 'info' manda título+precio
+   * y después la imagen. Los dos mensajes van como UNA tarea de la fila — si fueran
+   * dos, algo clickeado en el medio podría meterse entre el título y su foto.
+   */
+  const handleSendProducto = async (p, modo = 'foto') => {
+    if (!activeConv || !p) return
+    const telefono = activeConv.telefono
+    const nombre   = activeConv.nombre
+    const estadoDestino = estadoAlResponder(currentStatus)
+    return encolar(telefono, async () => {
+      if (modo === 'info') {
+        await enviarTextoSuelto(telefono, nombre, `${p.title}${p.price ? ` — $${p.price}` : ''}`)
+      }
+      const ok = await sendImageUrl(telefono, nombre, p.image)
+      if (ok) changeStatus(telefono, estadoDestino)
+      setTimeout(load, 4000)
+    })
   }
 
   // ── Toggle modo IA ────────────────────────────────────────────
@@ -833,29 +912,37 @@ export default function App() {
     if (!activeConv || !input.trim()) return
     const validBtns = btnTexts.map((t,i) => ({ id:`btn_${i+1}`, title:t.trim() })).filter(b=>b.title)
     if (validBtns.length === 0) return
+    const telefono = activeConv.telefono
+    const nombre   = activeConv.nombre
+    const cuerpo   = input.trim()
+    const estadoDestino = estadoAlResponder(currentStatus)
     setSendingBtns(true)
-    // El servidor guarda SOLO el cuerpo en `mensaje`; los botones van aparte en `botones`
-    // (columna M / campo Supabase). Con el texto igual al guardado, la reconciliación
-    // descarta el temporal sin duplicar, y la burbuja pinta los botones desde `botones`.
-    const tmpMsg = {
-      id:'tmp_'+Date.now(), telefono:activeConv.telefono, nombre:activeConv.nombre,
-      mensaje:input.trim(), botones:validBtns,
-      direccion:'SALIENTE', timestamp:new Date().toISOString(), estado:'enviado',
-    }
-    setConvs(prev=>prev.map(c=>c.telefono===activeConv.telefono?{...c,msgs:[...c.msgs,tmpMsg],last:tmpMsg}:c))
-    pendingRef.current[activeConv.telefono] = [...(pendingRef.current[activeConv.telefono] || []), tmpMsg]
-    const result = await sendInteractiveButtons(activeConv.telefono, activeConv.nombre, input.trim(), validBtns)
-    setSendingBtns(false)
-    setToast(result)
-    setTimeout(()=>setToast(null),4000)
-    if (result.ok) {
-      setInput(''); setBtnTexts(['','','']); setShowBtnPanel(false)
-      await changeStatus(activeConv.telefono, estadoAlResponder(currentStatus))
-      setTimeout(load,4000)
-    }
+    setInput(''); setBtnTexts(['','','']); setShowBtnPanel(false)
+    return encolar(telefono, async () => {
+      // El servidor guarda SOLO el cuerpo en `mensaje`; los botones van aparte en `botones`
+      // (columna M / campo Supabase). Con el texto igual al guardado, la reconciliación
+      // descarta el temporal sin duplicar, y la burbuja pinta los botones desde `botones`.
+      const tmpMsg = {
+        id:'tmp_'+Date.now(), telefono, nombre,
+        mensaje:cuerpo, botones:validBtns,
+        direccion:'SALIENTE', timestamp:new Date().toISOString(), estado:'enviado',
+      }
+      setConvs(prev=>prev.map(c=>c.telefono===telefono?{...c,msgs:[...c.msgs,tmpMsg],last:tmpMsg}:c))
+      pendingRef.current[telefono] = [...(pendingRef.current[telefono] || []), tmpMsg]
+      const result = await sendInteractiveButtons(telefono, nombre, cuerpo, validBtns)
+      setSendingBtns(false)
+      setToast(result)
+      setTimeout(()=>setToast(null),4000)
+      if (result.ok) {
+        await changeStatus(telefono, estadoDestino)
+        setTimeout(load,4000)
+      }
+    })
   }
 
   const currentContact = activeConv ? contacts[activeConv.telefono] : null
+  // Cuántos envíos hay saliendo o esperando turno en el chat abierto.
+  const enFila = activeConv ? (colaLen[activeConv.telefono] || 0) : 0
   const currentStatus  = currentContact?.estado || 'pendiente'
   const currentStatusView = activeConv ? getStatus(activeConv.telefono) : 'pendiente'
   const displayName    = (tel) => contacts[tel]?.alias || convs.find(c=>c.telefono===tel)?.nombre || tel
@@ -1209,10 +1296,12 @@ export default function App() {
                   </div>
                 )
               })}
-              {sending && (
+              {enFila > 0 && (
                 <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:4 }}>
                   <div style={{ background:'#0d4f3c', borderRadius:'18px 18px 4px 18px', padding:'9px 14px', border:'1px solid rgba(37,211,102,.1)' }}>
-                    <span style={{ color:'#25d366', fontSize:12, animation:'blink 1s infinite' }}>Enviando...</span>
+                    <span style={{ color:'#25d366', fontSize:12, animation:'blink 1s infinite' }}>
+                      {enFila > 1 ? `Enviando... (${enFila} en fila)` : 'Enviando...'}
+                    </span>
                   </div>
                 </div>
               )}
@@ -1326,7 +1415,9 @@ export default function App() {
                     // UN SOLO botón de envío: si el panel de botones está abierto y hay
                     // botones con texto → manda CON botones; si no → manda solo texto.
                     const conBotones = showBtnPanel && btnTexts.some(t => t.trim())
-                    const busy = sending || sendingBtns
+                    // Ya NO se bloquea por tener envíos en curso: lo que se escriba
+                    // ahora entra a la fila y sale después, en orden.
+                    const busy = sendingBtns
                     const activo = !!input.trim() && windowOpen && !busy
                     return (
                       <button
@@ -1370,7 +1461,7 @@ export default function App() {
                 contactInfo={currentContact}
                 onQuickReply={handleQuickReply}
                 onSendText={handleSendText}
-                onSendImage={handleSendAIImage}
+                onSendImage={handleSendAIImage} onSendProducto={handleSendProducto}
                 onUpdateContact={handleUpdateContact}
                 windowOpen={windowOpen}
               />
