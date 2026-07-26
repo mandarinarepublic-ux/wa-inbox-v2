@@ -10,7 +10,8 @@ import RepublicInbox from '@/components/RepublicInbox'
 import SocialInbox from '@/components/SocialInbox'
 import Contactos, { PlantillaModal } from '@/components/Contactos'
 import Automatizaciones from '@/components/Automatizaciones'
-import { actualizarNoLeidos, pedirPermisoNotif, notificar } from '@/lib/notif'
+import PushToggle from '@/components/PushToggle'
+import { actualizarNoLeidos, notificar } from '@/lib/notif'
 
 // ── Dos ejes de estado ────────────────────────────────────────────
 // Eje 1 (bandeja): pendiente / atendido / soporte / archivado — casi todo automático.
@@ -395,8 +396,9 @@ export default function App() {
   }
 
   // ── Alerta de leads 🔥 calientes cerca del cierre de la ventana de 24h ──
-  // Pide permiso una vez y dispara una notificación del navegador por lead y por ventana.
-  useEffect(() => { pedirPermisoNotif() }, [])
+  // Dispara una notificación del navegador por lead y por ventana. El permiso ya no
+  // se pide acá: Chrome silencia los pedidos sin gesto del usuario, así que ahora lo
+  // pide el botón 🔔 (PushToggle) dentro de su click.
   useEffect(() => {
     const now = Date.now()
     Object.entries(contacts).forEach(([tel, c]) => {
@@ -1067,6 +1069,7 @@ export default function App() {
                 <a href="/dashboard" title="Dashboard" style={{ background:'rgba(16,185,129,.14)', border:'1px solid rgba(16,185,129,.3)', color:'#10b981', borderRadius:8, width:28, height:28, cursor:'pointer', fontSize:13, display:'flex', alignItems:'center', justifyContent:'center', textDecoration:'none' }}>📊</a>
                 <button onClick={() => setShowGuide(true)} style={{ background:'rgba(99,102,241,.12)', border:'1px solid rgba(99,102,241,.2)', color:'#818cf8', borderRadius:8, width:28, height:28, cursor:'pointer', fontSize:12 }}>📖</button>
                 <button onClick={() => setLinea('AUTO')} title="Mensajes de saludo (automatizaciones)" style={{ background:'rgba(245,158,11,.14)', border:'1px solid rgba(245,158,11,.35)', color:'#f59e0b', borderRadius:8, width:28, height:28, cursor:'pointer', fontSize:13 }}>👋</button>
+                <PushToggle />
                 <button onClick={() => setShowSetup(true)} style={{ background:'rgba(255,255,255,.04)', border:'1px solid #1a2d40', color:'#64748b', borderRadius:8, width:28, height:28, cursor:'pointer', fontSize:12 }}>⚙</button>
               </div>
             </div>
