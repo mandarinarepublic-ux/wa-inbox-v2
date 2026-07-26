@@ -9,13 +9,49 @@ export const revalidate = 0
 // del pago. Consultamos el detalle y avisamos por WhatsApp (plantilla ya aprobada
 // "confirmacionpago_dlocalgo") al CLIENTE y al SOPORTE, igual que hacía Make.
 //
-// Apuntar en env: DLOCAL_NOTIFY_URL = https://wa-inbox-v2.vercel.app/api/pago-dlocal
+// Apuntar en env: DLOCAL_NOTIFY_URL = https://wa-inbox-v2.vercel.app/api/pago-dlocal?k=<secreto>
+//
+// ── Quién puede llamar aquí ────────────────────────────────────────────────────
+// dLocal Go NO firma sus notificaciones, así que la única forma de saber que la
+// llamada viene de un pago nuestro es un secreto compartido en la URL, que dLocal
+// nos devuelve tal cual la guardamos al crear el link.
+//
+// Sin esto, cualquiera que conozca la URL puede dispararnos plantillas de
+// WhatsApp: no a números arbitrarios (el destino sale del pago que consultamos a
+// dLocal), pero sí reenviar confirmaciones a clientes reales con solo acertar un
+// payment_id, y cada envío se cobra.
+//
+// PUESTA EN MARCHA, en este orden, para no perder confirmaciones en vuelo:
+//   1. Desplegar esto. Mientras DLOCAL_NOTIFY_SECRET esté vacío NADA cambia.
+//   2. Poner el secreto en DLOCAL_NOTIFY_URL (…/api/pago-dlocal?k=<secreto>): los
+//      links nuevos ya lo llevan.
+//   3. Cuando los links viejos hayan caducado o cobrado, setear
+//      DLOCAL_NOTIFY_SECRET. Desde ahí, lo que no traiga la llave se rechaza.
 const META_TOKEN    = process.env.META_TOKEN || ''
 const META_PHONE_ID = process.env.META_PHONE_ID || '1024077200794372'
 const GRAPH_URL     = `https://graph.facebook.com/v22.0/${META_PHONE_ID}/messages`
 const SOPORTE_TEL   = String(process.env.SOPORTE_TEL || '593984159804').replace(/\D/g, '')
+// Limpia BOM y no imprimibles: cargar envs desde PowerShell mete un U+FEFF
+// invisible que haría fallar la comparación solo en producción.
+const NOTIFY_SECRET = String(process.env.DLOCAL_NOTIFY_SECRET || '').replace(/[^\x21-\x7E]/g, '')
 
 const soloDigitos = (s) => String(s || '').replace(/\D/g, '')
+
+// Comparación de largo constante: no le regalamos al atacante el tiempo de
+// respuesta como pista de cuántos caracteres acertó.
+function mismoSecreto(a, b) {
+  if (a.length !== b.length) return false
+  let dif = 0
+  for (let i = 0; i < a.length; i++) dif |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  return dif === 0
+}
+
+function llamadaLegitima(req) {
+  if (!NOTIFY_SECRET) return true // todavía sin configurar: se comporta como antes
+  const url = new URL(req.url)
+  const llave = url.searchParams.get('k') || req.headers.get('x-notify-key') || ''
+  return mismoSecreto(String(llave).replace(/[^\x21-\x7E]/g, ''), NOTIFY_SECRET)
+}
 
 // Plantilla confirmacionpago_dlocalgo (6 parámetros), misma lógica que Make.
 function plantillaPago(to, p) {
@@ -75,6 +111,12 @@ async function leerBody(req) {
 
 export async function POST(req) {
   try {
+    if (!llamadaLegitima(req)) {
+      // Sin detalle del motivo: no ayudamos a afinar el intento.
+      console.error('[/api/pago-dlocal] llamada sin la llave correcta, rechazada')
+      return NextResponse.json({ ok: false }, { status: 401 })
+    }
+
     const body = await leerBody(req)
     const paymentId = body?.payment_id || body?.id || body?.data?.id || ''
     if (!paymentId) return NextResponse.json({ ok: false, error: 'sin payment_id' })
