@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getSupabase } from '@/lib/supabase'
+import { getSupabase, CUENTA } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -26,6 +26,7 @@ export async function POST(req) {
     const sb = getSupabase()
     const { error } = await sb.from('push_subs').upsert({
       endpoint, p256dh, auth,
+      cuenta: CUENTA,   // MANDI e IND comparten tabla y tienen claves VAPID distintas
       user_agent: (req.headers.get('user-agent') || '').slice(0, 300),
       fallos: 0,
     }, { onConflict: 'endpoint' })
