@@ -1,115 +1,30 @@
 import { NextResponse } from 'next/server'
 import { guardarMensajeSupabase } from '@/lib/inbox-supabase'
 import { parseLinkpago, crearLinkPago, mensajeLinkPago } from '@/lib/dlocal'
+import { resolverMediaId, invalidarMediaId, esErrorDeMediaId, urlLiviana, META_PHONE_ID } from '@/lib/media-id'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
+// Sin esto la función se queda con el default (10 s) y una foto pesada se corta a
+// medio camino: Vercel mata el proceso y el vendedor cree que la mandó.
+export const maxDuration = 60
 
 // ── Envío DIRECTO a la Cloud API de Meta (sin Make) ───────────────────────────
 // Recibe el mismo body que ya manda lib/api-client.js y App.jsx, y lo traduce al
 // payload de la Graph API. Luego registra la salida en la hoja MENSAJES (lo que
 // antes hacía Make con un "Add Row"). Token y phone id viven SOLO server-side.
-const META_TOKEN    = process.env.META_TOKEN || ''
-const META_PHONE_ID = process.env.META_PHONE_ID || '1024077200794372'
-const GRAPH_URL     = `https://graph.facebook.com/v19.0/${META_PHONE_ID}/messages`
+const META_TOKEN = process.env.META_TOKEN || ''
+// META_PHONE_ID se importa de lib/media-id: la caché de media_id se indexa por ese
+// mismo número, así que tiene que ser exactamente el mismo valor en los dos lados.
+const GRAPH_URL  = `https://graph.facebook.com/v19.0/${META_PHONE_ID}/messages`
 
 // Fallback temporal a Make: mientras META_TOKEN NO esté configurado en Vercel,
 // seguimos enviando por Make para no cortar el servicio. En cuanto agregues el
 // token, esta ruta pasa sola a enviar DIRECTO a Meta y Make queda bypasseado.
 const MAKE_SEND_WEBHOOK = process.env.MAKE_SEND_WEBHOOK || 'https://hook.us2.make.com/2j5dzq4gjqkjjnyxiyb46bons15awy2k'
 
-// Sube una imagen a Meta DESDE EL SERVIDOR y devuelve el media id.
-// Motivo: mandar `image.link` obliga a Meta a descargar la foto del hosting
-// (imgbb). Cuando ese hosting le responde 500 a Meta, el mensaje se acepta con
-// 200 pero luego muere con el status `failed` code 131053 "Media upload error"
-// → la foto nunca llega y el vendedor no se entera. Subiendo los bytes nosotros,
-// Meta ya no depende de terceros.
-// Descarga la imagen con User-Agent de navegador, timeout y reintentos.
-// imgbb (i.ibb.co) y algunos CDNs responden lento o con 5xx/403 a los fetch
-// server-side "pelados": un único intento hacía que la conversión a media id
-// fallara y cayéramos al envío por LINK, que Meta luego NO podía bajar y el
-// mensaje moría con status `failed` (131053). Con reintentos la conversión casi
-// siempre gana, así el envío va por media id (que nunca falla).
-async function descargarImagen(url, intentos = 3) {
-  let ultimoError
-  for (let i = 0; i < intentos; i++) {
-    try {
-      const ctrl = new AbortController()
-      const t = setTimeout(() => ctrl.abort(), 15000)
-      const res = await fetch(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; MandarinaInbox/1.0)', Accept: 'image/*' },
-        signal: ctrl.signal,
-      }).finally(() => clearTimeout(t))
-      if (res.ok) return res
-      ultimoError = new Error(`HTTP ${res.status}`)
-    } catch (e) {
-      ultimoError = e
-    }
-    if (i < intentos - 1) await new Promise(r => setTimeout(r, 400 * (i + 1))) // backoff 400ms, 800ms
-  }
-  throw new Error(`no se pudo descargar la imagen (${ultimoError?.message || 'desconocido'})`)
-}
-
-// WhatsApp acepta imágenes de hasta 5 MB, y las fotos de producto de Shopify son
-// PNG de 8 MB: fallaban SIEMPRE y por los dos caminos —la subida a Meta las
-// rechaza por tamaño, caemos al envío por link, y Meta las baja y las rechaza
-// igual (status `failed`, 131053)—, así que el vendedor creía haberlas mandado.
-// El CDN de Shopify redimensiona solo: pidiéndole `width` devuelve la misma foto
-// mucho más liviana (los 8,07 MB de REDRANGER quedan en 3,78 MB a 1600px).
-const LIMITE_META = 5 * 1024 * 1024
-
-function urlLiviana(url, ancho = 1600) {
-  try {
-    const u = new URL(url)
-    if (!u.hostname.endsWith('shopify.com')) return url
-    if (u.searchParams.has('width')) return url // ya viene pedida en un tamaño
-    u.searchParams.set('width', String(ancho))
-    return u.toString()
-  } catch {
-    return url // si no es una URL válida, que siga el camino de siempre
-  }
-}
-
-async function subirImagenAMeta(url) {
-  // Escalera de tamaños: 1600px deja la foto en 3,78 MB (pasa, pero con poco
-  // margen) y 1000px en 1,76 MB. Si la primera no entra, se prueba la más chica
-  // antes de rendirse. Lo que no es de Shopify tiene un solo intento: no hay
-  // forma de pedirlo más liviano.
-  const versiones = urlLiviana(url) === url
-    ? [url]
-    : [urlLiviana(url, 1600), urlLiviana(url, 1000)]
-
-  let ultimoTamano = 0
-  for (const version of versiones) {
-    const img = await descargarImagen(version)
-    const buf = await img.arrayBuffer()
-    ultimoTamano = buf.byteLength
-    if (buf.byteLength > LIMITE_META) continue
-
-    const mime = img.headers.get('content-type') || 'image/jpeg'
-    const ext  = mime.includes('png') ? 'png' : mime.includes('webp') ? 'webp' : 'jpg'
-
-    const fd = new FormData()
-    fd.append('file', new Blob([buf], { type: mime }), `imagen.${ext}`)
-    fd.append('messaging_product', 'whatsapp')
-
-    const res  = await fetch(`https://graph.facebook.com/v19.0/${META_PHONE_ID}/media`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${META_TOKEN}` },
-      body: fd,
-    })
-    const data = await res.json().catch(() => ({}))
-    if (!data?.id) throw new Error(data?.error?.message || `upload a Meta falló (HTTP ${res.status})`)
-    return data.id
-  }
-
-  // Ninguna versión entró en el límite. Mandarla por link solo cambia el momento
-  // del fracaso, no el resultado: mejor decirlo ahora.
-  const mb = (ultimoTamano / 1048576).toFixed(1)
-  const e = new Error(`la foto pesa ${mb} MB y WhatsApp acepta hasta 5 MB`)
-  e.demasiadoGrande = true
-  throw e
-}
+// La conversión URL → media_id (descarga + subida a Meta + caché) vive en
+// lib/media-id.js: la comparten esta ruta y /api/media/precache.
 
 async function enviarPorMake(body) {
   try {
@@ -295,10 +210,14 @@ export async function POST(req) {
 
     // Imagen por link (respuestas rápidas, catálogo, fotos ya subidas a imgbb):
     // la convertimos a media id ANTES de enviar, así Meta no descarga de terceros.
+    // `resolverMediaId` primero mira la caché: si esta foto ya se subió alguna vez,
+    // no se descarga ni se re-sube nada y el envío sale en milisegundos.
     // Si la conversión falla, seguimos con el link de siempre (mejor eso que nada).
+    let urlOrigen = ''   // url de la que salió el media id, por si hay que invalidarlo
     if (payload.type === 'image' && payload.image?.link) {
+      urlOrigen = payload.image.link
       try {
-        const id = await subirImagenAMeta(payload.image.link)
+        const id = await resolverMediaId(urlOrigen)
         payload.image = payload.image.caption ? { id, caption: payload.image.caption } : { id }
         mediaId = id
       } catch (e) {
@@ -315,12 +234,31 @@ export async function POST(req) {
       }
     }
 
-    const res  = await fetch(GRAPH_URL, {
+    const enviar = () => fetch(GRAPH_URL, {
       method: 'POST',
       headers: { Authorization: `Bearer ${META_TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     })
-    const data = await res.json().catch(() => ({}))
+
+    let res  = await enviar()
+    let data = await res.json().catch(() => ({}))
+
+    // El media id que teníamos guardado ya no le sirve a Meta (caducó, o lo borró).
+    // Lo sacamos de la caché, subimos la foto de nuevo y reintentamos UNA vez: para
+    // el vendedor esto es invisible, solo tarda como antes.
+    if (!res.ok && urlOrigen && esErrorDeMediaId(data)) {
+      console.warn('[/api/saliente] media id vencido, se re-sube la foto:', urlOrigen)
+      await invalidarMediaId(META_PHONE_ID, urlOrigen)
+      try {
+        const id = await resolverMediaId(urlOrigen)
+        payload.image = payload.image.caption ? { id, caption: payload.image.caption } : { id }
+        mediaId = id
+        res  = await enviar()
+        data = await res.json().catch(() => ({}))
+      } catch (e) {
+        console.error('[/api/saliente] re-subida tras media id vencido falló:', e.message)
+      }
+    }
 
     if (!res.ok || !data?.messages?.[0]?.id) {
       const msg = data?.error?.message || `HTTP ${res.status}`
