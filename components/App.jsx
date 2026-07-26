@@ -347,6 +347,17 @@ export default function App() {
     }
   }, [])
 
+  // El service worker avisa cuando llegó un push: refrescamos al instante en vez de
+  // dejar el polling corriendo en segundo plano (que costaría llamadas de más). Sin
+  // esto el contador de la pestaña nunca alcanzaba a subir, porque con la pestaña
+  // oculta el polling está detenido y `convs` no cambia.
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
+    const onMsg = (ev) => { if (ev.data?.tipo === 'push-recibido') load() }
+    navigator.serviceWorker.addEventListener('message', onMsg)
+    return () => navigator.serviceWorker.removeEventListener('message', onMsg)
+  }, [load])
+
   // Historial completo del chat, bajo demanda. La lista lateral solo trae el último
   // mensaje de cada conversación; sin esto un chat viejo se vería con una sola burbuja
   // (el síntoma de "se borraron los mensajes"). Cachea los últimos 5 hilos y se
@@ -394,6 +405,35 @@ export default function App() {
     setLinea('MANDI')
     openConv(conv ? conv.telefono : telefono)
   }
+
+  // ── Abrir un chat puntual desde un aviso push ────────────────────────────────
+  // Lo pide el service worker al tocar la notificación, o viene en ?tel= cuando el
+  // aviso tuvo que abrir una ventana nueva. Se guarda el pedido y se resuelve cuando
+  // la conversación esté cargada.
+  const pedidoRef = useRef(null)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const tel = new URLSearchParams(window.location.search).get('tel')
+    if (tel) pedidoRef.current = tel
+    if (!('serviceWorker' in navigator)) return
+    const onMsg = (ev) => {
+      if (ev.data?.tipo === 'abrir-chat' && ev.data.tel) pedidoRef.current = ev.data.tel
+    }
+    navigator.serviceWorker.addEventListener('message', onMsg)
+    return () => navigator.serviceWorker.removeEventListener('message', onMsg)
+  }, [])
+
+  useEffect(() => {
+    const pedido = pedidoRef.current
+    if (!pedido || !convs.length) return
+    // El formato del webhook y el canónico de la base pueden diferir → últimos 9.
+    const t9 = String(pedido).replace(/\D/g, '').slice(-9)
+    const conv = convs.find(c => String(c.telefono).replace(/\D/g, '').slice(-9) === t9)
+    if (!conv) return          // aún no llegó en este ciclo: reintenta al siguiente
+    pedidoRef.current = null
+    setLinea('MANDI')
+    openConv(conv.telefono)
+  }, [convs])
 
   // ── Alerta de leads 🔥 calientes cerca del cierre de la ventana de 24h ──
   // Dispara una notificación del navegador por lead y por ventana. El permiso ya no
