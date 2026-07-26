@@ -427,7 +427,10 @@ git commit -m "feat(avisos): alta y baja de suscripciones push"
 - Produces: `GET /api/push/test?key=<CRON_SECRET>` → `{ok, enviados, borradas}`.
 
 Sin esto, probar el push exige que un cliente real escriba. Se protege con la misma
-llave que ya usa el cron (`app/api/cron/seguimientos/route.js:25`).
+llave que ya usa el cron (`app/api/cron/seguimientos/route.js:25`), pero **solo por
+cabecera `Authorization`**: a diferencia del cron, esta ruta la dispara una persona a
+mano, y un `?key=` en la URL quedaría en el historial del navegador y en los logs de
+request de Vercel.
 
 - [ ] **Step 1: Escribir la ruta**
 
@@ -1021,13 +1024,15 @@ coincide con el commit local.
 
 - [ ] **Step 4: Probar el endpoint de prueba**
 
-Abrir en el navegador (con la clave del cron):
+El secreto va por cabecera, NO por query string (en la URL quedaría en el historial
+del navegador y en los logs de request de Vercel). Desde PowerShell:
 
-```
-https://wa-inbox-v2.vercel.app/api/push/test?key=<CRON_SECRET>
+```powershell
+$s = '<CRON_SECRET>'
+Invoke-RestMethod -Uri 'https://wa-inbox-v2.vercel.app/api/push/test' -Headers @{ Authorization = "Bearer $s" }
 ```
 
-Esperado antes de suscribirse: `{"ok":true,"enviados":0,"borradas":0}`.
+Esperado antes de suscribirse: `ok=True, enviados=0`.
 Si devuelve `503 faltan las claves VAPID`, las variables no quedaron bien cargadas.
 
 - [ ] **Step 5: Checklist de pruebas manuales**
