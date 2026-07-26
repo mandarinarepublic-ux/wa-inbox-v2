@@ -185,7 +185,11 @@ export default function App() {
     // null = ERROR (no "vacío"): conservamos lo previo para no parpadear a blanco.
     if (Array.isArray(lista) || Array.isArray(rows)) {
       const hilos = Object.values(hilosRef.current).flat()
-      const convsData = buildConvs([...(lista || []), ...(rows || []), ...hilos])
+      // ORDEN IMPORTANTE: buildConvs deduplica por id y se queda con el PRIMERO que
+      // ve. `lista` es la fuente más pobre (sale de una vista con menos columnas), así
+      // que va al FINAL: si un mensaje viene por dos lados, gana la versión completa.
+      // Con `lista` primero, el último mensaje de cada chat perdía la cita y la pauta.
+      const convsData = buildConvs([...(rows || []), ...hilos, ...(lista || [])])
       // Conservar los mensajes optimistas que Make aún no registró en la hoja, para
       // que no "desaparezcan" entre el envío y el logueo (sensación de "no se envió").
       const pend = pendingRef.current
