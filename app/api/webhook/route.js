@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server'
 import { waitUntil } from '@vercel/functions'
-import { registrarContactoEntrante, getContactos, updateEstado, updateModoIA } from '@/lib/contactos'
+import { registrarContactoEntrante, getContactos, updateEstado, updateModoIA, marcarPush } from '@/lib/contactos'
 import { usaSupabaseLectura } from '@/lib/supabase'
 import { guardarMensajeSupabase, existeWamidSupabase, guardarEventoCrudoSupabase, actualizarEstadoEntregaSupabase } from '@/lib/inbox-supabase'
 import { archivarFoto } from '@/lib/media-archive'
 import { parseLinkpago, crearLinkPago, mensajeLinkPago } from '@/lib/dlocal'
 import { getAutomatizaciones } from '@/lib/automatizaciones'
+import { enviarPush, cuerpoDeMensaje, debeNotificar } from '@/lib/push'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -200,6 +201,34 @@ async function procesar(nuevos, origin) {
   // Anti doble-saludo dentro del mismo lote de webhook.
   const saludados = new Set()
 
+  // Último aviso push enviado por conversación (del snapshot de este ciclo).
+  const ultimoPushAtDe = (phone) => {
+    const t = tail9(phone)
+    const c = contactos.find(c => tail9(c.telefono) === t)
+    return c?.ultimoPushAt || null
+  }
+  // Anti doble-aviso dentro del mismo lote: el snapshot no se entera de lo que
+  // acabamos de mandar hace dos mensajes.
+  const avisados = new Set()
+
+  // Aviso de mensaje nuevo al equipo (web push). Nunca lanza: un fallo acá no puede
+  // tocar el webhook. Sin claves VAPID, enviarPush es un no-op silencioso.
+  async function avisarSiCorresponde(m) {
+    const t = tail9(m.telefono)
+    if (avisados.has(t)) return
+    if (!debeNotificar(ultimoPushAtDe(m.telefono), Date.now())) return
+    avisados.add(t)
+    const nombre = m.nombre || m.telefono
+    await enviarPush({
+      titulo: `💬 ${nombre}`,
+      cuerpo: cuerpoDeMensaje({ tipo: m.tipo, contenido: m.contenido }),
+      url:    `/inbox?tel=${encodeURIComponent(m.telefono)}`,
+      tag:    `chat-${t}`,
+      tel:    m.telefono,
+    })
+    await marcarPush(m.telefono)
+  }
+
   // Saludo automático. Solo cuando la IA está APAGADA para el contacto (si está
   // prendida, el propio agente saluda → evitamos doble mensaje). Nuevo → saludo de
   // bienvenida; reactivación tras N horas de silencio → "hola de vuelta".
@@ -250,6 +279,11 @@ async function procesar(nuevos, origin) {
 
     try { await registrarContactoEntrante(m.telefono, m.nombre, m.telefono) }
     catch (e) { console.error('[/api/webhook] contacto:', e.message) }
+
+    // Aviso al equipo. Va DESPUÉS de registrarContactoEntrante para que la
+    // conversación exista y se le pueda escribir ultimo_push_at.
+    await avisarSiCorresponde(m)
+      .catch(e => console.error('[/api/webhook] aviso push:', e.message))
 
     // REABRIR: un cliente que ya estaba ATENDIDO y vuelve a escribir debe regresar
     // a PENDIENTES (necesita atención). Esto lo hacía Make en la recepción; al pasar
