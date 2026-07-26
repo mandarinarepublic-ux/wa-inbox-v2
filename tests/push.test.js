@@ -61,3 +61,18 @@ test('debeNotificar ignora una fecha corrupta y deja pasar', () => {
 test('el enfriamiento es de 5 minutos', () => {
   assert.equal(ENFRIAMIENTO_MS, 5 * 60 * 1000)
 })
+
+// Contestar borra ultimo_push_at (lo hace limpiarPush desde /api/saliente). Este
+// test fija la consecuencia: con el campo en null SIEMPRE se avisa, aunque el aviso
+// anterior haya sido hace segundos. Sin esto volvía el bug de "solo llega el primer
+// mensaje de cada persona aunque yo ya haya respondido".
+test('tras responder (campo limpiado) se avisa aunque hayan pasado segundos', () => {
+  const ahora = Date.parse('2026-07-26T12:00:00Z')
+  assert.equal(debeNotificar(null, ahora), true)
+})
+
+test('sin responder, una rafaga seguida sigue silenciada', () => {
+  const ahora = Date.parse('2026-07-26T12:00:00Z')
+  const hace10seg = new Date(ahora - 10_000).toISOString()
+  assert.equal(debeNotificar(hace10seg, ahora), false)
+})

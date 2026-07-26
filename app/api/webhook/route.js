@@ -45,11 +45,14 @@ const RE_IMG = /https?:\/\/[^\s)]+?\.(?:png|jpe?g|webp|gif)(?:\?[^\s)]*)?/gi
 
 // Envía un mensaje (texto o imagen) por /api/saliente, que lo manda a Meta y lo
 // registra en MENSAJES.
+// `auto: true` marca que el envío NO lo hizo un humano (IA, saludo automático,
+// LINKPAGO). /api/saliente lo usa para no reiniciar el enfriamiento del aviso push:
+// si la IA está llevando el chat, no hay que empezar a interrumpir al humano.
 async function enviarSaliente(origin, body) {
   return fetch(`${origin}/api/saliente`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ ...body, auto: true }),
   }).catch(e => console.error('[webhook IA] envío falló:', e.message))
 }
 

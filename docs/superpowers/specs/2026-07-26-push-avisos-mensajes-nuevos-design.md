@@ -34,7 +34,7 @@ Diagnóstico (2026-07-26, sobre `main` = `bcf369e`):
 | Aparatos | PC (Windows/Chrome) y Android. **Sin iPhone** |
 | Destinatarios | Todo el equipo, mismo aviso. Sin reparto por persona |
 | Cuándo suena | Solo cuando **no** estás mirando el inbox |
-| Anti-ruido | Uno por conversación, con enfriamiento de 5 minutos |
+| Anti-ruido | Uno por conversación, con enfriamiento de 5 minutos **que se reinicia al contestar** |
 | Suscripción | Protegida por una clave corta compartida |
 | Bug del contador | Se arregla en este mismo trabajo |
 | Enfoque descartado | Telegram (más confiable y más barato, pero el aviso no lleva al chat) |
@@ -98,6 +98,17 @@ alter table inbox.conversaciones
 
 El enfriamiento vive en la base, **no en memoria**: las funciones de Vercel son
 efímeras y un `Set` en RAM daría avisos duplicados desde instancias frías.
+
+**Contestar reinicia el enfriamiento.** La primera versión solo miraba el reloj, y en
+producción resultó que llegaba el aviso del primer mensaje de cada persona y ninguno
+más, aunque ya se hubiera respondido y el cliente escribiera de nuevo. Ahora
+`/api/saliente` pone `ultimo_push_at` en NULL con cada envío de un humano. Los envíos
+automáticos del webhook (IA, saludos, LINKPAGO) viajan con `auto:true` y NO reinician,
+para no interrumpir en chats que está llevando la IA.
+
+Regla final: **se silencia solo si hubo un aviso hace menos de 5 minutos Y no has
+contestado desde entonces.** Una ráfaga del mismo cliente sigue dando un solo aviso;
+un mensaje que llega después de tu respuesta siempre avisa.
 
 ## 6. Flujo
 

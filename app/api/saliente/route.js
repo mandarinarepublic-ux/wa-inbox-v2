@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { guardarMensajeSupabase } from '@/lib/inbox-supabase'
+import { limpiarPush } from '@/lib/contactos'
 import { parseLinkpago, crearLinkPago, mensajeLinkPago } from '@/lib/dlocal'
 import { resolverMediaId, invalidarMediaId, esErrorDeMediaId, urlLiviana, META_PHONE_ID } from '@/lib/media-id'
 
@@ -284,6 +285,16 @@ export async function POST(req) {
     } catch (e) {
       // El mensaje YA se envió por WhatsApp; si falla el log no revertimos.
       console.error('[/api/saliente] Enviado pero no se pudo registrar:', e.message)
+    }
+
+    // Contestar reinicia el enfriamiento del aviso: si ya respondiste, el próximo
+    // mensaje del cliente es información nueva y DEBE avisar, aunque el aviso
+    // anterior haya sido hace un minuto.
+    // Los envíos automáticos (IA, saludos, LINKPAGO) mandan auto:true y NO lo
+    // reinician: si la IA está llevando ese chat, no hay que interrumpir al humano.
+    if (!body.auto) {
+      await limpiarPush(telSal)
+        .catch(e => console.error('[/api/saliente] limpiar enfriamiento push:', e.message))
     }
 
     return NextResponse.json({ ok: true, wamid })
