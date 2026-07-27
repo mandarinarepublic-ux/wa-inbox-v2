@@ -33,6 +33,10 @@ Pruebas con `node:test` + `assert` (igual que `tests/push.test.js`).
   envíos.
 - La pestaña **Ventas** no se monta en SOCIAL (escribiría contactos basura en la
   tabla de WhatsApp). Entra con el bloque de CRM.
+- **Nunca se pinta una hora suelta.** Un mensaje viejo tiene que verse viejo: si no,
+  el vendedor cree que llegó hoy, intenta contestar y le rebota. Se usa `fmtTime`
+  de `lib/utils.js`, el mismo que usa WhatsApp. Zona horaria explícita:
+  `America/Guayaquil`.
 - Comentarios en español, como el resto del repo.
 
 ## Estructura de archivos
@@ -41,6 +45,7 @@ Pruebas con `node:test` + `assert` (igual que `tests/push.test.js`).
 |---|---|
 | `lib/social-agrupar.js` *(nuevo)* | Filas de la base → conversaciones. Puro, sin Supabase. |
 | `lib/social-envio.js` *(nuevo)* | Reglas de envío: qué admite cada tipo de hilo y cómo se arma el cuerpo para Meta. Puro. |
+| `lib/social-ventana.js` *(nuevo)* | Estado de la ventana de 24 h. Puro. |
 | `lib/social-supabase.js` | Deja de agrupar a mano y usa `social-agrupar`. |
 | `app/api/social/saliente/route.js` | Acepta imagen, rechaza foto en comentario, conecta LINKPAGO. |
 | `components/SocialInbox.jsx` | Hilos separados, y monta `RightPanel`. |
@@ -577,7 +582,202 @@ Comentarios y Mensajes— y que su "😍" NO está dentro del hilo de mensajes.
 
 ---
 
-### Tarea 5: SOCIAL monta el panel único
+### Tarea 5: Que se vea CUÁNDO llegó y si todavía se puede contestar
+
+Hoy la lista pinta solo hora y minuto (`SocialInbox.jsx:99` y `:146`), sin fecha.
+Un mensaje del 17 de julio se ve `15:32`, idéntico a uno de hace un rato. El
+vendedor cree que todo llegó hoy, intenta contestar y le rebota — que es
+exactamente lo que pasó en producción.
+
+`lib/utils.js` ya tiene `fmtTime`, que WhatsApp usa y hace lo correcto. SOCIAL no
+lo usa. Y falta lo más importante: **ver de un vistazo si la ventana de 24 h sigue
+abierta**.
+
+**Archivos:**
+- Crear: `lib/social-ventana.js`
+- Modificar: `tests/social.test.js`
+- Modificar: `components/SocialInbox.jsx` (líneas 99 y 146)
+
+**Interfaces:**
+- Produce: `estadoVentana(ultimoEntranteISO, ahoraMs) -> { abierta, horasRestantes, etiqueta }`
+- Consume: `fmtTime(iso)` de `lib/utils.js`.
+
+- [ ] **Paso 1: Escribir la prueba que falla**
+
+Agregar a `tests/social.test.js`:
+
+```js
+import { estadoVentana } from '../lib/social-ventana.js'
+
+const AHORA = new Date('2026-07-27T23:00:00Z').getTime()
+
+test('recien escrito: ventana abierta con casi 24 h', () => {
+  const v = estadoVentana('2026-07-27T22:30:00Z', AHORA)
+  assert.equal(v.abierta, true)
+  assert.equal(v.horasRestantes, 23)
+})
+
+test('a 23 h del mensaje queda 1 h', () => {
+  const v = estadoVentana('2026-07-27T00:00:00Z', AHORA)
+  assert.equal(v.abierta, true)
+  assert.equal(v.horasRestantes, 1)
+})
+
+test('pasadas las 24 h la ventana esta cerrada', () => {
+  const v = estadoVentana('2026-07-17T20:55:00Z', AHORA)
+  assert.equal(v.abierta, false)
+  assert.equal(v.horasRestantes, 0)
+})
+
+test('justo en el limite cuenta como cerrada', () => {
+  const v = estadoVentana('2026-07-26T23:00:00Z', AHORA)
+  assert.equal(v.abierta, false)
+})
+
+test('sin mensaje del cliente la ventana esta cerrada', () => {
+  assert.equal(estadoVentana('', AHORA).abierta, false)
+  assert.equal(estadoVentana(null, AHORA).abierta, false)
+})
+
+test('la etiqueta dice las horas que quedan, o que se cerro', () => {
+  assert.equal(estadoVentana('2026-07-27T22:30:00Z', AHORA).etiqueta, '⏳ 23 h para responder')
+  assert.equal(estadoVentana('2026-07-17T20:55:00Z', AHORA).etiqueta, '🔒 Cerrada')
+})
+```
+
+- [ ] **Paso 2: Correr la prueba y ver que falla**
+
+```bash
+node --test tests/social.test.js
+```
+Esperado: FALLA — no existe `../lib/social-ventana.js`.
+
+- [ ] **Paso 3: Escribir `lib/social-ventana.js`**
+
+```js
+// lib/social-ventana.js — la ventana de 24 h de Meta. Puro, sin red.
+//
+// Se cuenta desde el ÚLTIMO MENSAJE DEL CLIENTE. Mientras esté abierta se mandan
+// los mensajes que haga falta, seguidos, sin esperar respuesta. Cuando se cierra,
+// en Facebook e Instagram no hay plantillas para reabrirla: la conversación
+// terminó.
+
+const VENTANA_MS = 24 * 60 * 60 * 1000
+
+/**
+ * @param {string} ultimoEntranteISO fecha del último mensaje del cliente
+ * @param {number} ahoraMs           Date.now(), inyectable para poder probarlo
+ */
+export function estadoVentana(ultimoEntranteISO, ahoraMs = Date.now()) {
+  const cerrada = { abierta: false, horasRestantes: 0, etiqueta: '🔒 Cerrada' }
+  if (!ultimoEntranteISO) return cerrada
+  const t = new Date(ultimoEntranteISO).getTime()
+  if (!Number.isFinite(t)) return cerrada
+  const restanteMs = t + VENTANA_MS - ahoraMs
+  if (restanteMs <= 0) return cerrada
+  const horasRestantes = Math.floor(restanteMs / 3_600_000)
+  return {
+    abierta: true,
+    horasRestantes,
+    etiqueta: `⏳ ${horasRestantes} h para responder`,
+  }
+}
+```
+
+- [ ] **Paso 4: Correr la prueba y ver que pasa**
+
+```bash
+node --test tests/social.test.js
+```
+Esperado: todos en verde.
+
+- [ ] **Paso 5: Fechas de verdad en la lista y en el hilo**
+
+En `components/SocialInbox.jsx`, importar el helper que ya usa WhatsApp:
+
+```js
+import { fmtTime } from '@/lib/utils'
+```
+
+Reemplazar la línea 99 (la hora de `ConvRow`) por:
+
+```jsx
+          <span style={{ fontSize:9, color:'#334155', flexShrink:0 }}>{fmtTime(conv.last_time)}</span>
+```
+
+Y la línea 146 (la hora de la burbuja) por la hora con fecha completa al pasar el
+mouse, para que nunca haya duda de cuándo se dijo algo:
+
+```jsx
+          <div style={{ fontSize:9, opacity:.5, marginTop:4, textAlign:'right' }}
+               title={new Date(msg.time).toLocaleString('es-EC', { timeZone:'America/Guayaquil', dateStyle:'full', timeStyle:'short' })}>
+            {fmtTime(msg.time)}
+          </div>
+```
+
+- [ ] **Paso 6: El estado de la ventana, visible**
+
+En `SocialInbox.jsx`, calcular el estado del hilo abierto (reemplaza el cálculo
+suelto de `windowOpen`):
+
+```js
+import { estadoVentana } from '@/lib/social-ventana'
+
+  const ultimoEntrante = selectedConv
+    ? [...selectedConv.messages].reverse().find(m => m.from === 'user')
+    : null
+  const ventana = estadoVentana(ultimoEntrante?.time)
+  const windowOpen = ventana.abierta
+```
+
+Pintarlo en la cabecera del chat, junto al nombre:
+
+```jsx
+<span style={{ fontSize:10, fontWeight:700, color: ventana.abierta ? '#25d366' : '#f87171' }}>
+  {ventana.etiqueta}
+</span>
+```
+
+- [ ] **Paso 7: Cuando está cerrada, decirlo en vez de dejar que rebote**
+
+Reemplazar el input por un aviso cuando `!ventana.abierta && selectedConv.tipo !== 'COMENTARIO'`:
+
+```jsx
+<div style={{ padding:'12px 16px', background:'#1a1116', border:'1px solid #3a1f28',
+              borderRadius:12, color:'#f87171', fontSize:12, lineHeight:1.5 }}>
+  🔒 <b>Pasaron más de 24 h desde el último mensaje del cliente.</b><br />
+  Meta ya no deja responder por aquí, y en Facebook e Instagram no hay plantillas
+  para reabrir la conversación. Toca esperar a que el cliente escriba de nuevo.
+</div>
+```
+
+- [ ] **Paso 8: Compilar, desplegar y comprobar**
+
+```bash
+npm test && npm run build
+git add lib/social-ventana.js tests/social.test.js components/SocialInbox.jsx
+git commit -m "fix(social): mostrar la fecha real y si todavia se puede contestar
+
+La lista pintaba solo hora y minuto: un mensaje del 17 de julio se veia igual que
+uno de hoy, el vendedor intentaba contestar y le rebotaba sin entender por que.
+Ahora usa fmtTime -el mismo helper que WhatsApp- y la fecha completa al pasar el
+mouse.
+
+Ademas se ve el estado de la ventana de 24 h: las horas que quedan, o el aviso de
+que se cerro y por que, en vez de dejar que el envio falle contra Meta."
+git push origin main
+```
+
+Tras el despliegue: abrir SOCIAL y confirmar que los comentarios viejos de julio
+muestran su fecha (no una hora suelta) y salen como **🔒 Cerrada**.
+
+Nota: las filas viejas que escribió Make tienen la hora corrida 5 horas (guardaba
+hora de Ecuador en una columna UTC). No se corrigen hacia atrás; las nuevas entran
+con la hora real de Meta.
+
+---
+
+### Tarea 6: SOCIAL monta el panel único
 
 **Archivos:**
 - Modificar: `components/RightPanel.jsx` (líneas 214-216 y 221)
@@ -768,7 +968,7 @@ git push origin main
 
 ---
 
-### Tarea 6: Mandar una foto desde el computador
+### Tarea 7: Mandar una foto desde el computador
 
 `RightPanel` sube fotos solo al **editar** una respuesta rápida. Mandar una foto
 suelta en el chat vive en `App.jsx` y no se toca, así que SOCIAL necesita su propio
@@ -780,7 +980,7 @@ el Send API de FB/IG.
 
 **Interfaces:**
 - Consume: `POST /api/upload-foto` con `FormData{ file }` → `{ url }` (o `{ error }`);
-  `enviarSocial({ imagen })` de la Tarea 5.
+  `enviarSocial({ imagen })` de la Tarea 6.
 
 - [ ] **Paso 1: Subir y mandar**
 
@@ -850,7 +1050,7 @@ git push origin main
 
 ---
 
-### Tarea 7: Verificación en producción
+### Tarea 8: Verificación en producción
 
 Sin esto no está terminado. Cada punto se comprueba en el inbox real.
 
