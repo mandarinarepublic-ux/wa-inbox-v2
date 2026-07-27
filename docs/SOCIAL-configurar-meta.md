@@ -31,16 +31,29 @@ pública y sin firma cualquiera podría meter conversaciones falsas.
 
 Después de guardar la variable hay que **redesplegar** para que la tome.
 
-## Paso 2 — Token que NO caduca (Usuario del Sistema)
+## Paso 2 — El token: de PÁGINA, derivado de un Usuario del Sistema
 
-El error de siempre es generar un token de página: dura ~60 días y se muere en
-silencio. Hay que usar uno de **Usuario del Sistema**.
+Son **dos capas**, y confundirlas es lo que nos costó el mes:
+
+- El **Usuario del Sistema** da la propiedad de "no caduca".
+- Pero el Send API (`/me/messages`) exige un token **de PÁGINA**. Con el token del
+  usuario del sistema, `me` es el usuario del sistema, no la página.
+
+Entonces: se genera el token del usuario del sistema **y con ese se pide el token de
+la página**. El token de página heredado NO caduca. Ese último es el que se guarda.
+
+**No sirve repetir tal cual el arreglo del CAPI de INDSTORE.** Allá alcanzó con
+asignar el activo porque el token ya tenía los permisos correctos (`ads_management`).
+Acá los permisos son otros, y los permisos de un token de usuario del sistema se
+fijan **al generarlo**: asignar la Página como activo NO le agrega permisos a un
+token ya emitido. Hay que asignar activos **y además** regenerar.
 
 1. business.facebook.com → Configuración del negocio → Usuarios → **Usuarios del
-   sistema**. Puede servir el que ya existe (*Conversions API System User*).
+   sistema**. Sirve el que ya existe (*Conversions API System User*), en el negocio
+   donde viven los activos (**Mandarina Lab**, el mismo de los pixels).
 2. **Agregar activos** a ese usuario: la **Página de Facebook** (control total) y la
-   **cuenta de Instagram**.
-3. **Generar nuevo token**, eligiendo la app de siempre, con estos permisos:
+   **cuenta de Instagram**. — esta parte SÍ es igual que en el CAPI.
+3. **Generar nuevo token** para ese usuario, eligiendo la app de siempre, marcando:
    - `pages_messaging` — contestar DM de Messenger
    - `pages_manage_metadata` — suscribir la página al webhook
    - `pages_read_engagement` — leer publicaciones y comentarios
@@ -48,13 +61,28 @@ silencio. Hay que usar uno de **Usuario del Sistema**.
    - `instagram_basic`
    - `instagram_manage_messages` — DM de Instagram
    - `instagram_manage_comments` — comentarios y respuestas privadas
-4. Guardarlo en Supabase (SQL Editor de `mandarina-DATA`). No hace falta redesplegar:
+4. Con ESE token, pedir el de la página (Graph API Explorer o el navegador):
+
+   ```
+   GET https://graph.facebook.com/v19.0/me/accounts?access_token=TOKEN_DEL_SYSTEM_USER
+   ```
+
+   Devuelve la página con su `id` y su `access_token`. **Ese `access_token` es el que
+   se guarda.** (Si ya sabes el id: `GET /{page-id}?fields=access_token&access_token=…`)
+
+5. Guardarlo en Supabase (SQL Editor de `mandarina-DATA`). No hace falta redesplegar:
    el código lo lee de ahí y lo cachea 5 minutos.
 
 ```sql
 update inbox.app_config
-   set valor = 'EL_TOKEN_NUEVO', actualizado_at = now()
+   set valor = 'EL_TOKEN_DE_PAGINA', actualizado_at = now()
  where clave = 'fb_page_token';
+```
+
+Para comprobar que quedó bien (debe decir `expires_at: 0` = nunca):
+
+```
+GET https://graph.facebook.com/v19.0/debug_token?input_token=EL_TOKEN_DE_PAGINA&access_token=EL_TOKEN_DE_PAGINA
 ```
 
 ## Paso 3 — Suscribir el webhook
