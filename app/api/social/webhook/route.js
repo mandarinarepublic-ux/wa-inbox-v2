@@ -12,7 +12,8 @@ import { usaSupabaseLectura } from '@/lib/supabase'
 // Si tardáramos, Meta reintenta el mismo evento → mensajes duplicados.
 //
 // En Meta → App → Webhooks, Callback URL = https://wa-inbox-v2.vercel.app/api/social/webhook
-// Verify Token = SOCIAL_VERIFY_TOKEN. Campos a suscribir:
+// Verify Token = SOCIAL_VERIFY_TOKEN, y META_APP_SECRET (el "App Secret" de la app de
+// Meta) es OBLIGATORIO: sin él se rechazan todos los eventos. Campos a suscribir:
 //   Página (object "page"):      messages, messaging_postbacks, messaging_referrals, feed
 //   Instagram (object "instagram"): messages, comments
 // Y además hay que suscribir la app a la página:
@@ -37,11 +38,14 @@ export async function GET(req) {
   return new NextResponse('Forbidden', { status: 403 })
 }
 
-// Firma de Meta (x-hub-signature-256). Solo se exige si hay META_APP_SECRET
-// configurado; sin secreto no bloqueamos (el endpoint seguiría siendo público,
-// pero ya no dependemos de Make para recibir).
+// Firma de Meta (x-hub-signature-256). SIEMPRE se exige: esta URL es pública y sin
+// firma cualquiera podría meter conversaciones falsas en el inbox. Si falta
+// META_APP_SECRET rechazamos todo — es preferible a quedarnos abiertos en silencio.
 function firmaValida(rawBody, cabecera) {
-  if (!APP_SECRET) return true
+  if (!APP_SECRET) {
+    console.error('[social webhook] falta META_APP_SECRET — se rechaza el evento')
+    return false
+  }
   if (!cabecera?.startsWith('sha256=')) return false
   const esperada = 'sha256=' + crypto.createHmac('sha256', APP_SECRET).update(rawBody, 'utf8').digest('hex')
   const a = Buffer.from(cabecera), b = Buffer.from(esperada)

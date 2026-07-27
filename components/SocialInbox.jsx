@@ -116,10 +116,15 @@ function ConvRow({ conv, isActive, onClick }) {
   )
 }
 
+// Solo http(s): la URL viene del payload de Meta, y un esquema raro (javascript:)
+// en un enlace que el vendedor va a clickear no tiene por qué llegar a la pantalla.
+const urlSegura = (u) => (/^https?:\/\//i.test(String(u || '')) ? String(u) : '')
+
 function MsgBubble({ msg, channel }) {
   const isUser = msg.from === 'user'
   const isMandi = msg.from === 'mandi'
   const meta = CHANNEL_META[channel] || CHANNEL_META.FB
+  const imagen = urlSegura(msg.image)
   return (
     <div style={{ display:'flex', marginBottom:10, justifyContent: isUser ? 'flex-start' : 'flex-end' }}>
       <div style={{
@@ -130,9 +135,9 @@ function MsgBubble({ msg, channel }) {
         border: isUser ? '1px solid #1e2d3d' : 'none',
       }}>
         {isMandi && <div style={{ fontSize:9, fontWeight:700, opacity:.75, marginBottom:3 }}>🍊 MANDI</div>}
-        {msg.image && (
-          <a href={msg.image} target="_blank" rel="noreferrer">
-            <img src={msg.image} alt="" style={{ maxWidth:'100%', borderRadius:8, marginBottom: msg.text ? 6 : 0, display:'block' }} />
+        {imagen && (
+          <a href={imagen} target="_blank" rel="noreferrer">
+            <img src={imagen} alt="" style={{ maxWidth:'100%', borderRadius:8, marginBottom: msg.text ? 6 : 0, display:'block' }} />
           </a>
         )}
         {msg.text && <div>{msg.text}</div>}
