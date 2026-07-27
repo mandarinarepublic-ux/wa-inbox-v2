@@ -130,7 +130,12 @@ function MsgBubble({ msg, channel }) {
         border: isUser ? '1px solid #1e2d3d' : 'none',
       }}>
         {isMandi && <div style={{ fontSize:9, fontWeight:700, opacity:.75, marginBottom:3 }}>🍊 MANDI</div>}
-        <div>{msg.text}</div>
+        {msg.image && (
+          <a href={msg.image} target="_blank" rel="noreferrer">
+            <img src={msg.image} alt="" style={{ maxWidth:'100%', borderRadius:8, marginBottom: msg.text ? 6 : 0, display:'block' }} />
+          </a>
+        )}
+        {msg.text && <div>{msg.text}</div>}
         {msg.time && (
           <div style={{ fontSize:9, opacity:.5, marginTop:4, textAlign:'right' }}>
             {new Date(msg.time).toLocaleTimeString('es-EC', { hour:'2-digit', minute:'2-digit' })}
@@ -152,6 +157,7 @@ export default function SocialInbox({ active: isVisible }) {
   const [lastSync, setLastSync] = useState(null)
   const [quickReplies, setQuickReplies] = useState([]) // mismas respuestas que WhatsApp (RESPUESTAS_RAPIDAS)
   const [showQR, setShowQR]     = useState(false)
+  const [modoRespuesta, setModoRespuesta] = useState('privado') // comentarios: 'privado' | 'publico'
   const [isMobile, setIsMobile] = useState(false)
   const [mediaInfo, setMediaInfo] = useState(null) // publicación/anuncio que comentó el cliente
   const bottomRef = useRef(null)
@@ -203,6 +209,10 @@ export default function SocialInbox({ active: isVisible }) {
   }, [isVisible])
 
   const selectedConv = convs.find(c => convKey(c) === selected) || null
+  // Lo último que mandó el cliente define CÓMO se le responde: si fue un comentario,
+  // la respuesta va al comentario (privada o pública); si fue un DM, al chat.
+  const ultimoDelCliente = selectedConv ? [...selectedConv.messages].reverse().find(m => m.from === 'user') : null
+  const respondeComentario = (ultimoDelCliente?.tipo || selectedConv?.tipo) === 'COMENTARIO'
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -281,9 +291,11 @@ export default function SocialInbox({ active: isVisible }) {
     setInput('')
     setSending(true)
     try {
-      // IG: los chats son comentarios → respondemos con DM privado al comentario más
-      // reciente del cliente (recipient.comment_id). FB: DM normal por PSID.
+      // Si lo último del cliente fue un COMENTARIO se responde al comentario (privado
+      // por defecto, o público si el vendedor lo eligió). Si fue un DM, se contesta
+      // el DM normal por PSID/IGSID.
       const lastUser = [...selectedConv.messages].reverse().find(m => m.from === 'user')
+      const esComentario = (lastUser?.tipo || selectedConv.tipo) === 'COMENTARIO'
       const res = await fetch('/api/social/saliente', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -291,7 +303,9 @@ export default function SocialInbox({ active: isVisible }) {
           sender_id: selectedConv.sender_id,
           message: text,
           canal: selectedConv.canal,
-          comment_id: selectedConv.canal === 'IG' ? (lastUser?.id || '') : '',
+          tipo: esComentario ? 'COMENTARIO' : 'DM',
+          comment_id: esComentario ? (lastUser?.id || '') : '',
+          modo: esComentario ? modoRespuesta : 'privado',
         })
       })
       const data = await res.json().catch(() => ({}))
@@ -456,6 +470,26 @@ export default function SocialInbox({ active: isVisible }) {
 
           {/* Input */}
           <div style={{ padding:'10px 16px 14px', background:'#0a0f1a', borderTop:'1px solid #111c2a', flexShrink:0 }}>
+            {/* Comentario: elegir si la respuesta es privada (abre el DM) o pública
+                (queda colgada del comentario, la ve todo el mundo). Meta permite UNA
+                sola respuesta privada por comentario. */}
+            {respondeComentario && (
+              <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:8 }}>
+                <span style={{ fontSize:10, color:'#475569' }}>Responder al comentario:</span>
+                {[
+                  { id:'privado', label:'🔒 En privado (DM)' },
+                  { id:'publico', label:'🌎 En público' },
+                ].map(m => (
+                  <button key={m.id} onClick={() => setModoRespuesta(m.id)} style={{
+                    padding:'3px 9px', fontSize:10, fontWeight:700, borderRadius:6, cursor:'pointer',
+                    background: modoRespuesta === m.id ? 'rgba(37,211,102,.15)' : 'transparent',
+                    border: `1px solid ${modoRespuesta === m.id ? 'rgba(37,211,102,.4)' : '#1a2d40'}`,
+                    color: modoRespuesta === m.id ? '#25d366' : '#334155',
+                    fontFamily:'Outfit,sans-serif',
+                  }}>{m.label}</button>
+                ))}
+              </div>
+            )}
             {/* Respuestas rápidas (mismas que WhatsApp) */}
             {showQR && (
               quickReplies.length > 0 ? (
