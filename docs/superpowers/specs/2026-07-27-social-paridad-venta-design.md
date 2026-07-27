@@ -184,6 +184,19 @@ Meta no admite texto y adjunto en el mismo mensaje: una respuesta rápida con te
 - **Verificación obligatoria antes de cerrar:** mandar una respuesta rápida con
   fotos por WhatsApp en producción (MANDI) y confirmar que sale como siempre.
 
+## Dentro de la ventana de 24 h NO hay turnos
+
+Regla explícita, para que nadie meta esperas artificiales en la implementación:
+mientras el cliente haya escrito en las últimas 24 h, el negocio manda **los
+mensajes que quiera, seguidos**, sin esperar respuesta. Texto y cuatro fotos salen
+de corrido, igual que en WhatsApp.
+
+Verificado en producción el 27-jul: entrante 23:01:20 → saliente 23:01:30 →
+saliente 23:01:38, sin nada del cliente en el medio.
+
+Lo único que se cuenta es **el tiempo desde el último mensaje del cliente**. Pasadas
+las 24 h la conversación se cierra y en FB/IG no hay plantillas para reabrirla.
+
 ## Lo que hay que comprobar en vivo
 
 Separar comentarios de DM elimina la pregunta que tenía el diseño anterior (no se
