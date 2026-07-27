@@ -70,6 +70,11 @@ export async function POST(req) {
 
     if (!r.ok) {
       const err = r.data?.error || {}
+      // Meta contesta "An unknown error has occurred" para media docena de causas
+      // distintas. Sin el código y el contexto no hay forma de saber cuál fue.
+      console.error('[/api/social/saliente] Meta rechazó — code=%s subcode=%s msg=%s | canal=%s tipo=%s modo=%s comment_id=%s sender=%s',
+        err.code, err.error_subcode, err.message, canal, esComentario ? 'COMENTARIO' : 'DM',
+        publico ? 'publico' : 'privado', comment_id || '—', String(sender_id).slice(0, 8) + '…')
       return NextResponse.json(
         { error: err.message || `Envío falló (HTTP ${r.status})`, code: err.code, subcode: err.error_subcode },
         { status: 502 }
