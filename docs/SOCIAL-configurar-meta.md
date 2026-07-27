@@ -3,17 +3,37 @@
 Estado al 27-jul-2026. El **código ya está en producción** (`49aa23f`). Lo que sigue
 es configuración del lado de Meta: sin esto no entra ni sale nada.
 
+## Datos concretos del montaje
+
+- App de Meta: **MandarinaSalesApp**, ID `931686799639248`. De ahí sale el
+  `META_APP_SECRET` (es la app que va a FIRMAR los eventos de FB/IG).
+- **Página de Facebook: `1437580293211264`**
+- **Cuenta de Instagram: `17841467642039699`** (@mandarinarepublicec)
+
 ## Por qué estaba muerto
 
 1. **Enviar** llevaba roto desde el **24-jun**: el `fb_page_token` guardado en
    `inbox.app_config` era un token de página normal y caducó. Meta responde
    `code: 190 — Session has expired on Wednesday, 24-Jun-26`.
-2. **Recibir** dependía de **Make** (escenarios *EscuchaFacebook* / *EscuchaInstagram*
-   que empujaban a `/api/social/ingest`). Dejó de llegar el **17-jul**. Quedaron 15
-   comentarios de Instagram sin contestar ("Precio", "¿Aún tienen disponible?").
+2. **Recibir**: dependía de **Make**, y hay que separar los dos escenarios porque NO
+   están igual (revisado en Make el 27-jul):
+   - *EscuchaFacebook - Mandarina* (5484769): encendido, pero su **última ejecución
+     real fue el 25-jun**. Un mes sin recibir un solo DM. Está muerto de hecho.
+   - *EscuchaInstagram - Mandarina* (5484757): **sigue corriendo HOY** (ejecuciones
+     el 27-jul), pero **desde el 21-jul no aterriza nada** en la tabla. Ese día se
+     editó el escenario (pasó de 3 a 4 operaciones) y ahí se rompió: corre, dice
+     SUCCESS, y los comentarios se pierden. Son ~6 clientes tirados a la basura.
+   - Bonus: las fechas que escribía Make estaban **5 horas corridas** (guardaba hora
+     de Ecuador en una columna UTC). El webhook nuevo guarda la hora real de Meta.
 
 Ahora recibimos directo de Meta con `/api/social/webhook`, igual que WhatsApp.
 Make sale del circuito.
+
+## ORDEN (importante)
+
+El paso 3 (cambiar la URL del webhook en Meta) **va al final**. Meta solo permite UNA
+URL de callback por objeto por app: en cuanto la cambies, el camino viejo se corta.
+Haz primero el secreto y el token, y recién ahí muévela.
 
 ## Paso 1 — `META_APP_SECRET` en Vercel (obligatorio)
 
