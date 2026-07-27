@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { guardarSocialMensajeSupabase, getFbPageToken, getFbPageId } from '@/lib/social-supabase'
+import { guardarSocialMensajeSupabase, getTokenPagina, getFbPageId } from '@/lib/social-supabase'
 
 // Envío saliente del Social Inbox. Cuatro casos, cada uno con su endpoint:
 //   FB · DM         → Send API, recipient {id: PSID}
@@ -28,7 +28,7 @@ async function graphPost(path, params, token) {
 
 export async function POST(req) {
   try {
-    const FB_PAGE_TOKEN = await getFbPageToken()
+    const FB_PAGE_TOKEN = await getTokenPagina()
     if (!FB_PAGE_TOKEN) {
       return NextResponse.json({ error: 'FB_PAGE_TOKEN no configurado en el servidor' }, { status: 500 })
     }

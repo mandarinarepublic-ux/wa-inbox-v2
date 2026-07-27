@@ -214,10 +214,22 @@ export default function SocialInbox({ active: isVisible }) {
   }, [isVisible])
 
   const selectedConv = convs.find(c => convKey(c) === selected) || null
-  // Lo último que mandó el cliente define CÓMO se le responde: si fue un comentario,
-  // la respuesta va al comentario (privada o pública); si fue un DM, al chat.
+  // CÓMO se responde. Meta pone dos relojes distintos y hay que respetarlos:
+  //   · respuesta PRIVADA a un comentario → solo dentro de 7 días, y una sola vez
+  //   · respuesta PÚBLICA a un comentario → sin límite de tiempo
+  // Si el comentario ya venció, se contesta por DM (que tiene su propia ventana de
+  // 24 h). Antes se intentaba siempre la privada y Meta devolvía un inútil
+  // "An unknown error has occurred".
+  const SIETE_DIAS = 7 * 24 * 3600 * 1000
   const ultimoDelCliente = selectedConv ? [...selectedConv.messages].reverse().find(m => m.from === 'user') : null
-  const respondeComentario = (ultimoDelCliente?.tipo || selectedConv?.tipo) === 'COMENTARIO'
+  const hayComentario = ultimoDelCliente?.tipo === 'COMENTARIO'
+  const comentarioVigente = hayComentario && ultimoDelCliente.time &&
+    (Date.now() - new Date(ultimoDelCliente.time).getTime()) < SIETE_DIAS
+  // El selector privado/público solo tiene sentido si hay un comentario al que responder.
+  const respondeComentario = hayComentario
+  // Camino real del envío: al comentario si es público (siempre se puede) o si la
+  // ventana privada sigue abierta. Si no, DM.
+  const iraAlComentario = hayComentario && (modoRespuesta === 'publico' || comentarioVigente)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -299,8 +311,6 @@ export default function SocialInbox({ active: isVisible }) {
       // Si lo último del cliente fue un COMENTARIO se responde al comentario (privado
       // por defecto, o público si el vendedor lo eligió). Si fue un DM, se contesta
       // el DM normal por PSID/IGSID.
-      const lastUser = [...selectedConv.messages].reverse().find(m => m.from === 'user')
-      const esComentario = (lastUser?.tipo || selectedConv.tipo) === 'COMENTARIO'
       const res = await fetch('/api/social/saliente', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -308,9 +318,9 @@ export default function SocialInbox({ active: isVisible }) {
           sender_id: selectedConv.sender_id,
           message: text,
           canal: selectedConv.canal,
-          tipo: esComentario ? 'COMENTARIO' : 'DM',
-          comment_id: esComentario ? (lastUser?.id || '') : '',
-          modo: esComentario ? modoRespuesta : 'privado',
+          tipo: iraAlComentario ? 'COMENTARIO' : 'DM',
+          comment_id: iraAlComentario ? (ultimoDelCliente?.id || '') : '',
+          modo: iraAlComentario ? modoRespuesta : 'privado',
         })
       })
       const data = await res.json().catch(() => ({}))

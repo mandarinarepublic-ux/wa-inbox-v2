@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { waitUntil } from '@vercel/functions'
-import { guardarSocialMensajeSupabase, getFbPageToken, getFbPageId } from '@/lib/social-supabase'
+import { guardarSocialMensajeSupabase, getTokenPagina } from '@/lib/social-supabase'
 import { guardarEventoCrudoSupabase } from '@/lib/inbox-supabase'
 import { usaSupabaseLectura } from '@/lib/supabase'
 
@@ -189,29 +189,6 @@ function deComentarioIG(value, igId) {
   }
 }
 
-// Un PSID (el id del cliente en Messenger) está ATADO a la página: solo se puede
-// resolver con el token DE LA PÁGINA. Si lo que tenemos guardado es un token de
-// usuario del sistema, se lo cambiamos por el de la página. Se cachea porque no
-// cambia. Si algo falla, devolvemos el token original (peor caso: nombre vacío).
-let _tokenPaginaCache = { valor: null, at: 0 }
-async function tokenDePagina(token) {
-  const ahora = Date.now()
-  if (_tokenPaginaCache.valor && ahora - _tokenPaginaCache.at < 3600000) return _tokenPaginaCache.valor
-  try {
-    const pageId = await getFbPageId()
-    if (!pageId) return token
-    const res = await fetch(`${GRAPH}/${encodeURIComponent(pageId)}?fields=access_token&access_token=${encodeURIComponent(token)}`,
-      { cache: 'no-store', signal: AbortSignal.timeout(8000) })
-    const d = await res.json().catch(() => ({}))
-    const t = d?.access_token || token
-    _tokenPaginaCache = { valor: t, at: ahora }
-    return t
-  } catch (e) {
-    console.error('[social webhook] no se pudo derivar el token de página:', e.message)
-    return token
-  }
-}
-
 // Nombre real del cliente en un DM. Sin esto la conversación se ve como un número
 // (PSID), que es como quedaban los chats de Facebook hasta ahora.
 const nombreCache = new Map()
@@ -236,8 +213,7 @@ async function resolverNombre(id, canal, token) {
 
 // ── Guardado en segundo plano ─────────────────────────────────────────────────
 async function procesar(eventos) {
-  const guardado = await getFbPageToken().catch(() => '')
-  const token = guardado ? await tokenDePagina(guardado) : ''
+  const token = await getTokenPagina().catch(() => '')
   for (const ev of eventos) {
     try {
       // Los comentarios ya traen el nombre en el payload; los DM no.
