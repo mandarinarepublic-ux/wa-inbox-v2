@@ -386,6 +386,16 @@ export default function App() {
     }))
   }, [])
 
+  // Cambiar de bandeja CIERRA el chat abierto: si no, al terminar de escribirle a un
+  // cliente y pasar a "Pendientes" quedaba en pantalla la conversación anterior, que
+  // ya no pertenece a esa bandeja. Se deja el panel del medio en blanco para elegir.
+  const cambiarFiltro = (key) => {
+    setFilter(key)
+    setActive(null)
+    activeRef.current = null
+    setCitando(null)
+  }
+
   const openConv = (telefono) => {
     setActive(telefono)
     activeRef.current = telefono
@@ -1161,7 +1171,7 @@ export default function App() {
                 { key:'soporte',   label:'🎧 Soporte',    color:'#a78bfa' },
                 { key:'archivado', label:'⚫ Archivados', color:'#64748b' },
               ].map(({ key, label, color }) => (
-                <button key={key} onClick={() => setFilter(key)} style={{
+                <button key={key} onClick={() => cambiarFiltro(key)} style={{
                   flex:1, padding:'5px 2px', fontSize:9, fontWeight:700,
                   background:filter===key?`${color}18`:'transparent',
                   border:`1px solid ${filter===key?color+'40':'#1a2d40'}`,
@@ -1176,7 +1186,7 @@ export default function App() {
             {/* Fila 2 — TEMPERATURA del lead (Eje 2, manual) */}
             <div style={{ display:'flex', gap:4, marginTop:5 }}>
               {TEMPERATURAS.map(({ key, icon, label, color }) => (
-                <button key={key} onClick={() => setFilter(key)} style={{
+                <button key={key} onClick={() => cambiarFiltro(key)} style={{
                   flex:1, padding:'5px 2px', fontSize:9, fontWeight:700,
                   background:filter===key?`${color}18`:'transparent',
                   border:`1px solid ${filter===key?color+'40':'#1a2d40'}`,
