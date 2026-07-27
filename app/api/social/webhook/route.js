@@ -21,8 +21,13 @@ import { usaSupabaseLectura } from '@/lib/supabase'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-const VERIFY_TOKEN = process.env.SOCIAL_VERIFY_TOKEN || process.env.WHATSAPP_VERIFY_TOKEN || ''
-const APP_SECRET   = process.env.META_APP_SECRET || ''
+// Limpia BOM (U+FEFF) y cualquier carácter no imprimible que se pueda haber colado
+// al cargar la variable en Vercel. Un solo byte invisible al final del secreto
+// cambia el HMAC entero y la firma no valida NUNCA, sin ninguna pista de por qué.
+const limpiar = (s) => String(s || '').replace(/[^\x21-\x7E]/g, '')
+
+const VERIFY_TOKEN = limpiar(process.env.SOCIAL_VERIFY_TOKEN || process.env.WHATSAPP_VERIFY_TOKEN || '')
+const APP_SECRET   = limpiar(process.env.META_APP_SECRET || '')
 const GRAPH = 'https://graph.facebook.com/v19.0'
 
 // ── Verificación del webhook (GET) ────────────────────────────────────────────
@@ -227,7 +232,13 @@ export async function POST(req) {
   try {
     const raw = await req.text()
     if (!firmaValida(raw, req.headers.get('x-hub-signature-256'))) {
-      console.error('[social webhook] firma inválida')
+      // Diagnóstico sin exponer el secreto: un App Secret de Meta son 32 caracteres
+      // hexadecimales. Si acá NO dice 32/hex=true, el valor guardado está mal (BOM,
+      // recortado, pegado a medias). Si dice 32/hex=true y aun así falla, entonces
+      // el secreto es de OTRA app y hay que copiarlo de la que manda los eventos.
+      console.error('[social webhook] firma inválida — secreto: %d chars, hex=%s, cabecera=%s',
+        APP_SECRET.length, /^[0-9a-f]+$/i.test(APP_SECRET),
+        req.headers.get('x-hub-signature-256') ? 'sí' : 'NO')
       return new NextResponse('Forbidden', { status: 403 })
     }
 
