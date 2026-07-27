@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { guardarSocialMensajeSupabase, getFbPageToken } from '@/lib/social-supabase'
+import { guardarSocialMensajeSupabase, getFbPageToken, getFbPageId } from '@/lib/social-supabase'
 
 // Envío saliente del Social Inbox. Cuatro casos, cada uno con su endpoint:
 //   FB · DM         → Send API, recipient {id: PSID}
@@ -37,6 +37,11 @@ export async function POST(req) {
       return NextResponse.json({ error: 'Faltan sender_id o message' }, { status: 400 })
     }
 
+    // Mandar a /{page-id}/messages y no a /me/messages: así sirve tanto un token de
+    // página como uno de usuario del sistema. Si no hay id configurado, cae a 'me'.
+    const pageId = await getFbPageId().catch(() => '')
+    const RUTA_MSGS = `${pageId ? encodeURIComponent(pageId) : 'me'}/messages`
+
     const esIG = String(canal).toUpperCase() === 'IG'
     const esComentario = String(tipo || '').toUpperCase() === 'COMENTARIO' || (esIG && !!comment_id)
     const publico = String(modo || '') === 'publico'
@@ -52,7 +57,7 @@ export async function POST(req) {
       r = await graphPost(`${encodeURIComponent(comment_id)}/comments`, { message: texto }, FB_PAGE_TOKEN)
     } else if (esComentario && esIG) {
       // IG: respuesta privada al comentario (abre el DM).
-      r = await graphPost('me/messages', { recipient: { comment_id: String(comment_id) }, message: { text: texto } }, FB_PAGE_TOKEN)
+      r = await graphPost(RUTA_MSGS, { recipient: { comment_id: String(comment_id) }, message: { text: texto } }, FB_PAGE_TOKEN)
     } else if (esComentario) {
       // FB: respuesta privada al comentario (endpoint propio de la página).
       r = await graphPost(`${encodeURIComponent(comment_id)}/private_replies`, { message: texto }, FB_PAGE_TOKEN)
@@ -60,7 +65,7 @@ export async function POST(req) {
       // DM normal (FB o IG). Ventana de 24 h.
       const body = { recipient: { id: String(sender_id) }, message: { text: texto } }
       if (!esIG) body.messaging_type = 'RESPONSE'
-      r = await graphPost('me/messages', body, FB_PAGE_TOKEN)
+      r = await graphPost(RUTA_MSGS, body, FB_PAGE_TOKEN)
     }
 
     if (!r.ok) {
