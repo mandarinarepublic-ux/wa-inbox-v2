@@ -63,7 +63,20 @@ otra en `SocialInbox`, sin tocar `RightPanel`:
 ```
 
 El prefijo del canal evita que un `sender_id` de IG choque con uno de FB, y deja el
-identificador legible en las notas.
+identificador legible.
+
+**Cuidado con la pestaña Ventas.** `RightPanel` guarda notas y el id de venta
+usando ese identificador como si fuera un teléfono, y eso escribe en la tabla de
+contactos de WhatsApp. Con un identificador falso tipo `IG:660529760420669` se
+llenaría de contactos basura que después ensucian el directorio y los envíos.
+
+Por eso, en este bloque **la pestaña Ventas se monta deshabilitada para SOCIAL**:
+se ven Respuestas y Tienda, que son las que venden. Las notas y el id de venta
+entran en el bloque de CRM, cuando se decida dónde se guardan para social — que es
+una decisión de datos, no de interfaz, y merece su propio diseño.
+
+`windowOpen` (que en WhatsApp indica si la ventana de 24 h sigue abierta) se calcula
+para SOCIAL a partir de la fecha del último mensaje entrante del cliente.
 
 ### 2. Adaptador de envío por canal
 
