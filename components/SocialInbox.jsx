@@ -86,6 +86,35 @@ function StatusBadge({ status }) {
   )
 }
 
+// "Hace 3 s" en vez de "Sync 18:42:07": un reloj absoluto no le dice al vendedor si
+// lo que tiene en pantalla es de recién o de hace rato.
+function haceCuanto(desde, ahora = Date.now()) {
+  const s = Math.max(0, Math.round((ahora - desde) / 1000))
+  if (s < 60) return `Hace ${s} s`
+  const m = Math.round(s / 60)
+  if (m < 60) return `Hace ${m} min`
+  return `Hace ${Math.round(m / 60)} h`
+}
+
+// Vive aparte a propósito: así el tic de cada segundo repinta SOLO esta línea. Si el
+// reloj fuera estado de SocialInbox, se repintarían también el hilo y el panel de la
+// derecha —y volverían a correr sus efectos— una vez por segundo.
+function SyncLabel({ lastSync, refrescando }) {
+  const [, repintar] = useState(0)
+  useEffect(() => {
+    if (refrescando || !lastSync) return
+    const t = setInterval(() => repintar(n => n + 1), 1000)
+    return () => clearInterval(t)
+  }, [lastSync, refrescando])
+  // #334155 sobre este fondo casi no se lee: era la única señal de que el botón había
+  // hecho algo, y por eso el dueño lo daba por muerto.
+  return (
+    <span style={{ fontSize:10, fontWeight:600, color: refrescando ? '#25d366' : '#94a3b8' }}>
+      {refrescando ? 'Actualizando…' : lastSync ? haceCuanto(lastSync.getTime()) : '—'}
+    </span>
+  )
+}
+
 function SocialAvatar({ name, channel }) {
   const initials = (name || '?').split(/[\s._@]/).slice(0, 2).map(w => (w[0] || '').toUpperCase()).join('')
   const meta = CHANNEL_META[channel] || CHANNEL_META.FB
@@ -181,6 +210,7 @@ export default function SocialInbox({ active: isVisible }) {
   const [input, setInput]       = useState('')
   const [sending, setSending]   = useState(false)
   const [lastSync, setLastSync] = useState(null)
+  const [refrescando, setRefrescando] = useState(false)
   const [modoRespuesta, setModoRespuesta] = useState('privado') // comentarios: 'privado' | 'publico'
   const [isMobile, setIsMobile] = useState(false)
   const [mediaInfo, setMediaInfo] = useState(null) // publicación/anuncio que comentó el cliente
@@ -209,6 +239,20 @@ export default function SocialInbox({ active: isVisible }) {
       setLoading(false)
     }
   }, [])
+
+  // El poll de 8 s ya trae todo solo; este botón sirve para cuando el vendedor acaba
+  // de mandar algo y quiere confirmar YA que entró, sin esperar. Antes era imposible
+  // notar que hiciera algo (misma carga silenciosa, y de señal un reloj gris casi
+  // ilegible), así que el dueño lo daba por muerto. Ahora se ve trabajando y no se
+  // puede disparar dos veces a la vez.
+  const refrescar = useCallback(async () => {
+    if (refrescando) return
+    setRefrescando(true)
+    // Mínimo visible: la carga puede tardar 200 ms y el "Actualizando…" pasaría como
+    // un parpadeo — otra vez sin señal de que algo ocurrió.
+    try { await Promise.all([load(), new Promise(r => setTimeout(r, 450))]) }
+    finally { setRefrescando(false) }
+  }, [load, refrescando])
 
   // ¿Pantalla de celular? (mismo umbral que el inbox de WhatsApp: 767px)
   useEffect(() => {
@@ -299,13 +343,16 @@ export default function SocialInbox({ active: isVisible }) {
   }, [selectedConv, iraAlComentario, ultimoDelCliente, modoRespuesta])
 
   // Respuesta rápida del panel: el texto y luego cada foto, en orden (Meta no admite
-  // texto + adjunto en un mismo mensaje). En un COMENTARIO se manda solo el texto:
-  // es público y una foto ahí no correspondía.
+  // texto + adjunto en un mismo mensaje). Las fotos se descartan solo cuando el envío
+  // va DE VERDAD al hilo público — el mismo criterio con el que `enviarSocial` elige
+  // la ruta. Mirar `selectedConv.tipo` descartaba las fotos también en un comentario
+  // vencido, que ya sale por DM privado: al cliente no se le podía mandar una foto sin
+  // ninguna razón técnica que lo justificara.
   const onQuickReply = useCallback(async (reply, onProgress) => {
     const imgs = Array.from({ length: 10 }, (_, i) =>
       i === 0 ? reply.imageUrl : reply[`imageUrl${i + 1}`]
     ).filter(Boolean)
-    const soloTexto = selectedConv?.tipo === 'COMENTARIO'
+    const soloTexto = iraAlComentario
     const aMandar = soloTexto ? [] : imgs
     const total = (reply.text ? 1 : 0) + aMandar.length
     let hechas = 0
@@ -313,12 +360,10 @@ export default function SocialInbox({ active: isVisible }) {
       if (reply.text) { await enviarSocial({ texto: reply.text }); onProgress?.(++hechas, total) }
       for (const url of aMandar) { await enviarSocial({ imagen: url }); onProgress?.(++hechas, total) }
       if (soloTexto && imgs.length) {
-        // Con el comentario vencido (más de 7 días) `iraAlComentario` ya ruteó por DM:
-        // el envío SALIÓ en privado y pedirle "responde en privado" sería pedirle algo
-        // que ya hizo. Las fotos igual no salen, pero por otra razón — decirla.
-        alert(iraAlComentario
-          ? 'Es un comentario público: se mandó solo el texto. Responde en privado para poder mandar las fotos.'
-          : 'Se mandó solo el texto (en privado): las respuestas rápidas no mandan sus fotos desde un hilo de comentarios.')
+        // Ahora este aviso solo aparece cuando el envío fue de verdad al hilo público,
+        // que es donde "responde en privado" es cierto: si ya iba por DM, las fotos
+        // salieron.
+        alert('Es un comentario público: se mandó solo el texto. Responde en privado para poder mandar las fotos.')
       }
     } catch (e) {
       alert('❌ No se pudo enviar: ' + e.message)
@@ -581,10 +626,16 @@ export default function SocialInbox({ active: isVisible }) {
           ))}
         </div>
 
-        {/* Footer sync */}
-        <div style={{ padding:'7px 14px', borderTop:'1px solid #162030', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
-          <span style={{ fontSize:10, color:'#334155' }}>{lastSync ? 'Sync ' + lastSync.toLocaleTimeString('es-EC', { hour:'2-digit', minute:'2-digit', second:'2-digit' }) : '—'}</span>
-          <button onClick={load} style={{ background:'rgba(37,211,102,.1)', border:'1px solid rgba(37,211,102,.25)', color:'#25d366', borderRadius:7, width:28, height:28, cursor:'pointer', fontSize:14, display:'flex', alignItems:'center', justifyContent:'center' }}>↻</button>
+        {/* Footer sync — flexWrap por el celular: la fila del pie es angosta y el texto
+            crece a "Actualizando…"; sin wrap se desbordaría en vez de bajar el botón. */}
+        <div style={{ padding:'7px 14px', borderTop:'1px solid #162030', display:'flex', flexWrap:'wrap', gap:8, justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+          <SyncLabel lastSync={lastSync} refrescando={refrescando} />
+          <button onClick={refrescar} disabled={refrescando} title="Actualizar ahora" style={{
+            background:'rgba(37,211,102,.1)', border:'1px solid rgba(37,211,102,.25)', color:'#25d366',
+            borderRadius:7, width:28, height:28, flexShrink:0, fontSize:14,
+            cursor: refrescando ? 'default' : 'pointer', opacity: refrescando ? .45 : 1,
+            display:'flex', alignItems:'center', justifyContent:'center',
+          }}>{refrescando ? '⏳' : '↻'}</button>
         </div>
       </div>
       )}
@@ -726,9 +777,12 @@ export default function SocialInbox({ active: isVisible }) {
                   style={{ width:'100%', background:'transparent', border:'none', outline:'none', color:'#e2e8f0', fontSize:16, resize:'none', lineHeight:1.5, minHeight:40, maxHeight:100, overflowY:'auto', fontFamily:'Outfit,sans-serif' }}
                 />
               </div>
-              {/* Un comentario es público: no admite foto. Se oculta el botón entero en
-                  vez de deshabilitarlo, para no sugerir que "algún día" se podría. */}
-              {selectedConv.tipo !== 'COMENTARIO' && (
+              {/* Se oculta cuando el envío va al hilo público (una foto ahí no se puede)
+                  o a la respuesta privada del comentario (Meta solo acepta texto por
+                  ese endpoint). Es `iraAlComentario`, no el tipo del hilo: un comentario
+                  vencido sale por DM normal, y ahí la foto sí va. Oculto y no
+                  deshabilitado, para no sugerir que "algún día" se podría. */}
+              {!iraAlComentario && (
                 <>
                   <input ref={fileRef} type="file" accept="image/*" onChange={onElegirFoto} style={{ display:'none' }} />
                   <button onClick={() => fileRef.current?.click()} disabled={subiendo} title="Mandar una foto" style={{
