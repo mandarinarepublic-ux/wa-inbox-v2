@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert'
-import { claveConversacion, agruparConversaciones } from '../lib/social-agrupar.js'
+import { claveConversacion, agruparConversaciones, normalizarEstado, filaAMensaje } from '../lib/social-agrupar.js'
 import { cuerpoMensajeMeta, esHiloPublico } from '../lib/social-envio.js'
 import { estadoVentana } from '../lib/social-ventana.js'
 
@@ -53,6 +53,57 @@ test('las conversaciones vienen de la mas reciente a la mas vieja', () => {
 
 test('una fila sin sender_id se ignora', () => {
   assert.equal(agruparConversaciones([{ ...base, sender_id: '', tipo: 'DM', texto: 'x' }]).length, 0)
+})
+
+test('normalizarEstado pasa a minusculas', () => {
+  assert.equal(normalizarEstado('PENDIENTE'), 'pendiente')
+  assert.equal(normalizarEstado('Atendido'), 'atendido')
+})
+
+test('normalizarEstado traduce el vocabulario viejo de SOCIAL', () => {
+  assert.equal(normalizarEstado('VENTAPROCESO'), 'venta')
+})
+
+test('normalizarEstado cae a pendiente ante un valor desconocido o vacio', () => {
+  assert.equal(normalizarEstado(''), 'pendiente')
+  assert.equal(normalizarEstado(null), 'pendiente')
+  assert.equal(normalizarEstado('loquesea'), 'pendiente')
+})
+
+test('filaAMensaje normaliza el estado sin importar como llegue de la base', () => {
+  assert.equal(filaAMensaje({ ...base, estado: 'ATENDIDO' }).estado, 'atendido')
+  assert.equal(filaAMensaje({ ...base, estado: 'VENTAPROCESO' }).estado, 'venta')
+  assert.equal(filaAMensaje({ ...base, estado: null }).estado, 'pendiente')
+})
+
+test('agruparConversaciones expone el estado ya en minusculas', () => {
+  const convs = agruparConversaciones([
+    { ...base, id: 1, tipo: 'DM', texto: 'hola', estado: 'PENDIENTE', fecha: '2026-07-27T10:00:00Z' },
+  ])
+  assert.equal(convs[0].status, 'pendiente')
+})
+
+test('la temperatura es manual: una fila sin ella no borra la ya marcada', () => {
+  const convs = agruparConversaciones([
+    { ...base, id: 1, tipo: 'DM', texto: 'a', temperatura: 'caliente', fecha: '2026-07-27T10:00:00Z' },
+    { ...base, id: 2, tipo: 'DM', texto: 'b', temperatura: '',         fecha: '2026-07-27T11:00:00Z' },
+  ])
+  assert.equal(convs[0].temperatura, 'caliente')
+})
+
+test('el ultimo valor de temperatura no vacio gana, igual que el estado', () => {
+  const convs = agruparConversaciones([
+    { ...base, id: 1, tipo: 'DM', texto: 'a', temperatura: 'frio',     fecha: '2026-07-27T10:00:00Z' },
+    { ...base, id: 2, tipo: 'DM', texto: 'b', temperatura: 'caliente', fecha: '2026-07-27T11:00:00Z' },
+  ])
+  assert.equal(convs[0].temperatura, 'caliente')
+})
+
+test('sin temperatura en ninguna fila, la conversacion queda sin clasificar', () => {
+  const convs = agruparConversaciones([
+    { ...base, id: 1, tipo: 'DM', texto: 'a', fecha: '2026-07-27T10:00:00Z' },
+  ])
+  assert.equal(convs[0].temperatura, '')
 })
 
 test('el cuerpo de un mensaje de texto', () => {
