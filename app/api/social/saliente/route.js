@@ -52,7 +52,10 @@ export async function POST(req) {
     // colaba como DM en la guardia y como comentario en el ruteo: el link de
     // pago se creaba y salía por la rama pública. Ver lib/social-envio.js.
     const esComentario = esHiloPublico({ tipo, canal, comment_id })
-    const publico = String(modo || '') === 'publico'
+    // La pregunta que importa para el link de pago no es "¿es un comentario?" sino
+    // "¿esto va a salir a la vista de todos?": la respuesta PRIVADA a un comentario
+    // es un DM, y ahí un link de cobro es legítimo. Se responde una sola vez, acá.
+    const saldraEnPublico = esComentario && String(modo || '') === 'publico'
 
     // Un comentario es PÚBLICO: una foto ahí quedaría a la vista de todos. Se
     // rechaza acá, con un mensaje que el vendedor entienda, en vez de dejar que
@@ -69,20 +72,22 @@ export async function POST(req) {
     }
 
     // LINKPAGO35 → link de cobro de dLocal. Mismo comando que en WhatsApp.
-    // Solo en DM: un link de pago no va en un comentario público.
+    // En público se rechaza: el comando no se convierte en link, así que el texto
+    // saldría publicado LITERAL ("LINKPAGO45" colgado del comentario a la vista de
+    // todos). El vendedor viene de WhatsApp, donde ese comando es rutina: se corta
+    // acá y se le dice a dónde sí va.
     let texto = String(message || '')
     const monto = parseLinkpago(texto)
-    // En un hilo público el comando no se convierte en link (arriba), así que el
-    // texto saldría publicado LITERAL: "LINKPAGO45" colgado del comentario a la
-    // vista de todos. El vendedor viene de WhatsApp, donde ese comando es rutina:
-    // se corta acá y se le dice a dónde sí va.
-    if (monto && esComentario && publico) {
+    if (monto && saldraEnPublico) {
       return NextResponse.json(
         { error: 'Un link de pago no se puede publicar en un comentario. Responde en privado.' },
         { status: 400 }
       )
     }
-    if (monto && !esComentario) {
+    // Privado (DM o respuesta privada a un comentario): el cobro se crea. Antes se
+    // exigía "no ser comentario" y la respuesta privada mandaba el comando literal:
+    // el vendedor creía haber mandado un cobro que nunca existió.
+    if (monto) {
       // Si además viene una foto, cuerpoMensajeMeta se queda con la imagen y
       // tira el texto: el link ya estaría cobrado en dLocal pero jamás se
       // manda. Mejor cortar ANTES de crear el cobro que dejar un cobro fantasma.
@@ -101,7 +106,7 @@ export async function POST(req) {
     const cuerpo = cuerpoMensajeMeta({ texto: imagen ? '' : texto, imagen })
 
     let r
-    if (esComentario && publico) {
+    if (saldraEnPublico) {
       // Respuesta pública: queda colgada del comentario, la ve todo el mundo.
       r = await graphPost(`${encodeURIComponent(comment_id)}/comments`, { message: texto }, FB_PAGE_TOKEN)
     } else if (esComentario && esIG) {
@@ -123,7 +128,7 @@ export async function POST(req) {
       // distintas. Sin el código y el contexto no hay forma de saber cuál fue.
       console.error('[/api/social/saliente] Meta rechazó — code=%s subcode=%s msg=%s | canal=%s tipo=%s modo=%s comment_id=%s sender=%s',
         err.code, err.error_subcode, err.message, canal, esComentario ? 'COMENTARIO' : 'DM',
-        publico ? 'publico' : 'privado', comment_id || '—', String(sender_id).slice(0, 8) + '…')
+        saldraEnPublico ? 'publico' : 'privado', comment_id || '—', String(sender_id).slice(0, 8) + '…')
       return NextResponse.json(
         { error: err.message || `Envío falló (HTTP ${r.status})`, code: err.code, subcode: err.error_subcode },
         { status: 502 }
@@ -139,7 +144,7 @@ export async function POST(req) {
         tipo: esComentario ? 'COMENTARIO' : 'DM',
         sender_id: String(sender_id),
         direccion: 'SALIENTE',
-        texto: publico ? `↩️ (público) ${texto}` : texto,
+        texto: saldraEnPublico ? `↩️ (público) ${texto}` : texto,
         media_url: imagen || '',
         msg_id: r.data.message_id || r.data.id || '',
         comment_id: esComentario ? String(comment_id) : '',
