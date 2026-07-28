@@ -47,10 +47,10 @@ export async function POST(req) {
     const esIG = String(canal).toUpperCase() === 'IG'
     // Única fuente de verdad para "¿esto es un comentario?": la misma función
     // decide el ENRUTAMIENTO (abajo) y las GUARDIAS de foto/LINKPAGO (aquí).
-    // Antes el enrutamiento y admiteAdjuntos(tipo) preguntaban cosas distintas
-    // y podían discrepar — un IG con comment_id pero sin tipo colaba como DM en
-    // la guardia y como comentario en el ruteo: el link de pago se creaba y
-    // salía por la rama pública. Ver lib/social-envio.js.
+    // Antes el enrutamiento y la guardia (que miraba solo `tipo`) preguntaban
+    // cosas distintas y podían discrepar — un IG con comment_id pero sin tipo
+    // colaba como DM en la guardia y como comentario en el ruteo: el link de
+    // pago se creaba y salía por la rama pública. Ver lib/social-envio.js.
     const esComentario = esHiloPublico({ tipo, canal, comment_id })
     const publico = String(modo || '') === 'publico'
 
@@ -72,6 +72,16 @@ export async function POST(req) {
     // Solo en DM: un link de pago no va en un comentario público.
     let texto = String(message || '')
     const monto = parseLinkpago(texto)
+    // En un hilo público el comando no se convierte en link (arriba), así que el
+    // texto saldría publicado LITERAL: "LINKPAGO45" colgado del comentario a la
+    // vista de todos. El vendedor viene de WhatsApp, donde ese comando es rutina:
+    // se corta acá y se le dice a dónde sí va.
+    if (monto && esComentario && publico) {
+      return NextResponse.json(
+        { error: 'Un link de pago no se puede publicar en un comentario. Responde en privado.' },
+        { status: 400 }
+      )
+    }
     if (monto && !esComentario) {
       // Si además viene una foto, cuerpoMensajeMeta se queda con la imagen y
       // tira el texto: el link ya estaría cobrado en dLocal pero jamás se
