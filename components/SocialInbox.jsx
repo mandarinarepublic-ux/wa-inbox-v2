@@ -527,11 +527,16 @@ export default function SocialInbox({ active: isVisible }) {
                 (queda colgada del comentario, la ve todo el mundo). Meta permite UNA
                 sola respuesta privada por comentario. */}
             {respondeComentario && (
-              <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:8 }}>
-                <span style={{ fontSize:10, color:'#475569' }}>Responder al comentario:</span>
+              // flexWrap: en celular (~360px) la etiqueta + los dos botones no caben en
+              // una sola línea; sin wrap la fila se desbordaba y descuadraba el input y
+              // el botón de enviar que van debajo. En móvil además se oculta la etiqueta
+              // (el aviso de "Comentario público" de la cabecera ya da ese contexto) y
+              // se usan etiquetas cortas para que quepan sin desbordar.
+              <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:6, marginBottom:8 }}>
+                {!isMobile && <span style={{ fontSize:10, color:'#475569' }}>Responder al comentario:</span>}
                 {[
-                  { id:'privado', label:'🔒 En privado (DM)' },
-                  { id:'publico', label:'🌎 En público' },
+                  { id:'privado', label: isMobile ? '🔒 Privado' : '🔒 En privado (DM)' },
+                  { id:'publico', label: isMobile ? '🌎 Público' : '🌎 En público' },
                 ].map(m => (
                   <button key={m.id} onClick={() => setModoRespuesta(m.id)} style={{
                     padding:'3px 9px', fontSize:10, fontWeight:700, borderRadius:6, cursor:'pointer',
