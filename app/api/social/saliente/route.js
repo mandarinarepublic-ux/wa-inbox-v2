@@ -3,13 +3,17 @@ import { guardarSocialMensajeSupabase, getTokenPagina, getFbPageId } from '@/lib
 import { esHiloPublico, cuerpoMensajeMeta } from '@/lib/social-envio'
 import { parseLinkpago, crearLinkPago, mensajeLinkPago } from '@/lib/dlocal'
 
-// Envío saliente del Social Inbox. Cuatro casos, cada uno con su endpoint:
+// Envío saliente del Social Inbox. Casos, cada uno con su endpoint:
 //   FB · DM         → Send API, recipient {id: PSID}
 //   IG · DM         → Send API, recipient {id: IGSID}
 //   FB · comentario → respuesta PRIVADA por /{comment_id}/private_replies
 //   IG · comentario → respuesta PRIVADA por Send API, recipient {comment_id}
-//   (cualquier comentario) con modo:'publico' → responde EN el hilo del comentario
+//   FB · comentario con modo:'publico' → POST /{comment_id}/comments (borde de Facebook)
+//   IG · comentario con modo:'publico' → POST /{comment_id}/replies  (borde de Instagram)
 // Meta permite UNA sola respuesta privada por comentario; la pública no tiene tope.
+// La pública usa un borde DISTINTO por canal — no son el mismo endpoint con nombre
+// distinto, son recursos distintos de la Graph API. Ver el comentario junto a
+// `saldraEnPublico` más abajo antes de tocar esto.
 //
 // El token de PÁGINA sale de env FB_PAGE_TOKEN o, si no está, de inbox.app_config
 // (getFbPageToken). Usa un token de Usuario del Sistema: NO caduca. Un token de
@@ -108,7 +112,19 @@ export async function POST(req) {
     let r
     if (saldraEnPublico) {
       // Respuesta pública: queda colgada del comentario, la ve todo el mundo.
-      r = await graphPost(`${encodeURIComponent(comment_id)}/comments`, { message: texto }, FB_PAGE_TOKEN)
+      // OJO: el borde de la Graph API es DISTINTO por canal, y NO es el mismo
+      // que el de la respuesta privada de arriba. No "unificar" esto pensando
+      // que es código duplicado:
+      //   - FB → POST /{comment_id}/comments   (borde de comentarios de Facebook)
+      //   - IG → POST /{comment_id}/replies    (borde de comentarios de Instagram)
+      // Antes se usaba SIEMPRE el de Facebook (/comments) también para IG. Ese
+      // endpoint no existe para un ID de comentario de Instagram, así que Meta
+      // contestaba "Unsupported post request... does not exist" — un mensaje
+      // que suena a que el comentario no existe, cuando el comentario sí existe
+      // y el token sí puede leerlo (confirmado con GET antes de este fix).
+      r = esIG
+        ? await graphPost(`${encodeURIComponent(comment_id)}/replies`, { message: texto }, FB_PAGE_TOKEN)
+        : await graphPost(`${encodeURIComponent(comment_id)}/comments`, { message: texto }, FB_PAGE_TOKEN)
     } else if (esComentario && esIG) {
       // IG: respuesta privada al comentario (abre el DM).
       r = await graphPost(RUTA_MSGS, { recipient: { comment_id: String(comment_id) }, message: cuerpo }, FB_PAGE_TOKEN)
@@ -129,8 +145,19 @@ export async function POST(req) {
       console.error('[/api/social/saliente] Meta rechazó — code=%s subcode=%s msg=%s | canal=%s tipo=%s modo=%s comment_id=%s sender=%s',
         err.code, err.error_subcode, err.message, canal, esComentario ? 'COMENTARIO' : 'DM',
         saldraEnPublico ? 'publico' : 'privado', comment_id || '—', String(sender_id).slice(0, 8) + '…')
+      // Rama de respuesta PÚBLICA a un comentario: Meta mezcla en el mismo
+      // mensaje genérico tres causas muy distintas (endpoint equivocado,
+      // permiso de App Review pendiente, o comentario borrado por el autor) y
+      // el vendedor no tiene forma de distinguirlas. El endpoint ya es el
+      // correcto por canal (ver arriba), así que si de todos modos falla, lo
+      // más probable en la práctica es que a la app le falte la aprobación de
+      // `instagram_manage_comments` en App Review. Se deja el mensaje de Meta,
+      // el code y el subcode TAL CUAL para no perder información al depurar.
+      const pista = saldraEnPublico
+        ? ' Si el problema persiste, lo más probable es que falte la aprobación de "instagram_manage_comments" en App Review de Meta (también puede ser que el comentario haya sido borrado por su autor).'
+        : ''
       return NextResponse.json(
-        { error: err.message || `Envío falló (HTTP ${r.status})`, code: err.code, subcode: err.error_subcode },
+        { error: (err.message || `Envío falló (HTTP ${r.status})`) + pista, code: err.code, subcode: err.error_subcode },
         { status: 502 }
       )
     }
