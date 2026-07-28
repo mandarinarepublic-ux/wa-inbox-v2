@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert'
 import { claveConversacion, agruparConversaciones } from '../lib/social-agrupar.js'
 import { admiteAdjuntos, cuerpoMensajeMeta, esHiloPublico } from '../lib/social-envio.js'
+import { estadoVentana } from '../lib/social-ventana.js'
 
 const base = { canal: 'IG', sender_id: '660529760420669', direccion: 'ENTRANTE', estado: 'PENDIENTE' }
 
@@ -114,4 +115,39 @@ test('esHiloPublico: DM de FB no es publico', () => {
 test('esHiloPublico: DM de IG sin comment_id no es publico', () => {
   assert.equal(esHiloPublico({ tipo: 'DM', canal: 'IG' }), false)
   assert.equal(esHiloPublico({ canal: 'IG' }), false)
+})
+
+const AHORA = new Date('2026-07-27T23:00:00Z').getTime()
+
+test('recien escrito: ventana abierta con casi 24 h', () => {
+  const v = estadoVentana('2026-07-27T22:30:00Z', AHORA)
+  assert.equal(v.abierta, true)
+  assert.equal(v.horasRestantes, 23)
+})
+
+test('a 23 h del mensaje queda 1 h', () => {
+  const v = estadoVentana('2026-07-27T00:00:00Z', AHORA)
+  assert.equal(v.abierta, true)
+  assert.equal(v.horasRestantes, 1)
+})
+
+test('pasadas las 24 h la ventana esta cerrada', () => {
+  const v = estadoVentana('2026-07-17T20:55:00Z', AHORA)
+  assert.equal(v.abierta, false)
+  assert.equal(v.horasRestantes, 0)
+})
+
+test('justo en el limite cuenta como cerrada', () => {
+  const v = estadoVentana('2026-07-26T23:00:00Z', AHORA)
+  assert.equal(v.abierta, false)
+})
+
+test('sin mensaje del cliente la ventana esta cerrada', () => {
+  assert.equal(estadoVentana('', AHORA).abierta, false)
+  assert.equal(estadoVentana(null, AHORA).abierta, false)
+})
+
+test('la etiqueta dice las horas que quedan, o que se cerro', () => {
+  assert.equal(estadoVentana('2026-07-27T22:30:00Z', AHORA).etiqueta, '⏳ 23 h para responder')
+  assert.equal(estadoVentana('2026-07-17T20:55:00Z', AHORA).etiqueta, '🔒 Cerrada')
 })

@@ -1,5 +1,7 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { fmtTime } from '@/lib/utils'
+import { estadoVentana } from '@/lib/social-ventana'
 
 // ── CONFIG ──────────────────────────────────────────────────────────────────
 // Los datos ya NO se leen de la hoja SOCIAL de Google Sheets: vienen de Supabase
@@ -112,7 +114,7 @@ function ConvRow({ conv, isActive, onClick }) {
       <div style={{ flex:1, minWidth:0 }}>
         <div style={{ display:'flex', justifyContent:'space-between', marginBottom:2 }}>
           <span style={{ fontSize:13, fontWeight:700, color:'#e2e8f0', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:130 }}>{conv.nombre}</span>
-          <span style={{ fontSize:9, color:'#334155', flexShrink:0 }}>{conv.last_time ? new Date(conv.last_time).toLocaleTimeString('es-EC', { hour:'2-digit', minute:'2-digit' }) : ''}</span>
+          <span style={{ fontSize:9, color:'#334155', flexShrink:0 }}>{fmtTime(conv.last_time)}</span>
         </div>
         <div style={{ display:'flex', gap:4, marginBottom:3, alignItems:'center' }}>
           <ChannelBadge channel={conv.canal} />
@@ -159,8 +161,9 @@ function MsgBubble({ msg, channel }) {
         )}
         {msg.text && <div>{msg.text}</div>}
         {msg.time && (
-          <div style={{ fontSize:9, opacity:.5, marginTop:4, textAlign:'right' }}>
-            {new Date(msg.time).toLocaleTimeString('es-EC', { hour:'2-digit', minute:'2-digit' })}
+          <div style={{ fontSize:9, opacity:.5, marginTop:4, textAlign:'right' }}
+               title={new Date(msg.time).toLocaleString('es-EC', { timeZone:'America/Guayaquil', dateStyle:'full', timeStyle:'short' })}>
+            {fmtTime(msg.time)}
           </div>
         )}
       </div>
@@ -249,6 +252,11 @@ export default function SocialInbox({ active: isVisible }) {
   // Camino real del envío: al comentario si es público (siempre se puede) o si la
   // ventana privada sigue abierta. Si no, DM.
   const iraAlComentario = hayComentario && (modoRespuesta === 'publico' || comentarioVigente)
+  // Ventana de 24 h de Meta para el DM, contada desde el ÚLTIMO MENSAJE DEL
+  // CLIENTE (no desde el último saliente: si no, el vendedor cree que tiene
+  // tiempo cuando ya se cerró).
+  const ventana = estadoVentana(ultimoDelCliente?.time)
+  const windowOpen = ventana.abierta
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -458,10 +466,13 @@ export default function SocialInbox({ active: isVisible }) {
             )}
             <SocialAvatar name={selectedConv.nombre} channel={selectedConv.canal} />
             <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                <span style={{ fontSize:14, fontWeight:800, color:'#e2e8f0', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{selectedConv.nombre}</span>
+              <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap', rowGap:2 }}>
+                <span style={{ fontSize:14, fontWeight:800, color:'#e2e8f0', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'100%' }}>{selectedConv.nombre}</span>
                 <ChannelBadge channel={selectedConv.canal} />
                 <TipoBadge tipo={selectedConv.tipo} />
+                <span style={{ fontSize:10, fontWeight:700, color: ventana.abierta ? '#25d366' : '#f87171', flexShrink:0 }}>
+                  {ventana.etiqueta}
+                </span>
               </div>
               <div style={{ fontSize:10, color:'#475569', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{CHANNEL_META[selectedConv.canal]?.label} · {selectedConv.sender_id}</div>
               {/* Aviso fijo (no solo un badge chiquito): un comentario es público y
@@ -523,6 +534,18 @@ export default function SocialInbox({ active: isVisible }) {
 
           {/* Input */}
           <div style={{ padding:'10px 16px 14px', background:'#0a0f1a', borderTop:'1px solid #111c2a', flexShrink:0 }}>
+            {/* Ventana cerrada y no es un comentario (que tiene su propio camino público
+                sin límite de tiempo): avisar ANTES de escribir, no dejar que Meta rebote
+                el mensaje después de que el vendedor ya lo redactó entero. */}
+            {!windowOpen && selectedConv.tipo !== 'COMENTARIO' ? (
+              <div style={{ padding:'12px 16px', background:'#1a1116', border:'1px solid #3a1f28',
+                            borderRadius:12, color:'#f87171', fontSize:12, lineHeight:1.5 }}>
+                🔒 <b>Pasaron más de 24 h desde el último mensaje del cliente.</b><br />
+                Meta ya no deja responder por aquí, y en Facebook e Instagram no hay plantillas
+                para reabrir la conversación. Toca esperar a que el cliente escriba de nuevo.
+              </div>
+            ) : (
+            <>
             {/* Comentario: elegir si la respuesta es privada (abre el DM) o pública
                 (queda colgada del comentario, la ve todo el mundo). Meta permite UNA
                 sola respuesta privada por comentario. */}
@@ -588,6 +611,8 @@ export default function SocialInbox({ active: isVisible }) {
             <div style={{ fontSize:9, color:'#2a3f55', marginTop:4, textAlign:'right' }}>
               {isMobile ? 'Toca ➤ para enviar' : 'Enter · Shift+Enter nueva línea'}
             </div>
+            </>
+            )}
           </div>
         </div>
       ) : (
