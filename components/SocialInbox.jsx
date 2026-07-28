@@ -82,6 +82,62 @@ function PautaBadge({ conv }) {
   )
 }
 
+// ── EMOJI PICKER (COPIA DELIBERADA de components/App.jsx, líneas ~52-100) ────
+// Es una COPIA, no algo compartido con App.jsx. Decisión del dueño: "al final
+// es algo que no va a cambiar y es poco usado" — una lista de emojis estática
+// tiene una deriva ~0, y compartirla obligaría a sacarla de App.jsx (que corre
+// el WhatsApp de producción) para ganar nada. Si agregas o cambias un emoji,
+// hazlo TAMBIÉN en App.jsx: quedan dos listas a propósito, no una por olvido.
+const EMOJI_CATS = [
+  { label:'😊', title:'Expresiones', emojis:['😊','😄','😂','🤣','😍','🥰','😘','😎','🤩','😜','😅','😭','😢','😡','🤔','🙏','👍','👎','❤️','🔥','💯','✅','⭐','🎉','🎊','💪','👏','🙌','💰','💸','🤝','😏','🫶','😋','🤑'] },
+  { label:'👕', title:'Ropa', emojis:['👕','👔','🧥','🧣','🧤','👗','👖','👟','👠','👜','🛍️','📦','🚚','💳','🏷️','📸','✂️','🎨','🖼️','📐','🧵','🪡','👒','🎒','💎','🪄','🎭','🎪'] },
+  { label:'✍️', title:'Negocio', emojis:['✍️','📝','📋','📌','📍','🔍','🔎','💡','⚡','🌟','💫','✨','🎯','📊','📈','📉','🗓️','⏰','🔔','📣','📲','💬','🗣️','📞','📧','🤖','🏆','🥇','💼','🔐'] },
+  { label:'🌎', title:'Lugares', emojis:['🌎','🇪🇨','🏠','🏪','📍','🗺️','✈️','🚗','🛵','🚴','🌤️','☀️','🌙','🌈','🌊','🌺','🌸','🍀','🎋','🏔️','🌴','🏖️','🌆','🏡','🛒'] },
+]
+
+function EmojiPicker({ onSelect, onClose }) {
+  const [cat,    setCat]    = useState(0)
+  const [search, setSearch] = useState('')
+  const allEmojis = EMOJI_CATS.flatMap(c => c.emojis)
+  const displayed = search.trim() ? allEmojis.filter(e => e.includes(search)) : EMOJI_CATS[cat].emojis
+  return (
+    <div style={{ position:'absolute', bottom:'100%', left:0, right:0, marginBottom:8, background:'#0d1828', border:'1px solid rgba(245,158,11,.25)', borderRadius:14, zIndex:60, overflow:'hidden', boxShadow:'0 8px 32px rgba(0,0,0,.6)' }}>
+      {/* Búsqueda */}
+      <div style={{ padding:'8px 10px 6px', borderBottom:'1px solid #111c2a', display:'flex', gap:6, alignItems:'center' }}>
+        <span style={{ fontSize:13, color:'#475569' }}>🔍</span>
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar emoji..."
+          autoFocus
+          style={{ flex:1, background:'transparent', border:'none', outline:'none', color:'#e2e8f0', fontSize:12, fontFamily:'Outfit,sans-serif' }} />
+        <button onClick={onClose} style={{ background:'transparent', border:'none', color:'#475569', cursor:'pointer', fontSize:15, padding:0, lineHeight:1 }}>✕</button>
+      </div>
+      {/* Tabs */}
+      {!search.trim() && (
+        <div style={{ display:'flex', borderBottom:'1px solid #111c2a' }}>
+          {EMOJI_CATS.map((c,i) => (
+            <button key={i} onClick={() => setCat(i)} title={c.title}
+              style={{ flex:1, padding:'7px 0', background: cat===i ? 'rgba(245,158,11,.1)' : 'transparent', border:'none', borderBottom: cat===i ? '2px solid #f59e0b' : '2px solid transparent', cursor:'pointer', fontSize:18, transition:'all .15s' }}>
+              {c.label}
+            </button>
+          ))}
+        </div>
+      )}
+      {/* Grid */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(9,1fr)', gap:1, padding:'8px', maxHeight:190, overflowY:'auto' }}>
+        {displayed.map((emoji, i) => (
+          <button key={i} onClick={() => onSelect(emoji)}
+            style={{ background:'transparent', border:'none', borderRadius:7, cursor:'pointer', fontSize:22, padding:'5px 2px', lineHeight:1, transition:'background .1s' }}
+            onMouseEnter={e => e.currentTarget.style.background='rgba(255,255,255,.08)'}
+            onMouseLeave={e => e.currentTarget.style.background='transparent'}
+          >{emoji}</button>
+        ))}
+        {displayed.length === 0 && (
+          <div style={{ gridColumn:'1/-1', textAlign:'center', padding:'20px 0', color:'#334155', fontSize:12 }}>Sin resultados</div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── COMPONENTES ──────────────────────────────────────────────────────────────
 
 function ChannelBadge({ channel }) {
@@ -249,7 +305,9 @@ export default function SocialInbox({ active: isVisible }) {
   const [isMobile, setIsMobile] = useState(false)
   const [mediaInfo, setMediaInfo] = useState(null) // publicación/anuncio que comentó el cliente
   const [subiendo, setSubiendo] = useState(false)
+  const [showEmoji, setShowEmoji] = useState(false)
   const fileRef = useRef(null)
+  const textareaRef = useRef(null)
   const bottomRef = useRef(null)
   const pollRef   = useRef(null)
   const mediaCacheRef = useRef({}) // cache por media id → info de la publicación
@@ -478,6 +536,25 @@ export default function SocialInbox({ active: isVisible }) {
       setSubiendo(false)
     }
   }, [enviarSocial, load])
+
+  // Inserta el emoji en la POSICIÓN DEL CURSOR, no al final: si el vendedor
+  // escribió "hola  cómo estás" con el cursor en medio, el emoji va ahí. Después
+  // devuelve el foco al textarea con el cursor justo DESPUÉS del emoji insertado,
+  // para poder seguir escribiendo sin tener que volver a tocar el campo.
+  const insertarEmoji = (emoji) => {
+    const ta = textareaRef.current
+    if (!ta) { setInput(prev => prev + emoji); return }
+    const inicio = ta.selectionStart ?? input.length
+    const fin    = ta.selectionEnd ?? input.length
+    setInput(input.slice(0, inicio) + emoji + input.slice(fin))
+    // Después de re-renderizar el textarea con el valor nuevo (React es
+    // controlado): recién ahí existe la posición nueva a la que mover el cursor.
+    requestAnimationFrame(() => {
+      ta.focus()
+      const pos = inicio + emoji.length
+      ta.setSelectionRange(pos, pos)
+    })
+  }
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -962,8 +1039,10 @@ export default function SocialInbox({ active: isVisible }) {
             <div ref={bottomRef} />
           </div>
 
-          {/* Input */}
-          <div style={{ padding:'10px 16px 14px', background:'#0a0f1a', borderTop:'1px solid #111c2a', flexShrink:0 }}>
+          {/* Input — position:relative: el panel de emojis se ancla a ESTE
+              contenedor (bottom:100%) para abrirse hacia arriba, encima del
+              compositor, y así nunca tapa el textarea ni en pantalla chica. */}
+          <div style={{ padding:'10px 16px 14px', background:'#0a0f1a', borderTop:'1px solid #111c2a', flexShrink:0, position:'relative' }}>
             {/* Ventana cerrada y no es un comentario (que tiene su propio camino público
                 sin límite de tiempo): avisar ANTES de escribir, no dejar que Meta rebote
                 el mensaje después de que el vendedor ya lo redactó entero. */}
@@ -1006,6 +1085,7 @@ export default function SocialInbox({ active: isVisible }) {
             <div style={{ display:'flex', gap:8, alignItems:'flex-end' }}>
               <div style={{ flex:1, minWidth:0, background:'#111c2a', border:'1px solid #1e2d3d', borderRadius:13, padding:'9px 13px' }}>
                 <textarea
+                  ref={textareaRef}
                   value={input}
                   onChange={e => setInput(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !isMobile) { e.preventDefault(); handleSend() } }}
@@ -1014,6 +1094,18 @@ export default function SocialInbox({ active: isVisible }) {
                   style={{ width:'100%', background:'transparent', border:'none', outline:'none', color:'#e2e8f0', fontSize:16, resize:'none', lineHeight:1.5, minHeight:40, maxHeight:100, overflowY:'auto', fontFamily:'Outfit,sans-serif' }}
                 />
               </div>
+              {/* Emoji: disponible en las DOS bandejas (Mensajes y Comentarios) y en
+                  cualquier modo de respuesta — a diferencia de la foto (📎), un emoji
+                  es texto plano y un comentario público admite texto sin problema. */}
+              <button onClick={() => setShowEmoji(p => !p)} title="Emojis" style={{
+                width:42, height:42, flexShrink:0, borderRadius:11, fontSize:20, cursor:'pointer',
+                background: showEmoji ? 'rgba(245,158,11,.15)' : '#111c2a',
+                border: `1px solid ${showEmoji ? 'rgba(245,158,11,.4)' : '#1e2d3d'}`,
+                display:'flex', alignItems:'center', justifyContent:'center', transition:'all .15s',
+              }}>😊</button>
+              {showEmoji && (
+                <EmojiPicker onSelect={insertarEmoji} onClose={() => setShowEmoji(false)} />
+              )}
               {/* Se oculta cuando el envío va al hilo público (una foto ahí no se puede)
                   o a la respuesta privada del comentario (Meta solo acepta texto por
                   ese endpoint). Es `iraAlComentario`, no el tipo del hilo: un comentario
