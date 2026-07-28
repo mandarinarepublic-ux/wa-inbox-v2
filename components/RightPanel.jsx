@@ -218,8 +218,12 @@ const TABS = [
 // Etiqueta del catálogo online en el selector de la pestaña Tienda (este inbox = Mandarina).
 const CATALOGO_LABEL = 'Mandarina'
 
-export default function RightPanel({ activeConv, onQuickReply, onSendText, onSendImage, onSendProducto, contactInfo, onUpdateContact, windowOpen }) {
-  const [tab, setTab]           = useState('respuestas')
+// pestanas: qué pestañas mostrar y en qué orden. Por defecto las tres de siempre
+// (WhatsApp), así App.jsx sigue igual sin tocar una línea. SOCIAL pasa un subconjunto:
+// nunca 'ventas' (escribiría contactos basura con el sender_id como si fuera teléfono),
+// y en un hilo de COMENTARIO tampoco 'tienda' (es público).
+export default function RightPanel({ activeConv, onQuickReply, onSendText, onSendImage, onSendProducto, contactInfo, onUpdateContact, windowOpen, pestanas = ['respuestas', 'ventas', 'tienda'] }) {
+  const [tab, setTab]           = useState(pestanas[0] || 'respuestas')
   const [countdown, setCountdown] = useState('')
 
   // ── Contador regresivo ventana 24h ───────────────────────────
@@ -492,7 +496,7 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
 
       {/* ── BARRA DE PESTAÑAS ── */}
       <div style={{ flexShrink:0, display:'flex', background:'#0a1019', borderBottom:'1px solid #111c2a' }}>
-        {TABS.map(t => {
+        {TABS.filter(t => pestanas.includes(t.id)).map(t => {
           const active = tab === t.id
           return (
             <button key={t.id} onClick={() => setTab(t.id)}

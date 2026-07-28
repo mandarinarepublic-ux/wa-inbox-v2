@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { fmtTime } from '@/lib/utils'
 import { estadoVentana } from '@/lib/social-ventana'
+import RightPanel from '@/components/RightPanel'
 
 // ── CONFIG ──────────────────────────────────────────────────────────────────
 // Los datos ya NO se leen de la hoja SOCIAL de Google Sheets: vienen de Supabase
@@ -180,8 +181,6 @@ export default function SocialInbox({ active: isVisible }) {
   const [input, setInput]       = useState('')
   const [sending, setSending]   = useState(false)
   const [lastSync, setLastSync] = useState(null)
-  const [quickReplies, setQuickReplies] = useState([]) // mismas respuestas que WhatsApp (RESPUESTAS_RAPIDAS)
-  const [showQR, setShowQR]     = useState(false)
   const [modoRespuesta, setModoRespuesta] = useState('privado') // comentarios: 'privado' | 'publico'
   const [isMobile, setIsMobile] = useState(false)
   const [mediaInfo, setMediaInfo] = useState(null) // publicación/anuncio que comentó el cliente
@@ -226,15 +225,6 @@ export default function SocialInbox({ active: isVisible }) {
     return () => clearInterval(pollRef.current)
   }, [isVisible, load])
 
-  // Respuestas rápidas: las MISMAS que WhatsApp (hoja RESPUESTAS_RAPIDAS vía /api/respuestas).
-  useEffect(() => {
-    if (!isVisible) return
-    fetch('/api/respuestas')
-      .then(r => (r.ok ? r.json() : []))
-      .then(data => { if (Array.isArray(data)) setQuickReplies(data) })
-      .catch(() => {})
-  }, [isVisible])
-
   const selectedConv = convs.find(c => convKey(c) === selected) || null
   // CÓMO se responde. Meta pone dos relojes distintos y hay que respetarlos:
   //   · respuesta PRIVADA a un comentario → solo dentro de 7 días, y una sola vez
@@ -257,6 +247,94 @@ export default function SocialInbox({ active: isVisible }) {
   // tiempo cuando ya se cerró).
   const ventana = estadoVentana(ultimoDelCliente?.time)
   const windowOpen = ventana.abierta
+
+  // RightPanel habla el idioma de WhatsApp (telefono/nombre/msgs con direccion+timestamp).
+  // Se traduce acá para no tocarlo — su interfaz no sabe nada de FB/IG. El prefijo del
+  // canal en "telefono" evita que un sender_id de IG choque con uno de FB o de WhatsApp.
+  const convParaPanel = selectedConv ? {
+    telefono: `${selectedConv.canal}:${selectedConv.sender_id}`,
+    nombre: selectedConv.nombre,
+    msgs: selectedConv.messages.map(m => ({
+      direccion: m.from === 'user' ? 'ENTRANTE' : 'SALIENTE',
+      timestamp: m.time,
+      mensaje: m.text,
+    })),
+  } : null
+
+  // Un envío suelto (texto O imagen) para las acciones del panel único. Dentro de la
+  // ventana de 24 h no hay turnos: se pueden encadenar varios sin esperar al cliente.
+  const enviarSocial = useCallback(async ({ texto, imagen }) => {
+    if (!selectedConv) return
+    const res = await fetch('/api/social/saliente', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sender_id: selectedConv.sender_id,
+        canal: selectedConv.canal,
+        tipo: selectedConv.tipo,
+        comment_id: selectedConv.tipo === 'COMENTARIO' ? (ultimoDelCliente?.id || '') : '',
+        modo: selectedConv.tipo === 'COMENTARIO' ? modoRespuesta : 'privado',
+        message: texto || '',
+        imagen: imagen || '',
+      }),
+    })
+    // /api/social/saliente ya valida (foto en comentario, LINKPAGO en público, etc.)
+    // con mensajes entendibles: no se repiten esas reglas acá, solo se propaga el error.
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`)
+    return data
+  }, [selectedConv, ultimoDelCliente, modoRespuesta])
+
+  // Respuesta rápida del panel: el texto y luego cada foto, en orden (Meta no admite
+  // texto + adjunto en un mismo mensaje). En un COMENTARIO se manda solo el texto:
+  // es público y una foto ahí no correspondía.
+  const onQuickReply = useCallback(async (reply, onProgress) => {
+    const imgs = Array.from({ length: 10 }, (_, i) =>
+      i === 0 ? reply.imageUrl : reply[`imageUrl${i + 1}`]
+    ).filter(Boolean)
+    const soloTexto = selectedConv?.tipo === 'COMENTARIO'
+    const aMandar = soloTexto ? [] : imgs
+    const total = (reply.text ? 1 : 0) + aMandar.length
+    let hechas = 0
+    try {
+      if (reply.text) { await enviarSocial({ texto: reply.text }); onProgress?.(++hechas, total) }
+      for (const url of aMandar) { await enviarSocial({ imagen: url }); onProgress?.(++hechas, total) }
+      if (soloTexto && imgs.length) {
+        alert('Es un comentario público: se mandó solo el texto. Responde en privado para poder mandar las fotos.')
+      }
+    } catch (e) {
+      alert('❌ No se pudo enviar: ' + e.message)
+    }
+    load()
+  }, [selectedConv, enviarSocial, load])
+
+  const onSendImage = useCallback(async (imageUrl) => {
+    try { await enviarSocial({ imagen: imageUrl }) }
+    catch (e) { alert('❌ No se pudo enviar la foto: ' + e.message) }
+    load()
+  }, [enviarSocial, load])
+
+  // Producto del catálogo (pestaña Tienda, nunca en un hilo de comentario). RightPanel
+  // manda (p, modo): 'foto' solo la imagen, 'info' primero título+precio y luego la
+  // imagen. p.image/p.title/p.price son los mismos campos que usa handleSendProducto
+  // en App.jsx (vienen de /api/tienda) — no "imagen/titulo/precio".
+  const onSendProducto = useCallback(async (p, modo = 'foto') => {
+    try {
+      if (modo === 'info') {
+        const detalle = [p.title, p.price ? `$${p.price}` : ''].filter(Boolean).join(' — ')
+        if (detalle) await enviarSocial({ texto: detalle })
+      }
+      if (p.image) await enviarSocial({ imagen: p.image })
+    } catch (e) { alert('❌ No se pudo enviar el producto: ' + e.message) }
+    load()
+  }, [enviarSocial, load])
+
+  const onSendText = useCallback(async (texto, copiarAlInput) => {
+    if (copiarAlInput) { setInput(texto); return }
+    try { await enviarSocial({ texto }) }
+    catch (e) { alert('❌ No se pudo enviar: ' + e.message) }
+    load()
+  }, [enviarSocial, load])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -302,7 +380,6 @@ export default function SocialInbox({ active: isVisible }) {
 
   const openConv = (conv) => {
     setSelected(convKey(conv))
-    setShowQR(false)
     if (isMobile && !backGuardRef.current) {
       window.history.pushState({ social: 'chat' }, '')
       backGuardRef.current = true
@@ -313,7 +390,6 @@ export default function SocialInbox({ active: isVisible }) {
     // Volver SIEMPRE a la lista de forma directa (no depender de popstate, que en
     // algunos webviews de celular no dispara). Si empujamos una entrada de historial
     // al abrir el chat, la consumimos para dejar el historial limpio.
-    setShowQR(false)
     setSelected(null)
     if (backGuardRef.current) {
       backGuardRef.current = false
@@ -580,27 +656,9 @@ export default function SocialInbox({ active: isVisible }) {
                 ))}
               </div>
             )}
-            {/* Respuestas rápidas (mismas que WhatsApp) */}
-            {showQR && (
-              quickReplies.length > 0 ? (
-                <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:8, maxHeight:130, overflowY:'auto' }}>
-                  {quickReplies.map(qr => (
-                    <button key={qr.id} onClick={() => { setInput(qr.text || ''); setShowQR(false) }}
-                      style={{ padding:'5px 12px', borderRadius:20, background:'#111c2a', border:'1px solid #1e2d3d', color:'#94a3b8', fontSize:12, cursor:'pointer', display:'flex', alignItems:'center', gap:6, fontFamily:'Outfit,sans-serif' }}>
-                      {qr.imageUrl && <img src={qr.imageUrl} alt="" style={{ width:18, height:18, borderRadius:3, objectFit:'cover' }} />}
-                      {(qr.text || '').substring(0, 40)}{(qr.text || '').length > 40 ? '…' : ''}
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <div style={{ marginBottom:8, fontSize:11, color:'#334155' }}>Sin respuestas rápidas. Agrégalas en MANDI (hoja RESPUESTAS_RAPIDAS).</div>
-              )
-            )}
+            {/* Las respuestas rápidas (con fotos, botones, etc.) ahora viven en el panel
+                único de la derecha (pestaña ⚡ Respuestas) — no se duplican acá. */}
             <div style={{ display:'flex', gap:8, alignItems:'flex-end' }}>
-              <button onClick={() => setShowQR(s => !s)} title="Respuestas rápidas"
-                style={{ width:42, height:42, flexShrink:0, borderRadius:11, background: showQR ? '#f59e0b' : '#111c2a', border:`1px solid ${showQR ? '#f59e0b' : '#1e2d3d'}`, color: showQR ? '#fff' : '#64748b', fontSize:17, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                ⚡
-              </button>
               <div style={{ flex:1, minWidth:0, background:'#111c2a', border:'1px solid #1e2d3d', borderRadius:13, padding:'9px 13px' }}>
                 <textarea
                   value={input}
@@ -633,6 +691,30 @@ export default function SocialInbox({ active: isVisible }) {
           </div>
         </div>
       ))}
+
+      {/* ── PANEL ÚNICO (Respuestas/Tienda) — solo escritorio y con chat abierto.
+          En móvil este panel tapa toda la pantalla (son 340px fijos), por eso no se
+          monta ahí: la conversación y el input tienen que seguir viéndose enteros. */}
+      {!isMobile && selectedConv && (
+        <div style={{ width: 340, flexShrink: 0, borderLeft: '1px solid #162030', display: 'flex' }}>
+          <RightPanel
+            activeConv={convParaPanel}
+            contactInfo={null}
+            // El botón "Enviar" del panel se apaga solo con windowOpen=false: eso es
+            // correcto para un DM (ventana de 24h de Meta), pero un COMENTARIO siempre
+            // tiene un camino válido (público sin límite, o privado dentro de 7 días con
+            // fallback a público) — nunca "se cierra" como un DM. Sin este `true` fijo,
+            // un comentario de ayer dejaría el botón apagado aunque Meta sí lo aceptara.
+            windowOpen={selectedConv.tipo === 'COMENTARIO' ? true : windowOpen}
+            pestanas={selectedConv.tipo === 'COMENTARIO' ? ['respuestas'] : ['respuestas', 'tienda']}
+            onQuickReply={onQuickReply}
+            onSendText={onSendText}
+            onSendImage={onSendImage}
+            onSendProducto={onSendProducto}
+            onUpdateContact={() => {}}
+          />
+        </div>
+      )}
     </div>
   )
 }
