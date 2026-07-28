@@ -63,6 +63,23 @@ ocurren. Meter ahí 💰 Ventas y 🎧 Soporte sería vocabulario que nadie usa.
 - Buena parte de la lógica de "¿qué puedo hacer aquí?" en el componente: la respuesta
   pasa a depender de en qué bandeja estás, no de inspeccionar cada conversación.
 
+## Selector de emojis
+
+WhatsApp tiene uno con buscador y cuatro categorías hechas a medida del negocio
+(Expresiones, Ropa, Negocio, Lugares — con 🇪🇨 y 👕🛍️📦🚚). SOCIAL no tiene nada.
+
+**Se COPIA a `SocialInbox.jsx`, no se comparte.** Decisión del dueño, con su razón:
+*"al final es algo que no va a cambiar y es poco usado"*. Y es correcta — el costo de
+duplicar es proporcional a cuánto cambia la cosa, y una lista de emojis estática
+tiene una deriva cercana a cero. Compartirlo obligaría a extraerlo de `App.jsx`, el
+archivo que corre el WhatsApp de producción, y ese riesgo no se paga solo para
+sincronizar una lista que nadie va a tocar.
+
+Queda dicho para el futuro: si algún día se agregan emojis, van en dos sitios.
+
+En la bandeja de Comentarios el botón también aplica: un emoji es texto, y un
+comentario admite texto.
+
 ## Datos
 
 **Vocabulario unificado con WhatsApp**, en minúsculas: `pendiente`, `atendido`,
