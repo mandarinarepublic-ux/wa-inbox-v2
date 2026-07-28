@@ -13,7 +13,12 @@ export const revalidate = 0
 export async function POST(req) {
   try {
     const { canal, sender_id, estado, temperatura, tipo } = await req.json()
-    if (!sender_id || (!estado && !temperatura)) {
+    // OJO: quitar la marca de temperatura manda `temperatura: ''` a propósito (es un
+    // valor válido, "sin clasificar"). Si acá se negara con `!temperatura` esa petición
+    // se rechazaría con 400 antes de llegar a updateSocialEstadoSupabase, que sí sabe
+    // interpretar el vacío como "quitar". Lo que hay que exigir es que el campo HAYA
+    // VENIDO, no que no esté vacío — igual que /api/contactos/estado con `valor`.
+    if (!sender_id || (estado === undefined && temperatura === undefined)) {
       return NextResponse.json({ error: 'faltan sender_id y (estado o temperatura)' }, { status: 400 })
     }
     await updateSocialEstadoSupabase(canal || 'FB', sender_id, { estado, temperatura }, tipo)

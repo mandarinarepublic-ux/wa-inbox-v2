@@ -148,7 +148,7 @@ export async function POST(req) {
         media_url: imagen || '',
         msg_id: r.data.message_id || r.data.id || '',
         comment_id: esComentario ? String(comment_id) : '',
-        estado: 'ATENDIDO',
+        estado: 'atendido', // vocabulario de WhatsApp en minúsculas (normalizarEstado lo exige)
       })
     } catch (e) {
       console.error('[/api/social/saliente] no se pudo registrar en Supabase:', e.message)

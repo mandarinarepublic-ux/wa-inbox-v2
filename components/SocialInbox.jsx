@@ -14,12 +14,37 @@ const CHANNEL_META = {
   IG: { label: 'Instagram', color: '#E1306C', bg: 'rgba(225,48,108,.12)', icon: '📸' },
 }
 
-const STATUS_COLORS = {
-  PENDIENTE:     { bg: 'rgba(248,113,113,.15)', color: '#f87171' },
-  VENTAPROCESO:  { bg: 'rgba(245,158,11,.15)',  color: '#f59e0b' },
-  ATENDIDO:      { bg: 'rgba(74,222,128,.15)',   color: '#4ade80' },
-  ARCHIVADO:     { bg: 'rgba(100,116,139,.15)',  color: '#64748b' },
+// Vocabulario de bandeja (Eje 1) — el mismo de WhatsApp, en minúsculas, con los
+// mismos iconos y colores de components/App.jsx (leídos de ahí, sin tocar ese
+// archivo). 'venta' y 'soporte' NO aparecen en Comentarios: la venta y el lead se
+// siguen en el DM, que es donde ocurren de verdad.
+const STATUS_META = {
+  pendiente: { icon:'🔴', label:'Pendiente', filterLabel:'🔴 Pendientes', color:'#f87171' },
+  atendido:  { icon:'🟢', label:'Atendido',  filterLabel:'🟢 Atendidos',  color:'#4ade80' },
+  venta:     { icon:'💰', label:'Venta',     filterLabel:'💰 Ventas',     color:'#10b981' },
+  soporte:   { icon:'🎧', label:'Soporte',   filterLabel:'🎧 Soporte',    color:'#a78bfa' },
+  archivado: { icon:'⚫', label:'Archivado', filterLabel:'⚫ Archivados', color:'#64748b' },
 }
+const FILTROS_MENSAJES    = ['pendiente', 'atendido', 'venta', 'soporte', 'archivado']
+const FILTROS_COMENTARIOS = ['pendiente', 'atendido', 'archivado']
+
+// Eje 2 (temperatura del lead): 100% manual, nada la cambia sola. Solo tiene
+// sentido en Mensajes — un comentario público no es un lead que se "enfríe", el
+// lead vive en el DM (ver restricciones.md).
+const TEMPERATURAS = [
+  { key:'caliente', icon:'🔥', label:'Caliente', color:'#f97316' },
+  { key:'tibio',    icon:'🌤️', label:'Tibio',    color:'#fbbf24' },
+  { key:'frio',     icon:'❄️', label:'Frío',     color:'#38bdf8' },
+]
+const TEMP_META = Object.fromEntries(TEMPERATURAS.map(t => [t.key, t]))
+
+// Las dos bandejas: DÓNDE ESTÁS PARADO, no una etiqueta que hay que leer en cada
+// fila. Un DM es privado y un comentario es público — confundirlos ya le costó al
+// dueño escribir datos de entrega a la vista de cualquiera.
+const BANDEJAS = [
+  { key:'mensajes',    icon:'✉️', label:'Mensajes',    sub:'Privado — DM',  color:'#25d366' },
+  { key:'comentarios', icon:'💬', label:'Comentarios', sub:'Público',       color:'#f59e0b' },
+]
 
 // Devuelve la info de pauta lista para mostrar, o null si la conversación no vino
 // de un anuncio/publicación.
@@ -61,27 +86,15 @@ function ChannelBadge({ channel }) {
   )
 }
 
-// Un comentario es PÚBLICO (lo ve cualquiera) y un DM es PRIVADO. El mismo cliente
-// puede tener un hilo de cada tipo: este distintivo evita que el vendedor confunda
-// uno con otro y pida datos de entrega en un comentario público.
-function TipoBadge({ tipo }) {
-  const esComentario = tipo === 'COMENTARIO'
-  return (
-    <span style={{
-      padding:'1px 6px', borderRadius:5, fontSize:9, fontWeight:800,
-      background: esComentario ? 'rgba(245,158,11,.15)' : 'rgba(37,211,102,.12)',
-      color: esComentario ? '#f59e0b' : '#25d366',
-    }}>
-      {esComentario ? '💬 PÚBLICO' : '✉️ PRIVADO'}
-    </span>
-  )
-}
+// PÚBLICO/PRIVADO ya NO es un badge por fila: ahora es la bandeja en la que estás
+// parado (ver BANDEJAS más abajo). Leer un badge en cada fila era exactamente el
+// punto de error que el dueño reportó.
 
 function StatusBadge({ status }) {
-  const s = STATUS_COLORS[status] || STATUS_COLORS.PENDIENTE
+  const meta = STATUS_META[status] || STATUS_META.pendiente
   return (
-    <span style={{ padding:'1px 6px', borderRadius:5, fontSize:9, fontWeight:700, background: s.bg, color: s.color }}>
-      {status}
+    <span style={{ padding:'1px 6px', borderRadius:5, fontSize:9, fontWeight:700, background: `${meta.color}26`, color: meta.color }}>
+      {meta.icon} {meta.label}
     </span>
   )
 }
@@ -146,10 +159,12 @@ function ConvRow({ conv, isActive, onClick }) {
           <span style={{ fontSize:13, fontWeight:700, color:'#e2e8f0', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:130 }}>{conv.nombre}</span>
           <span style={{ fontSize:9, color:'#334155', flexShrink:0 }}>{fmtTime(conv.last_time)}</span>
         </div>
-        <div style={{ display:'flex', gap:4, marginBottom:3, alignItems:'center' }}>
+        <div style={{ display:'flex', gap:4, marginBottom:3, alignItems:'center', flexWrap:'wrap' }}>
           <ChannelBadge channel={conv.canal} />
-          <TipoBadge tipo={conv.tipo} />
           <StatusBadge status={conv.status} />
+          {conv.temperatura && TEMP_META[conv.temperatura] && (
+            <span title={`Lead ${TEMP_META[conv.temperatura].label}`} style={{ fontSize:11 }}>{TEMP_META[conv.temperatura].icon}</span>
+          )}
           {pautaInfo(conv) && (
             <span title="Vino de un anuncio/publicación" style={{ fontSize:10, color:'#f59e0b' }}>📢</span>
           )}
@@ -205,7 +220,11 @@ function MsgBubble({ msg, channel }) {
 export default function SocialInbox({ active: isVisible }) {
   const [convs, setConvs]       = useState([])
   const [selected, setSelected] = useState(null) // clave compuesta: `${canal}__${sender_id}`
-  const [filter, setFilter]     = useState('Todas')
+  // Bandeja = DÓNDE ESTÁS PARADO (mensajes privados o comentarios públicos), no una
+  // etiqueta por fila. filter = el estado/temperatura dentro de esa bandeja, igual
+  // que en App.jsx (un solo filtro activo, sin opción "Todas").
+  const [bandeja, setBandeja]   = useState('mensajes')
+  const [filter, setFilter]     = useState('pendiente')
   const [loading, setLoading]   = useState(true)
   const [input, setInput]       = useState('')
   const [sending, setSending]   = useState(false)
@@ -220,6 +239,11 @@ export default function SocialInbox({ active: isVisible }) {
   const pollRef   = useRef(null)
   const mediaCacheRef = useRef({}) // cache por media id → info de la publicación
   const backGuardRef = useRef(false) // móvil: entrada de historial empujada al abrir un chat
+  // El poll de 8 s no puede pisar un cambio de estado/temperatura recién hecho —
+  // mismo problema y mismo arreglo que `localStatusRef`/`localTempRef` en
+  // components/App.jsx: un override local con vencimiento por conversación.
+  const localEstadoRef = useRef({}) // { [convKey]: { estado, expiresAt } }
+  const localTempRef   = useRef({}) // { [convKey]: { temperatura, expiresAt } }
 
   // El tipo entra en la llave: un comentario y un DM del mismo cliente son DOS
   // hilos (uno público, uno privado) y no pueden colapsar en una sola fila.
@@ -230,7 +254,21 @@ export default function SocialInbox({ active: isVisible }) {
       const res = await fetch('/api/social/lista')
       const data = await res.json()
       if (Array.isArray(data)) {
-        setConvs(data)
+        // Reaplicar los overrides locales vigentes ANTES de pintar: si el vendedor
+        // acaba de marcar 🔥 Caliente o cambió de bandeja, la base puede no haber
+        // terminado de guardar cuando este poll llega, y sin esto el valor viejo
+        // "vuelve" a los 8 s.
+        const now = Date.now()
+        const conData = data.map(c => {
+          const key = convKey(c)
+          let fila = c
+          const eo = localEstadoRef.current[key]
+          if (eo && eo.expiresAt > now) fila = { ...fila, status: eo.estado }
+          const to = localTempRef.current[key]
+          if (to && to.expiresAt > now) fila = { ...fila, temperatura: to.temperatura }
+          return fila
+        })
+        setConvs(conData)
         setLastSync(new Date())
       }
     } catch (e) {
@@ -497,23 +535,35 @@ export default function SocialInbox({ active: isVisible }) {
   }
 
   // Cambiar de filtro CIERRA el chat abierto: si no, el chat seleccionado puede
-  // quedar en pantalla aunque ya no pertenezca al filtro nuevo (p.ej. tenías un DM
-  // abierto y saltas a "💬 Comentarios"). Mismo bug y mismo arreglo que
+  // quedar en pantalla aunque ya no pertenezca al filtro nuevo (p.ej. tenías un
+  // 🔴 Pendiente abierto y saltas a ⚫ Archivados). Mismo bug y mismo arreglo que
   // `cambiarFiltro` en components/App.jsx (commit da39001).
   const cambiarFiltro = (f) => {
     setFilter(f)
     setSelected(null)
   }
 
-  const filtered = convs.filter(c => {
-    if (filter === 'FB') return c.canal === 'FB'
-    if (filter === 'IG') return c.canal === 'IG'
-    if (filter === '💬 Comentarios') return c.tipo === 'COMENTARIO'
-    if (filter === '✉️ Mensajes') return c.tipo !== 'COMENTARIO'
-    if (filter === 'PENDIENTE') return c.status === 'PENDIENTE'
-    if (filter === 'VENTAPROCESO') return c.status === 'VENTAPROCESO'
-    return true
-  })
+  // La bandeja separa PRIVADO de PÚBLICO por `tipo` (no una etiqueta a leer). Un
+  // comentario y un DM del mismo cliente son dos hilos distintos (ver convKey).
+  const porBandeja = convs.filter(c => (bandeja === 'comentarios' ? c.tipo === 'COMENTARIO' : c.tipo !== 'COMENTARIO'))
+  const esTemp = (key) => TEMP_META[key] !== undefined
+  // Un solo filtro activo a la vez (estado O temperatura), igual que en App.jsx —
+  // sin opción "Todas": entrar a una bandeja arranca en 🔴 Pendientes, que es lo
+  // que hay que atender.
+  const filtered = porBandeja.filter(c => (esTemp(filter) ? c.temperatura === filter : c.status === filter))
+  // Contadores para los chips de filtro, calculados sobre la bandeja actual (no
+  // sobre TODAS las conversaciones): un comentario archivado no debe sumar al
+  // contador de Archivados de Mensajes, ni al revés.
+  const counts = {
+    pendiente: porBandeja.filter(c => c.status === 'pendiente').length,
+    atendido:  porBandeja.filter(c => c.status === 'atendido').length,
+    venta:     porBandeja.filter(c => c.status === 'venta').length,
+    soporte:   porBandeja.filter(c => c.status === 'soporte').length,
+    archivado: porBandeja.filter(c => c.status === 'archivado').length,
+    caliente:  porBandeja.filter(c => c.temperatura === 'caliente').length,
+    tibio:     porBandeja.filter(c => c.temperatura === 'tibio').length,
+    frio:      porBandeja.filter(c => c.temperatura === 'frio').length,
+  }
 
   const handleSend = async () => {
     if (!input.trim() || !selectedConv || sending) return
@@ -543,10 +593,13 @@ export default function SocialInbox({ active: isVisible }) {
         alert('❌ No se pudo enviar: ' + (data.error || `HTTP ${res.status}`))
         return
       }
-      // Optimistic update: agrega el saliente y marca ATENDIDO (como en el server).
+      // Optimistic update: agrega el saliente y marca 'atendido' (como en el server).
+      // Vocabulario en minúsculas: en MAYÚSCULAS no calzaba con STATUS_META ni con
+      // el filtro activo, y la fila se veía "sin bandeja" hasta el próximo poll.
+      localEstadoRef.current[selected] = { estado: 'atendido', expiresAt: Date.now() + 15000 }
       setConvs(prev => prev.map(c =>
         convKey(c) === selected
-          ? { ...c, status: 'ATENDIDO', messages: [...c.messages, { id: Date.now(), from: 'mandi', text, time: new Date().toISOString() }] }
+          ? { ...c, status: 'atendido', messages: [...c.messages, { id: Date.now(), from: 'mandi', text, time: new Date().toISOString() }] }
           : c
       ))
     } catch (e) {
@@ -560,6 +613,10 @@ export default function SocialInbox({ active: isVisible }) {
   const cambiarEstado = async (nuevo) => {
     if (!selectedConv || selectedConv.status === nuevo) return
     const { canal, sender_id, tipo } = selectedConv
+    const key = selected
+    // Override con vencimiento: sin esto el poll de 8s puede pisar este cambio con
+    // el valor viejo si la base todavía no terminó de guardar (ver `load`).
+    localEstadoRef.current[key] = { estado: nuevo, expiresAt: Date.now() + 15000 }
     // El update optimista toca UNA sola fila (convKey incluye el tipo), así que el
     // servidor tiene que filtrar por tipo también: si no, archivar un comentario
     // archivaba además el DM del cliente y la pantalla mentía hasta el próximo poll.
@@ -575,7 +632,39 @@ export default function SocialInbox({ active: isVisible }) {
     }
   }
 
-  const FILTERS = ['Todas', 'FB', 'IG', '💬 Comentarios', '✉️ Mensajes', 'PENDIENTE', 'VENTAPROCESO']
+  // Eje 2 (temperatura): 100% manual. Clic de nuevo sobre la misma = quitarla
+  // (toggle), igual que `changeTemperatura` en App.jsx. Solo se llama desde
+  // Mensajes — el botón ni se pinta en Comentarios (ver cabecera del chat).
+  const cambiarTemperatura = async (temp) => {
+    if (!selectedConv) return
+    const { canal, sender_id, tipo } = selectedConv
+    const actual = selectedConv.temperatura || ''
+    const nueva = actual === temp ? '' : temp
+    const key = selected
+    localTempRef.current[key] = { temperatura: nueva, expiresAt: Date.now() + 15000 }
+    setConvs(prev => prev.map(c => convKey(c) === selected ? { ...c, temperatura: nueva } : c))
+    try {
+      // `temperatura: ''` es un valor válido ("sin clasificar"): /api/social/estado
+      // ya distingue "no vino el campo" de "vino vacío", así que este POST sí quita
+      // la marca en vez de rebotar con 400.
+      await fetch('/api/social/estado', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ canal, sender_id, tipo: tipo || 'DM', temperatura: nueva }),
+      })
+    } catch (e) {
+      console.error('Temperatura error:', e)
+    }
+  }
+
+  // Cambiar de bandeja cierra el chat abierto (mismo bug y mismo arreglo que
+  // `cambiarFiltro`, arriba) y vuelve al filtro por defecto: si no, "💰 Ventas"
+  // seguiría activo al entrar a Comentarios, una bandeja donde ese filtro no existe.
+  const cambiarBandeja = (b) => {
+    setBandeja(b)
+    setFilter('pendiente')
+    setSelected(null)
+  }
 
   // En móvil mostramos UNA sola vista: lista o chat (nunca las dos apretadas, que era
   // lo que "tapaba la pantalla" y no dejaba responder).
@@ -600,18 +689,73 @@ export default function SocialInbox({ active: isVisible }) {
               </div>
             </div>
           </div>
-          {/* Filtros */}
-          <div style={{ display:'flex', gap:3, flexWrap:'wrap' }}>
-            {FILTERS.map(f => (
-              <button key={f} onClick={() => cambiarFiltro(f)} style={{
-                padding:'3px 8px', fontSize:9, fontWeight:700, borderRadius:6, cursor:'pointer',
-                background: filter === f ? 'rgba(37,211,102,.15)' : 'transparent',
-                border: `1px solid ${filter === f ? 'rgba(37,211,102,.4)' : '#1a2d40'}`,
-                color: filter === f ? '#25d366' : '#334155',
-                fontFamily:'Outfit,sans-serif', transition:'all .15s',
-              }}>{f}</button>
+          {/* Bandejas: DÓNDE ESTÁS PARADO, no una etiqueta por fila. Mismo peso visual
+              que el selector MANDI/REPUBLIC/SOCIAL de App.jsx, a escala del sidebar. */}
+          <div style={{ display:'flex', gap:4, marginBottom:8, borderRadius:9, overflow:'hidden', border:'1px solid #162030' }}>
+            {BANDEJAS.map(({ key, icon, label, sub, color }) => (
+              <button key={key} onClick={() => cambiarBandeja(key)} style={{
+                flex:1, padding:'6px 4px', border:'none', cursor:'pointer', minWidth:0,
+                background: bandeja===key ? `${color}18` : 'transparent',
+                borderBottom: `2px solid ${bandeja===key ? color : 'transparent'}`,
+                fontFamily:'Outfit,sans-serif', transition:'all .2s',
+              }}>
+                <div style={{ fontSize:11, fontWeight:800, color: bandeja===key ? color : '#334155', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                  {icon} {label}
+                </div>
+                <div style={{ fontSize:8, color: bandeja===key ? color+'a0' : '#2a3f55', whiteSpace:'nowrap' }}>{sub}</div>
+              </button>
             ))}
           </div>
+
+          {/* Franja fija (no un badge por fila): TODO lo que se ve en esta bandeja es
+              público. Reemplaza al viejo badge 💬 PÚBLICO por fila — ver restricciones. */}
+          {bandeja === 'comentarios' && (
+            <div style={{ marginBottom:8, padding:'6px 9px', background:'rgba(245,158,11,.1)', border:'1px solid rgba(245,158,11,.3)', borderRadius:8, color:'#f59e0b', fontSize:10, fontWeight:700, textAlign:'center', lineHeight:1.4 }}>
+              ⚠️ Público — sin fotos, catálogo, links de pago ni datos de entrega acá
+            </div>
+          )}
+
+          {/* Fila 1 — BANDEJA de estado (Eje 1) */}
+          <div style={{ display:'flex', gap:3, flexWrap:'wrap' }}>
+            {(bandeja === 'comentarios' ? FILTROS_COMENTARIOS : FILTROS_MENSAJES).map(key => {
+              const meta = STATUS_META[key]
+              const active = filter === key
+              return (
+                <button key={key} onClick={() => cambiarFiltro(key)} style={{
+                  padding:'3px 7px', fontSize:9, fontWeight:700, borderRadius:6, cursor:'pointer',
+                  background: active ? `${meta.color}22` : 'transparent',
+                  border: `1px solid ${active ? meta.color+'60' : '#1a2d40'}`,
+                  color: active ? meta.color : '#334155',
+                  fontFamily:'Outfit,sans-serif', transition:'all .15s',
+                }}>
+                  {meta.filterLabel}
+                  {counts[key] > 0 && <span style={{ marginLeft:3, background: active ? meta.color : '#1a2d40', color: active ? '#080d14' : '#475569', borderRadius:10, padding:'0 4px', fontSize:8, fontWeight:800 }}>{counts[key]}</span>}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Fila 2 — TEMPERATURA del lead (Eje 2, manual). Solo en Mensajes: en un
+              comentario el lead y su temperatura se siguen en el DM. */}
+          {bandeja === 'mensajes' && (
+            <div style={{ display:'flex', gap:3, flexWrap:'wrap', marginTop:5 }}>
+              {TEMPERATURAS.map(({ key, icon, label, color }) => {
+                const active = filter === key
+                return (
+                  <button key={key} onClick={() => cambiarFiltro(key)} style={{
+                    padding:'3px 7px', fontSize:9, fontWeight:700, borderRadius:6, cursor:'pointer',
+                    background: active ? `${color}22` : 'transparent',
+                    border: `1px solid ${active ? color+'60' : '#1a2d40'}`,
+                    color: active ? color : '#334155',
+                    fontFamily:'Outfit,sans-serif', transition:'all .15s',
+                  }}>
+                    {icon} {label}
+                    {counts[key] > 0 && <span style={{ marginLeft:3, background: active ? color : '#1a2d40', color: active ? '#080d14' : '#475569', borderRadius:10, padding:'0 4px', fontSize:8, fontWeight:800 }}>{counts[key]}</span>}
+                  </button>
+                )
+              })}
+            </div>
+          )}
         </div>
 
         {/* Lista */}
@@ -643,8 +787,11 @@ export default function SocialInbox({ active: isVisible }) {
       {/* ── CHAT ── */}
       {mostrarChat && (selectedConv ? (
         <div style={{ flex:1, display:'flex', flexDirection:'column', minWidth:0, minHeight:0, overflow:'hidden', background:'#080d14' }}>
-          {/* Header chat */}
-          <div style={{ padding:'8px 14px', background:'#0a0f1a', borderBottom:'1px solid #111c2a', display:'flex', alignItems:'center', gap:10, flexShrink:0 }}>
+          {/* Header chat — flexWrap: con Mensajes (4 botones de estado + hasta 3 de
+              temperatura) ya no caben junto al nombre en ~360px; si no envuelve, la
+              fila se desborda y el propio input de abajo queda descuadrado (mismo
+              tipo de bug que ya pasó una vez en este inbox). */}
+          <div style={{ padding:'8px 14px', background:'#0a0f1a', borderBottom:'1px solid #111c2a', display:'flex', alignItems:'center', gap:10, rowGap:6, flexWrap:'wrap', flexShrink:0 }}>
             {isMobile && (
               <button onClick={goBack} title="Volver" style={{ flexShrink:0, width:34, height:34, borderRadius:9, background:'#111c2a', border:'1px solid #1e2d3d', color:'#94a3b8', fontSize:18, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>‹</button>
             )}
@@ -653,7 +800,6 @@ export default function SocialInbox({ active: isVisible }) {
               <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap', rowGap:2 }}>
                 <span style={{ fontSize:14, fontWeight:800, color:'#e2e8f0', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'100%' }}>{selectedConv.nombre}</span>
                 <ChannelBadge channel={selectedConv.canal} />
-                <TipoBadge tipo={selectedConv.tipo} />
                 {/* La ventana de 24 h es una regla de DM. En un comentario no significa
                     nada -la respuesta pública nunca caduca- y pintar "Cerrada" ahí le
                     mentía al vendedor que sí podía contestar. */}
@@ -677,18 +823,36 @@ export default function SocialInbox({ active: isVisible }) {
               )}
               <PautaBadge conv={selectedConv} />
             </div>
-            <div style={{ display:'flex', gap:4, flexShrink:0 }}>
-              {['PENDIENTE','VENTAPROCESO','ATENDIDO','ARCHIVADO'].map(s => {
-                const sc = STATUS_COLORS[s]
+            {/* Botones de estado (Eje 1) + temperatura (Eje 2) — los mismos iconos y
+                colores que la cabecera del chat de WhatsApp en App.jsx. Ahí tampoco
+                hay botón de 'venta' (es automática por pedido): 'venta' se puede
+                filtrar en la lista, pero no se marca a mano desde este botón. */}
+            <div style={{ display:'flex', gap:4, flexShrink:0, flexWrap:'wrap', justifyContent:'flex-end' }}>
+              {['pendiente', 'atendido', 'soporte', 'archivado'].map(s => {
+                const meta = STATUS_META[s]
                 const isActive = selectedConv.status === s
                 return (
-                  <button key={s} title={s} onClick={() => cambiarEstado(s)} style={{
-                    padding:'3px 6px', fontSize:8, fontWeight:700, borderRadius:5, cursor:'pointer',
-                    background: isActive ? sc.bg : 'transparent',
-                    border: `1px solid ${isActive ? sc.color + '60' : '#1a2d40'}`,
-                    color: isActive ? sc.color : '#334155',
+                  <button key={s} title={meta.label} onClick={() => cambiarEstado(s)} style={{
+                    padding:'3px 6px', fontSize:11, fontWeight:700, borderRadius:5, cursor:'pointer',
+                    background: isActive ? `${meta.color}22` : 'transparent',
+                    border: `1px solid ${isActive ? meta.color + '60' : '#1a2d40'}`,
+                    color: isActive ? meta.color : '#334155',
                     fontFamily:'Outfit,sans-serif',
-                  }}>{s.slice(0,4)}</button>
+                  }}>{meta.icon}</button>
+                )
+              })}
+              {/* La temperatura solo tiene sentido en Mensajes: en un comentario el
+                  lead y su temperatura se siguen en el DM (restricciones.md). */}
+              {selectedConv.tipo !== 'COMENTARIO' && TEMPERATURAS.map(({ key, icon, label, color }) => {
+                const on = selectedConv.temperatura === key
+                return (
+                  <button key={key} title={on ? `${label} — clic para quitar` : `Marcar ${label}`} onClick={() => cambiarTemperatura(key)} style={{
+                    padding:'3px 6px', fontSize:11, fontWeight:700, borderRadius:5, cursor:'pointer',
+                    background: on ? `${color}22` : 'transparent',
+                    border: `1px solid ${on ? color + '60' : '#1a2d40'}`,
+                    color: on ? color : '#334155',
+                    fontFamily:'Outfit,sans-serif',
+                  }}>{icon}</button>
                 )
               })}
             </div>

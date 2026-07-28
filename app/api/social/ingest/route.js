@@ -46,7 +46,7 @@ export async function POST(req) {
       texto:     b.texto || b.message || '',
       msg_id:    b.msg_id || b.id || '',
       fecha:     b.fecha || '',
-      estado:    'PENDIENTE',
+      estado:    'pendiente', // vocabulario de WhatsApp en minúsculas (normalizarEstado lo exige)
       ad_id:     b.ad_id || '',
       pauta:     b.pauta || '',
       ref:       b.ref || '',

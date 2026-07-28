@@ -123,7 +123,8 @@ function deMensajeDirecto(item, canal) {
     media_url: url,
     msg_id,
     fecha: item?.timestamp ? new Date(Number(item.timestamp)).toISOString() : new Date().toISOString(),
-    estado: esEcho ? 'ATENDIDO' : 'PENDIENTE',
+    // Vocabulario de estados: el de WhatsApp, en minúsculas (normalizarEstado ya lo exige).
+    estado: esEcho ? 'atendido' : 'pendiente',
     ...pauta,
     comment_id: '',
     raw: item,
@@ -148,7 +149,7 @@ function deComentarioFB(value, pageId) {
     media_url: foto || '',
     msg_id: String(value?.comment_id || ''),
     fecha: value?.created_time ? new Date(Number(value.created_time) * 1000).toISOString() : new Date().toISOString(),
-    estado: 'PENDIENTE',
+    estado: 'pendiente',
     ad_id: String(value?.post_id || ''),
     pauta: '',
     ref: 'FEED',
@@ -178,7 +179,7 @@ function deComentarioIG(value, igId) {
     media_url: '',
     msg_id: String(value?.id || ''),
     fecha: value?.timestamp ? new Date(value.timestamp).toISOString() : new Date().toISOString(),
-    estado: 'PENDIENTE',
+    estado: 'pendiente',
     // ad_id guarda el id del media comentado → /api/social/media muestra la publicación.
     ad_id: String(media.id || ''),
     pauta: '',
