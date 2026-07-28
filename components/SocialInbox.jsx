@@ -58,6 +58,22 @@ function ChannelBadge({ channel }) {
   )
 }
 
+// Un comentario es PÚBLICO (lo ve cualquiera) y un DM es PRIVADO. El mismo cliente
+// puede tener un hilo de cada tipo: este distintivo evita que el vendedor confunda
+// uno con otro y pida datos de entrega en un comentario público.
+function TipoBadge({ tipo }) {
+  const esComentario = tipo === 'COMENTARIO'
+  return (
+    <span style={{
+      padding:'1px 6px', borderRadius:5, fontSize:9, fontWeight:800,
+      background: esComentario ? 'rgba(245,158,11,.15)' : 'rgba(37,211,102,.12)',
+      color: esComentario ? '#f59e0b' : '#25d366',
+    }}>
+      {esComentario ? '💬 PÚBLICO' : '✉️ PRIVADO'}
+    </span>
+  )
+}
+
 function StatusBadge({ status }) {
   const s = STATUS_COLORS[status] || STATUS_COLORS.PENDIENTE
   return (
@@ -100,6 +116,7 @@ function ConvRow({ conv, isActive, onClick }) {
         </div>
         <div style={{ display:'flex', gap:4, marginBottom:3, alignItems:'center' }}>
           <ChannelBadge channel={conv.canal} />
+          <TipoBadge tipo={conv.tipo} />
           <StatusBadge status={conv.status} />
           {pautaInfo(conv) && (
             <span title="Vino de un anuncio/publicación" style={{ fontSize:10, color:'#f59e0b' }}>📢</span>
@@ -170,7 +187,9 @@ export default function SocialInbox({ active: isVisible }) {
   const mediaCacheRef = useRef({}) // cache por media id → info de la publicación
   const backGuardRef = useRef(false) // móvil: entrada de historial empujada al abrir un chat
 
-  const convKey = (c) => `${c.canal}__${c.sender_id}`
+  // El tipo entra en la llave: un comentario y un DM del mismo cliente son DOS
+  // hilos (uno público, uno privado) y no pueden colapsar en una sola fila.
+  const convKey = (c) => `${c.canal}__${c.tipo || 'DM'}__${c.sender_id}`
 
   const load = useCallback(async () => {
     try {
@@ -297,8 +316,9 @@ export default function SocialInbox({ active: isVisible }) {
   const filtered = convs.filter(c => {
     if (filter === 'FB') return c.canal === 'FB'
     if (filter === 'IG') return c.canal === 'IG'
+    if (filter === '💬 Comentarios') return c.tipo === 'COMENTARIO'
+    if (filter === '✉️ Mensajes') return c.tipo !== 'COMENTARIO'
     if (filter === 'PENDIENTE') return c.status === 'PENDIENTE'
-    if (filter === 'VENTAPROCESO') return c.status === 'VENTAPROCESO'
     return true
   })
 
@@ -359,7 +379,7 @@ export default function SocialInbox({ active: isVisible }) {
     }
   }
 
-  const FILTERS = ['Todas', 'FB', 'IG', 'PENDIENTE', 'VENTAPROCESO']
+  const FILTERS = ['Todas', 'FB', 'IG', '💬 Comentarios', '✉️ Mensajes', 'PENDIENTE']
 
   // En móvil mostramos UNA sola vista: lista o chat (nunca las dos apretadas, que era
   // lo que "tapaba la pantalla" y no dejaba responder).
@@ -431,8 +451,16 @@ export default function SocialInbox({ active: isVisible }) {
               <div style={{ display:'flex', alignItems:'center', gap:6 }}>
                 <span style={{ fontSize:14, fontWeight:800, color:'#e2e8f0', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{selectedConv.nombre}</span>
                 <ChannelBadge channel={selectedConv.canal} />
+                <TipoBadge tipo={selectedConv.tipo} />
               </div>
               <div style={{ fontSize:10, color:'#475569', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{CHANNEL_META[selectedConv.canal]?.label} · {selectedConv.sender_id}</div>
+              {/* Aviso fijo (no solo un badge chiquito): un comentario es público y
+                  pedir ahí una dirección o teléfono expone al cliente ante cualquiera. */}
+              {selectedConv.tipo === 'COMENTARIO' && (
+                <div style={{ fontSize:10, color:'#f59e0b', fontWeight:700 }}>
+                  ⚠️ Comentario público — no pidas datos de entrega acá
+                </div>
+              )}
               <PautaBadge conv={selectedConv} />
             </div>
             <div style={{ display:'flex', gap:4, flexShrink:0 }}>
