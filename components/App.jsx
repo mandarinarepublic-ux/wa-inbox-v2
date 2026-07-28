@@ -1,5 +1,5 @@
 'use client'
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
 import { fetchInboxSync, fetchHilo, buscarEnMensajes, sendReply, updateContact, updateTemperatura, isDemo, sendInteractiveButtons, toggleIAMode, sendVideo, sendImageFile, precacheMedia } from '@/lib/api-client'
 import { buildConvs, fmtDate, parseDate } from '@/lib/utils'
 import { Spinner, Avatar, ContactRow, MessageBubble, Toast } from '@/components/Components'
@@ -22,6 +22,10 @@ const TEMPERATURAS = [
   { key:'frio',     icon:'❄️', label:'Frío',     color:'#38bdf8' },
 ]
 const TEMP_META = Object.fromEntries(TEMPERATURAS.map(t => [t.key, t]))
+
+// Hasta dónde puede estirarse la caja de texto antes de sacar su propio scroll:
+// más allá de esto se comería el hilo de mensajes.
+const CAJA_ALTO_MAX = 120
 
 // La ventana de 24h de Meta arranca en el ÚLTIMO mensaje del cliente. A partir de ahí,
 // un lead 🔥 caliente que se acerca a las 24h de silencio se resalta con ⏰ (hay que
@@ -150,6 +154,7 @@ export default function App() {
   const msgsRef    = useRef(null)
   const autoScroll = useRef(true)
   const prevMsgLen = useRef(0)
+  const taRef      = useRef(null)  // caja de texto del compositor (para que crezca sola)
 
   // Mensaje que se está citando al responder (null = ninguno).
   const [citando, setCitando] = useState(null)
@@ -169,6 +174,18 @@ export default function App() {
   const hilosRef   = useRef({})   // telefono → historial completo ya descargado (carga por chat)
   const activeRef  = useRef(null) // teléfono del chat abierto (para no borrar su hilo del cache)
   const backGuardRef = useRef(false) // móvil: entrada de historial empujada al abrir un chat (el "atrás" del celu vuelve a la lista en vez de salir de la app)
+
+  // La caja de texto crece con lo que se escribe. Antes tenía altura fija y
+  // scroll propio: al pasar de dos líneas el navegador arrastraba la vista para
+  // seguir al cursor y parecía que "saltaba" toda la ventana. Se recalcula por
+  // efecto y no en el onChange para que también valga cuando el texto entra por
+  // código (respuestas rápidas, emojis, copiar al input desde el panel derecho).
+  useLayoutEffect(() => {
+    const ta = taRef.current
+    if (!ta) return
+    ta.style.height = 'auto'   // sin esto solo crecería, nunca volvería a achicarse
+    ta.style.height = Math.min(ta.scrollHeight, CAJA_ALTO_MAX) + 'px'
+  }, [input])
 
   // ── Cargar datos ──────────────────────────────────────────────
   const load = useCallback(async () => {
@@ -1427,15 +1444,11 @@ export default function App() {
                   </div>
                 </div>
               )}
+              {/* Fila de escritura: la caja se lleva casi todo el ancho y solo el ➤ la
+                  acompaña. Adjuntar/botones/emojis bajaron a la fila de abajo porque
+                  entre los tres se comían ~150px por la izquierda: con la caja tan
+                  angosta una frase normal se partía en muchas líneas y la vista saltaba. */}
               <div style={{ display:'flex', gap:8, alignItems:'flex-end' }}>
-                <button onClick={() => fileRef.current?.click()} style={{ width:42, height:42, flexShrink:0, background:imgFiles.length?'rgba(37,211,102,.12)':'#111c2a', border:`1px solid ${imgFiles.length?'rgba(37,211,102,.3)':'#1e2d3d'}`, borderRadius:11, cursor:'pointer', fontSize:17, display:'flex', alignItems:'center', justifyContent:'center', color:imgFiles.length?'#25d366':'#475569', transition:'all .15s', position:'relative' }} title="Adjuntar imagen o video">
-                  📎
-                  {imgFiles.length > 0 && <span style={{ position:'absolute', top:-4, right:-4, width:16, height:16, borderRadius:'50%', background:'#25d366', color:'#080d14', fontSize:8, fontWeight:900, display:'flex', alignItems:'center', justifyContent:'center' }}>{imgFiles.length}</span>}
-                </button>
-                <button onClick={() => setShowBtnPanel(p=>!p)} title="Botones interactivos" style={{ width:42, height:42, flexShrink:0, background:showBtnPanel?'rgba(37,211,102,.15)':'#111c2a', border:`1px solid ${showBtnPanel?'rgba(37,211,102,.4)':'#1e2d3d'}`, borderRadius:11, cursor:'pointer', fontSize:16, display:'flex', alignItems:'center', justifyContent:'center', color:showBtnPanel?'#25d366':'#475569', transition:'all .15s' }}>🔘</button>
-                <button onClick={() => { setShowEmoji(p=>!p); setShowBtnPanel(false) }} title="Emojis" style={{ width:42, height:42, flexShrink:0, background:showEmoji?'rgba(245,158,11,.15)':'#111c2a', border:`1px solid ${showEmoji?'rgba(245,158,11,.4)':'#1e2d3d'}`, borderRadius:11, cursor:'pointer', fontSize:20, display:'flex', alignItems:'center', justifyContent:'center', transition:'all .15s' }}>😊</button>
-                <input ref={fileRef} type="file" accept="image/*,video/*" multiple style={{ display:'none' }} onChange={handleFileSelect} />
-
                 {/* Panel de emojis */}
                 {showEmoji && (
                   <EmojiPicker onSelect={(emoji) => setInput(prev => prev + emoji)} onClose={() => setShowEmoji(false)} />
@@ -1485,13 +1498,15 @@ export default function App() {
                         style={{ background:'transparent', border:'none', color:'#64748b', fontSize:15, cursor:'pointer', lineHeight:1, flexShrink:0 }}>✕</button>
                     </div>
                   )}
-                  <textarea value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKey}
+                  {/* rows={1} + minHeight: el alto real lo pone el efecto de auto-crecer.
+                      El scroll propio solo aparece al pasarse del tope. */}
+                  <textarea ref={taRef} value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKey}
                     placeholder={getModoIA(activeConv?.telefono) ? '🤖 IA respondiendo automáticamente...' : 'Escribe un mensaje... (Ctrl+Enter para enviar)'}
-                    rows={2}
+                    rows={1}
                     style={{
                       width:'100%', background:'transparent', border:'none', outline:'none',
                       color:'#e2e8f0', fontSize:14, resize:'none', lineHeight:1.5,
-                      minHeight:44, maxHeight:120, overflowY:'auto',
+                      minHeight:44, maxHeight:CAJA_ALTO_MAX, overflowY:'auto',
                       scrollbarWidth:'thin',
                       scrollbarColor:'#25d366 #111c2a',
                     }} />
@@ -1519,6 +1534,19 @@ export default function App() {
                     )
                   })()}
                 </div>
+              </div>
+
+              {/* Fila de herramientas, debajo de la caja y pegada a la izquierda.
+                  El ➤ de enviar NO baja acá: se queda al costado derecho de la caja,
+                  que es donde la mano ya lo busca. */}
+              <div style={{ display:'flex', gap:8, alignItems:'center', marginTop:8, flexWrap:'wrap' }}>
+                <button onClick={() => fileRef.current?.click()} style={{ width:42, height:42, flexShrink:0, background:imgFiles.length?'rgba(37,211,102,.12)':'#111c2a', border:`1px solid ${imgFiles.length?'rgba(37,211,102,.3)':'#1e2d3d'}`, borderRadius:11, cursor:'pointer', fontSize:17, display:'flex', alignItems:'center', justifyContent:'center', color:imgFiles.length?'#25d366':'#475569', transition:'all .15s', position:'relative' }} title="Adjuntar imagen o video">
+                  📎
+                  {imgFiles.length > 0 && <span style={{ position:'absolute', top:-4, right:-4, width:16, height:16, borderRadius:'50%', background:'#25d366', color:'#080d14', fontSize:8, fontWeight:900, display:'flex', alignItems:'center', justifyContent:'center' }}>{imgFiles.length}</span>}
+                </button>
+                <button onClick={() => setShowBtnPanel(p=>!p)} title="Botones interactivos" style={{ width:42, height:42, flexShrink:0, background:showBtnPanel?'rgba(37,211,102,.15)':'#111c2a', border:`1px solid ${showBtnPanel?'rgba(37,211,102,.4)':'#1e2d3d'}`, borderRadius:11, cursor:'pointer', fontSize:16, display:'flex', alignItems:'center', justifyContent:'center', color:showBtnPanel?'#25d366':'#475569', transition:'all .15s' }}>🔘</button>
+                <button onClick={() => { setShowEmoji(p=>!p); setShowBtnPanel(false) }} title="Emojis" style={{ width:42, height:42, flexShrink:0, background:showEmoji?'rgba(245,158,11,.15)':'#111c2a', border:`1px solid ${showEmoji?'rgba(245,158,11,.4)':'#1e2d3d'}`, borderRadius:11, cursor:'pointer', fontSize:20, display:'flex', alignItems:'center', justifyContent:'center', transition:'all .15s' }}>😊</button>
+                <input ref={fileRef} type="file" accept="image/*,video/*" multiple style={{ display:'none' }} onChange={handleFileSelect} />
               </div>
             </div>
           </div>
