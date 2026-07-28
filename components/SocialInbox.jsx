@@ -184,6 +184,8 @@ export default function SocialInbox({ active: isVisible }) {
   const [modoRespuesta, setModoRespuesta] = useState('privado') // comentarios: 'privado' | 'publico'
   const [isMobile, setIsMobile] = useState(false)
   const [mediaInfo, setMediaInfo] = useState(null) // publicación/anuncio que comentó el cliente
+  const [subiendo, setSubiendo] = useState(false)
+  const fileRef = useRef(null)
   const bottomRef = useRef(null)
   const pollRef   = useRef(null)
   const mediaCacheRef = useRef({}) // cache por media id → info de la publicación
@@ -254,13 +256,16 @@ export default function SocialInbox({ active: isVisible }) {
   const convParaPanel = selectedConv ? {
     telefono: `${selectedConv.canal}:${selectedConv.sender_id}`,
     nombre: selectedConv.nombre,
-    // RightPanel solo lee `msgs` para su contador regresivo de 24h (nada más ahí
-    // renderiza esta lista). Un COMENTARIO no tiene esa cuenta -la respuesta pública
-    // nunca caduca- y más abajo se le fuerza windowOpen=true: si además le mandamos
-    // los mensajes reales, el panel calculaba el contador con el último comentario
-    // del cliente y, pasadas 24h, pintaba "00:00:00" parpadeando en rojo justo debajo
-    // de "✅ Ventana activa" — la misma contradicción que este proyecto vino a sacar
-    // del inbox. Vacío acá, el contador nunca arranca y el rótulo queda solo.
+    // Todo lo que RightPanel hace con `msgs` (el contador regresivo de 24h Y el
+    // transcript que arma `crearPedido` para mandi-agent) vive detrás de las pestañas
+    // 'respuestas'/'tienda' que SOCIAL sí monta, o de 'ventas', que SOCIAL NUNCA monta
+    // (ver `pestanas` más abajo). Por eso hoy es inofensivo mandar [] en un COMENTARIO:
+    // ni el contador se ve (no hay pestaña que lo pinte) ni `crearPedido` puede
+    // dispararse (su botón vive en 'ventas'). Si algún día SOCIAL habilita 'ventas',
+    // hay que revisar esto: un comentario sin mensajes reales rompería el transcript
+    // que arma un pedido automático, y hoy además se le fuerza windowOpen=true, con lo
+    // que el contador (si llegara a pintarse) mostraría "00:00:00" en rojo debajo de un
+    // "✅ Ventana activa" — la contradicción que este proyecto vino a sacar del inbox.
     msgs: selectedConv.tipo === 'COMENTARIO' ? [] : selectedConv.messages.map(m => ({
       direccion: m.from === 'user' ? 'ENTRANTE' : 'SALIENTE',
       timestamp: m.time,
@@ -351,6 +356,29 @@ export default function SocialInbox({ active: isVisible }) {
     catch (e) { alert('❌ No se pudo enviar: ' + e.message) }
     load()
   }, [enviarSocial, load])
+
+  // Foto suelta desde el computador (botón 📎 del compositor, solo en hilos privados).
+  // Sube al bucket propio (inbox-media) y manda la URL. Meta la busca sola: en FB/IG
+  // no hace falta subir la imagen a Meta primero, como sí exige WhatsApp.
+  const onElegirFoto = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = '' // permite volver a elegir la misma foto
+    if (!file) return
+    setSubiendo(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file, file.name || 'imagen.jpg')
+      const res = await fetch('/api/upload-foto', { method: 'POST', body: fd })
+      const data = await res.json().catch(() => ({}))
+      if (!data.url) throw new Error(data.error || 'No se pudo subir la foto')
+      await enviarSocial({ imagen: data.url })
+      load()
+    } catch (err) {
+      alert('❌ ' + err.message)
+    } finally {
+      setSubiendo(false)
+    }
+  }
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -685,6 +713,18 @@ export default function SocialInbox({ active: isVisible }) {
                   style={{ width:'100%', background:'transparent', border:'none', outline:'none', color:'#e2e8f0', fontSize:16, resize:'none', lineHeight:1.5, minHeight:40, maxHeight:100, overflowY:'auto', fontFamily:'Outfit,sans-serif' }}
                 />
               </div>
+              {/* Un comentario es público: no admite foto. Se oculta el botón entero en
+                  vez de deshabilitarlo, para no sugerir que "algún día" se podría. */}
+              {selectedConv.tipo !== 'COMENTARIO' && (
+                <>
+                  <input ref={fileRef} type="file" accept="image/*" onChange={onElegirFoto} style={{ display:'none' }} />
+                  <button onClick={() => fileRef.current?.click()} disabled={subiendo} title="Mandar una foto" style={{
+                    width:42, height:42, flexShrink:0, borderRadius:11, background:'#111c2a',
+                    border:'1px solid #1e2d3d', color:'#64748b', fontSize:17, cursor:'pointer',
+                    display:'flex', alignItems:'center', justifyContent:'center',
+                  }}>{subiendo ? '⏳' : '📎'}</button>
+                </>
+              )}
               <button onClick={handleSend} disabled={!input.trim() || sending} style={{
                 width:42, height:42, flexShrink:0, borderRadius:11, border:'none', cursor: input.trim() ? 'pointer' : 'default',
                 background: input.trim() ? `linear-gradient(135deg,${CHANNEL_META[selectedConv.canal]?.color},${CHANNEL_META[selectedConv.canal]?.color}aa)` : '#111c2a',
