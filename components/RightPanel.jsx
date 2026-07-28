@@ -224,6 +224,12 @@ const CATALOGO_LABEL = 'Mandarina'
 // y en un hilo de COMENTARIO tampoco 'tienda' (es público).
 export default function RightPanel({ activeConv, onQuickReply, onSendText, onSendImage, onSendProducto, contactInfo, onUpdateContact, windowOpen, pestanas = ['respuestas', 'ventas', 'tienda'] }) {
   const [tab, setTab]           = useState(pestanas[0] || 'respuestas')
+  // El panel NO se desmonta al cambiar de conversación (SOCIAL reutiliza la misma
+  // instancia entre chats): si `tab` quedó en una pestaña que la conversación nueva
+  // ya no permite (p.ej. veníamos de un DM en 'tienda' y se abrió un COMENTARIO),
+  // se cae a la primera permitida. En App.jsx esto nunca dispara porque ahí
+  // `pestanas` siempre trae las tres.
+  const tabActiva = pestanas.includes(tab) ? tab : (pestanas[0] || 'respuestas')
   const [countdown, setCountdown] = useState('')
 
   // ── Contador regresivo ventana 24h ───────────────────────────
@@ -319,23 +325,28 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
     }
   }, [activeConv, contactInfo])
 
-  // Cargar historial de pedidos al cambiar de contacto (una sola vez por teléfono)
+  // Cargar historial de pedidos al cambiar de contacto (una sola vez por teléfono).
+  // Solo tiene sentido si la pestaña Ventas está habilitada: en SOCIAL no lo está
+  // (nunca se monta) y `activeConv.telefono` ahí es un `canal:sender_id` inventado,
+  // no un teléfono real — pegarle al CRM con eso es una consulta inútil y, por el
+  // cruce de últimos 9 dígitos que usa el CRM, un riesgo remoto de cruzar con un
+  // cliente real que no tiene nada que ver.
   useEffect(() => {
-    if (!activeConv) return
+    if (!activeConv || !pestanas.includes('ventas')) return
     if (histLoadedRef.current === activeConv.telefono) return
     histLoadedRef.current = activeConv.telefono
     loadHistorial(activeConv.telefono, contactInfo?.idVenta)
-  }, [activeConv, contactInfo])
+  }, [activeConv, contactInfo, pestanas])
 
   // Cargar el catálogo de la fuente activa la PRIMERA vez (perezoso, cacheado por fuente)
   useEffect(() => {
-    if (tab !== 'tienda' || prodCache[fuente]) return
+    if (tabActiva !== 'tienda' || prodCache[fuente]) return
     let cancel = false
     fetchProductos('', fuente).then(list => {
       if (!cancel) setProdCache(prev => ({ ...prev, [fuente]: list || [] }))
     })
     return () => { cancel = true }
-  }, [tab, fuente, prodCache])
+  }, [tabActiva, fuente, prodCache])
 
   if (!activeConv) return null
 
@@ -497,7 +508,7 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
       {/* ── BARRA DE PESTAÑAS ── */}
       <div style={{ flexShrink:0, display:'flex', background:'#0a1019', borderBottom:'1px solid #111c2a' }}>
         {TABS.filter(t => pestanas.includes(t.id)).map(t => {
-          const active = tab === t.id
+          const active = tabActiva === t.id
           return (
             <button key={t.id} onClick={() => setTab(t.id)}
               style={{
@@ -518,7 +529,7 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
       <div style={{ flex:1, overflowY:'auto', minHeight:0 }}>
 
         {/* ═══════════ RESPUESTAS RÁPIDAS ═══════════ */}
-        {tab === 'respuestas' && (
+        {tabActiva === 'respuestas' && (
           <>
             <div style={{ padding:'10px 12px 6px' }}>
               <p style={{ fontSize:10, color:'#94a3b8', fontWeight:700, letterSpacing:'.08em', display:'flex', alignItems:'center', gap:5, margin:0 }}>
@@ -598,7 +609,7 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
         )}
 
         {/* ═══════════ VENTAS: CREAR PEDIDO + NOTAS + HISTORIAL ═══════════ */}
-        {tab === 'ventas' && (
+        {tabActiva === 'ventas' && (
           <>
             {/* CREAR PEDIDO */}
             <div style={{ padding:'12px 12px 4px' }}>
@@ -708,7 +719,7 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
         )}
 
         {/* ═══════════ TIENDA: CATÁLOGO SHOPIFY ═══════════ */}
-        {tab === 'tienda' && (
+        {tabActiva === 'tienda' && (
           <div style={{ display:'flex', flexDirection:'column', minHeight:'100%' }}>
             {/* Selector de fuente + buscador */}
             <div style={{ position:'sticky', top:0, zIndex:2, padding:'10px 12px', background:'#07111d', borderBottom:'1px solid #111c2a' }}>

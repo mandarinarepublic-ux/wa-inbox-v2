@@ -254,7 +254,14 @@ export default function SocialInbox({ active: isVisible }) {
   const convParaPanel = selectedConv ? {
     telefono: `${selectedConv.canal}:${selectedConv.sender_id}`,
     nombre: selectedConv.nombre,
-    msgs: selectedConv.messages.map(m => ({
+    // RightPanel solo lee `msgs` para su contador regresivo de 24h (nada más ahí
+    // renderiza esta lista). Un COMENTARIO no tiene esa cuenta -la respuesta pública
+    // nunca caduca- y más abajo se le fuerza windowOpen=true: si además le mandamos
+    // los mensajes reales, el panel calculaba el contador con el último comentario
+    // del cliente y, pasadas 24h, pintaba "00:00:00" parpadeando en rojo justo debajo
+    // de "✅ Ventana activa" — la misma contradicción que este proyecto vino a sacar
+    // del inbox. Vacío acá, el contador nunca arranca y el rótulo queda solo.
+    msgs: selectedConv.tipo === 'COMENTARIO' ? [] : selectedConv.messages.map(m => ({
       direccion: m.from === 'user' ? 'ENTRANTE' : 'SALIENTE',
       timestamp: m.time,
       mensaje: m.text,
@@ -263,6 +270,11 @@ export default function SocialInbox({ active: isVisible }) {
 
   // Un envío suelto (texto O imagen) para las acciones del panel único. Dentro de la
   // ventana de 24 h no hay turnos: se pueden encadenar varios sin esperar al cliente.
+  // Mismo criterio de ruteo que `handleSend`: `iraAlComentario` (no `selectedConv.tipo`
+  // a secas) — un comentario con más de 7 días y modo privado ya NO va al endpoint de
+  // comentario (Meta solo permite una respuesta privada, y venció), cae a DM normal.
+  // Mandar tipo:'COMENTARIO' en ese caso hace que el servidor rechace con el inútil
+  // "An unknown error has occurred" que ya se había arreglado para el compositor de texto.
   const enviarSocial = useCallback(async ({ texto, imagen }) => {
     if (!selectedConv) return
     const res = await fetch('/api/social/saliente', {
@@ -271,9 +283,9 @@ export default function SocialInbox({ active: isVisible }) {
       body: JSON.stringify({
         sender_id: selectedConv.sender_id,
         canal: selectedConv.canal,
-        tipo: selectedConv.tipo,
-        comment_id: selectedConv.tipo === 'COMENTARIO' ? (ultimoDelCliente?.id || '') : '',
-        modo: selectedConv.tipo === 'COMENTARIO' ? modoRespuesta : 'privado',
+        tipo: iraAlComentario ? 'COMENTARIO' : 'DM',
+        comment_id: iraAlComentario ? (ultimoDelCliente?.id || '') : '',
+        modo: iraAlComentario ? modoRespuesta : 'privado',
         message: texto || '',
         imagen: imagen || '',
       }),
@@ -283,7 +295,7 @@ export default function SocialInbox({ active: isVisible }) {
     const data = await res.json().catch(() => ({}))
     if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`)
     return data
-  }, [selectedConv, ultimoDelCliente, modoRespuesta])
+  }, [selectedConv, iraAlComentario, ultimoDelCliente, modoRespuesta])
 
   // Respuesta rápida del panel: el texto y luego cada foto, en orden (Meta no admite
   // texto + adjunto en un mismo mensaje). En un COMENTARIO se manda solo el texto:
@@ -308,6 +320,10 @@ export default function SocialInbox({ active: isVisible }) {
     load()
   }, [selectedConv, enviarSocial, load])
 
+  // `RightPanel` acepta esta prop pero hoy no la invoca en ningún lado (tampoco en
+  // WhatsApp: App.jsx la pasa igual, sin que nada la dispare todavía). Se deja cableada
+  // por paridad de interfaz -es parte del panel único- y para que, si algún día se
+  // agrega ahí un botón que la use, funcione en los tres canales sin otro parche.
   const onSendImage = useCallback(async (imageUrl) => {
     try { await enviarSocial({ imagen: imageUrl }) }
     catch (e) { alert('❌ No se pudo enviar la foto: ' + e.message) }
@@ -696,7 +712,11 @@ export default function SocialInbox({ active: isVisible }) {
           En móvil este panel tapa toda la pantalla (son 340px fijos), por eso no se
           monta ahí: la conversación y el input tienen que seguir viéndose enteros. */}
       {!isMobile && selectedConv && (
-        <div style={{ width: 340, flexShrink: 0, borderLeft: '1px solid #162030', display: 'flex' }}>
+        // flexDirection:'column' — igual que `.right-col` en App.jsx: sin esto la fila
+        // (dirección por defecto de flex) no estira la raíz del panel a los 340px del
+        // wrapper y el layout interno de RightPanel (header fijo + contenido con scroll
+        // propio) queda roto.
+        <div style={{ width: 340, flexShrink: 0, borderLeft: '1px solid #162030', display: 'flex', flexDirection: 'column' }}>
           <RightPanel
             activeConv={convParaPanel}
             contactInfo={null}
