@@ -1,8 +1,19 @@
 'use client'
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
 import { fmtTime } from '@/lib/utils'
 import { estadoVentana } from '@/lib/social-ventana'
 import RightPanel from '@/components/RightPanel'
+
+// La caja de texto del compositor arranca en UNA línea y crece sola — MISMO patrón
+// que el compositor de WhatsApp en components/App.jsx (líneas ~26-34), pero con sus
+// propios números: acá el textarea usa fontSize 16 (no 14, para que el celular no
+// haga zoom automático al enfocar el campo, cosa que ya traía este archivo antes de
+// este cambio). 16 × lineHeight 1.5 = 24px por línea, más 10px de aire arriba y abajo
+// (24 + 10×2 = 44, la misma zona táctil mínima de siempre). Tope: 6 líneas.
+const CAJA_LINEA     = 24
+const CAJA_AIRE      = 10
+const CAJA_ALTO_MIN  = 44                                      // zona táctil, no se negocia
+const CAJA_ALTO_MAX  = CAJA_LINEA * 6 + CAJA_AIRE * 2          // 164px ≈ 6 líneas
 
 // ── CONFIG ──────────────────────────────────────────────────────────────────
 // Los datos ya NO se leen de la hoja SOCIAL de Google Sheets: vienen de Supabase
@@ -309,6 +320,41 @@ export default function SocialInbox({ active: isVisible }) {
   const fileRef = useRef(null)
   const textareaRef = useRef(null)
   const bottomRef = useRef(null)
+
+  // La caja crece con lo que se escribe (ver CAJA_LINEA arriba). Vacía SIEMPRE mide
+  // una línea: se fuerza en vez de medir porque Chrome suma el placeholder al
+  // scrollHeight, y si algún día se alarga (el texto es dinámico: "Facebook" vs
+  // "Instagram") no queremos que la caja vacía dependa de cuál de los dos es más largo.
+  const ajustarAlto = useCallback((ta) => {
+    if (!ta) return
+    ta.style.height = 'auto'   // sin esto solo crecería, nunca volvería a achicarse
+    ta.style.height = ta.value
+      ? Math.min(ta.scrollHeight, CAJA_ALTO_MAX) + 'px'
+      : CAJA_ALTO_MIN + 'px'
+  }, [])
+
+  // Ref de función, no useRef+efecto: el compositor entero se DESMONTA al cerrar el
+  // chat (mostrarChat / selectedConv nulo, ver el JSX de abajo) y se vuelve a montar
+  // al abrir otro — o el mismo, si el vendedor entra y sale del mismo hilo en el
+  // celular. Un efecto por dependencias no vuelve a dispararse si `input` (el
+  // borrador) no cambió, así que la caja aparecería en su alto mínimo con el
+  // borrador largo adentro y scroll interno hasta tocar una tecla. Midiendo en
+  // cuanto el <textarea> entra al DOM se cubren los dos casos.
+  const setTaRef = useCallback((node) => { textareaRef.current = node; ajustarAlto(node) }, [ajustarAlto])
+
+  // Recalcular cuando cambia el texto —incluido el que entra por código: emojis,
+  // "copiar al input" del panel derecho, y el setInput('') al enviar, que devuelve
+  // la caja a una línea— y al cambiar de conversación (`selected`), porque el
+  // borrador de la conversación nueva puede ser de otro largo que el de la anterior.
+  useLayoutEffect(() => { ajustarAlto(textareaRef.current) }, [input, selected, ajustarAlto])
+
+  // Recalcular también al cambiar el ANCHO disponible: el mismo texto se re-parte en
+  // más o menos líneas al rotar el celular. Mismo arreglo que en App.jsx.
+  useEffect(() => {
+    const alRedimensionar = () => ajustarAlto(textareaRef.current)
+    window.addEventListener('resize', alRedimensionar)
+    return () => window.removeEventListener('resize', alRedimensionar)
+  }, [ajustarAlto])
   const pollRef   = useRef(null)
   const mediaCacheRef = useRef({}) // cache por media id → info de la publicación
   const backGuardRef = useRef(false) // móvil: entrada de historial empujada al abrir un chat
@@ -1082,35 +1128,48 @@ export default function SocialInbox({ active: isVisible }) {
             )}
             {/* Las respuestas rápidas (con fotos, botones, etc.) ahora viven en el panel
                 único de la derecha (pestaña ⚡ Respuestas) — no se duplican acá. */}
+            {/* Fila de escritura: la caja se lleva casi todo el ancho y solo el ➤ la
+                acompaña — MISMO patrón que WhatsApp (App.jsx). Antes 📎 y 😊 iban acá
+                mismo, al lado de la caja, y entre los dos se comían ~100px por la
+                derecha: con la caja angosta una frase normal se partía en muchas
+                líneas y el hilo de mensajes "saltaba" para seguir al cursor. */}
             <div style={{ display:'flex', gap:8, alignItems:'flex-end' }}>
-              <div style={{ flex:1, minWidth:0, background:'#111c2a', border:'1px solid #1e2d3d', borderRadius:13, padding:'9px 13px' }}>
+              {/* El aire de arriba y abajo lo pone el propio textarea (padding +
+                  box-sizing:border-box), no este contenedor: así la zona táctil de
+                  44px es el textarea entero. Mismo ajuste que en App.jsx. */}
+              <div style={{ flex:1, minWidth:0, background:'#111c2a', border:'1px solid #1e2d3d', borderRadius:13, padding:'0 13px' }}>
                 <textarea
-                  ref={textareaRef}
+                  ref={setTaRef}
                   value={input}
                   onChange={e => setInput(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !isMobile) { e.preventDefault(); handleSend() } }}
                   placeholder={`Responder por ${CHANNEL_META[selectedConv.canal]?.label}...`}
-                  rows={2}
-                  style={{ width:'100%', background:'transparent', border:'none', outline:'none', color:'#e2e8f0', fontSize:16, resize:'none', lineHeight:1.5, minHeight:40, maxHeight:100, overflowY:'auto', fontFamily:'Outfit,sans-serif' }}
+                  rows={1}
+                  style={{
+                    width:'100%', background:'transparent', border:'none', outline:'none',
+                    color:'#e2e8f0', fontSize:16, resize:'none', lineHeight:1.5,
+                    display:'block', boxSizing:'border-box', padding:`${CAJA_AIRE}px 0`,
+                    minHeight:CAJA_ALTO_MIN, maxHeight:CAJA_ALTO_MAX, overflowY:'auto',
+                    fontFamily:'Outfit,sans-serif',
+                  }}
                 />
               </div>
-              {/* Emoji: disponible en las DOS bandejas (Mensajes y Comentarios) y en
-                  cualquier modo de respuesta — a diferencia de la foto (📎), un emoji
-                  es texto plano y un comentario público admite texto sin problema. */}
-              <button onClick={() => setShowEmoji(p => !p)} title="Emojis" style={{
-                width:42, height:42, flexShrink:0, borderRadius:11, fontSize:20, cursor:'pointer',
-                background: showEmoji ? 'rgba(245,158,11,.15)' : '#111c2a',
-                border: `1px solid ${showEmoji ? 'rgba(245,158,11,.4)' : '#1e2d3d'}`,
-                display:'flex', alignItems:'center', justifyContent:'center', transition:'all .15s',
-              }}>😊</button>
-              {showEmoji && (
-                <EmojiPicker onSelect={insertarEmoji} onClose={() => setShowEmoji(false)} />
-              )}
-              {/* Se oculta cuando el envío va al hilo público (una foto ahí no se puede)
-                  o a la respuesta privada del comentario (Meta solo acepta texto por
-                  ese endpoint). Es `iraAlComentario`, no el tipo del hilo: un comentario
-                  vencido sale por DM normal, y ahí la foto sí va. Oculto y no
-                  deshabilitado, para no sugerir que "algún día" se podría. */}
+              <button onClick={handleSend} disabled={!input.trim() || sending} style={{
+                width:42, height:42, flexShrink:0, borderRadius:11, border:'none', cursor: input.trim() ? 'pointer' : 'default',
+                background: input.trim() ? `linear-gradient(135deg,${CHANNEL_META[selectedConv.canal]?.color},${CHANNEL_META[selectedConv.canal]?.color}aa)` : '#111c2a',
+                color:'#fff', fontSize:17, display:'flex', alignItems:'center', justifyContent:'center', transition:'all .2s',
+              }}>{sending ? '⏳' : '➤'}</button>
+            </div>
+
+            {/* Fila de herramientas, debajo de la caja y pegada a la izquierda. El ➤
+                de enviar NO baja acá: se queda al costado derecho de la caja, que es
+                donde la mano ya lo busca (igual que en WhatsApp). */}
+            <div style={{ display:'flex', gap:8, alignItems:'center', marginTop:8, flexWrap:'wrap' }}>
+              {/* Se oculta (no se deshabilita) cuando el envío va al hilo público (una
+                  foto ahí no se puede) o a la respuesta privada del comentario (Meta
+                  solo acepta texto por ese endpoint). Es `iraAlComentario`, no el tipo
+                  del hilo: un comentario vencido sale por DM normal, y ahí la foto sí
+                  va. Esta condición NO se toca — es la regla del encargo. */}
               {!iraAlComentario && (
                 <>
                   <input ref={fileRef} type="file" accept="image/*" onChange={onElegirFoto} style={{ display:'none' }} />
@@ -1121,11 +1180,21 @@ export default function SocialInbox({ active: isVisible }) {
                   }}>{subiendo ? '⏳' : '📎'}</button>
                 </>
               )}
-              <button onClick={handleSend} disabled={!input.trim() || sending} style={{
-                width:42, height:42, flexShrink:0, borderRadius:11, border:'none', cursor: input.trim() ? 'pointer' : 'default',
-                background: input.trim() ? `linear-gradient(135deg,${CHANNEL_META[selectedConv.canal]?.color},${CHANNEL_META[selectedConv.canal]?.color}aa)` : '#111c2a',
-                color:'#fff', fontSize:17, display:'flex', alignItems:'center', justifyContent:'center', transition:'all .2s',
-              }}>{sending ? '⏳' : '➤'}</button>
+              {/* Emoji: disponible en las DOS bandejas (Mensajes y Comentarios) y en
+                  cualquier modo de respuesta — a diferencia de la foto, un emoji es
+                  texto plano y un comentario público admite texto sin problema. */}
+              <button onClick={() => setShowEmoji(p => !p)} title="Emojis" style={{
+                width:42, height:42, flexShrink:0, borderRadius:11, fontSize:20, cursor:'pointer',
+                background: showEmoji ? 'rgba(245,158,11,.15)' : '#111c2a',
+                border: `1px solid ${showEmoji ? 'rgba(245,158,11,.4)' : '#1e2d3d'}`,
+                display:'flex', alignItems:'center', justifyContent:'center', transition:'all .15s',
+              }}>😊</button>
+              {/* Ancla al contenedor del compositor (position:relative, más arriba),
+                  no a este botón: por eso sigue abriendo hacia arriba y por encima de
+                  TODA la barra (caja + fila de iconos) aunque el botón bajó de fila. */}
+              {showEmoji && (
+                <EmojiPicker onSelect={insertarEmoji} onClose={() => setShowEmoji(false)} />
+              )}
             </div>
             <div style={{ fontSize:9, color:'#2a3f55', marginTop:4, textAlign:'right' }}>
               {isMobile ? 'Toca ➤ para enviar' : 'Enter · Shift+Enter nueva línea'}
