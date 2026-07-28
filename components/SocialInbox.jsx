@@ -470,9 +470,18 @@ export default function SocialInbox({ active: isVisible }) {
                 <span style={{ fontSize:14, fontWeight:800, color:'#e2e8f0', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'100%' }}>{selectedConv.nombre}</span>
                 <ChannelBadge channel={selectedConv.canal} />
                 <TipoBadge tipo={selectedConv.tipo} />
-                <span style={{ fontSize:10, fontWeight:700, color: ventana.abierta ? '#25d366' : '#f87171', flexShrink:0 }}>
-                  {ventana.etiqueta}
-                </span>
+                {/* La ventana de 24 h es una regla de DM. En un comentario no significa
+                    nada -la respuesta pública nunca caduca- y pintar "Cerrada" ahí le
+                    mentía al vendedor que sí podía contestar. */}
+                {selectedConv.tipo === 'COMENTARIO' ? (
+                  <span style={{ fontSize:10, fontWeight:700, color:'#25d366', flexShrink:0 }}>
+                    🌎 La respuesta pública no caduca
+                  </span>
+                ) : (
+                  <span style={{ fontSize:10, fontWeight:700, color: ventana.abierta ? '#25d366' : '#f87171', flexShrink:0 }}>
+                    {ventana.etiqueta}
+                  </span>
+                )}
               </div>
               <div style={{ fontSize:10, color:'#475569', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{CHANNEL_META[selectedConv.canal]?.label} · {selectedConv.sender_id}</div>
               {/* Aviso fijo (no solo un badge chiquito): un comentario es público y
