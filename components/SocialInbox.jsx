@@ -313,12 +313,22 @@ export default function SocialInbox({ active: isVisible }) {
     }
   }
 
+  // Cambiar de filtro CIERRA el chat abierto: si no, el chat seleccionado puede
+  // quedar en pantalla aunque ya no pertenezca al filtro nuevo (p.ej. tenías un DM
+  // abierto y saltas a "💬 Comentarios"). Mismo bug y mismo arreglo que
+  // `cambiarFiltro` en components/App.jsx (commit da39001).
+  const cambiarFiltro = (f) => {
+    setFilter(f)
+    setSelected(null)
+  }
+
   const filtered = convs.filter(c => {
     if (filter === 'FB') return c.canal === 'FB'
     if (filter === 'IG') return c.canal === 'IG'
     if (filter === '💬 Comentarios') return c.tipo === 'COMENTARIO'
     if (filter === '✉️ Mensajes') return c.tipo !== 'COMENTARIO'
     if (filter === 'PENDIENTE') return c.status === 'PENDIENTE'
+    if (filter === 'VENTAPROCESO') return c.status === 'VENTAPROCESO'
     return true
   })
 
@@ -379,7 +389,7 @@ export default function SocialInbox({ active: isVisible }) {
     }
   }
 
-  const FILTERS = ['Todas', 'FB', 'IG', '💬 Comentarios', '✉️ Mensajes', 'PENDIENTE']
+  const FILTERS = ['Todas', 'FB', 'IG', '💬 Comentarios', '✉️ Mensajes', 'PENDIENTE', 'VENTAPROCESO']
 
   // En móvil mostramos UNA sola vista: lista o chat (nunca las dos apretadas, que era
   // lo que "tapaba la pantalla" y no dejaba responder).
@@ -407,7 +417,7 @@ export default function SocialInbox({ active: isVisible }) {
           {/* Filtros */}
           <div style={{ display:'flex', gap:3, flexWrap:'wrap' }}>
             {FILTERS.map(f => (
-              <button key={f} onClick={() => setFilter(f)} style={{
+              <button key={f} onClick={() => cambiarFiltro(f)} style={{
                 padding:'3px 8px', fontSize:9, fontWeight:700, borderRadius:6, cursor:'pointer',
                 background: filter === f ? 'rgba(37,211,102,.15)' : 'transparent',
                 border: `1px solid ${filter === f ? 'rgba(37,211,102,.4)' : '#1a2d40'}`,
