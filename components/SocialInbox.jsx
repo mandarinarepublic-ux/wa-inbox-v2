@@ -46,6 +46,13 @@ const BANDEJAS = [
   { key:'comentarios', icon:'💬', label:'Comentarios', sub:'Público',       color:'#f59e0b' },
 ]
 
+// Canal — selector ORTOGONAL a la bandeja y al filtro de estado (ver canalFiltro).
+const CANALES = [
+  { key:'todos', icon:'🌐', label:'Ambos' },
+  { key:'FB',    icon:'📘', label:'FB' },
+  { key:'IG',    icon:'📸', label:'IG' },
+]
+
 // Devuelve la info de pauta lista para mostrar, o null si la conversación no vino
 // de un anuncio/publicación.
 function pautaInfo(conv) {
@@ -143,7 +150,11 @@ function SocialAvatar({ name, channel }) {
   )
 }
 
-function ConvRow({ conv, isActive, onClick }) {
+// `filtroActivo` oculta el chip que solo repite el filtro activo: si estás
+// mirando 🔴 Pendientes, las 20 filas dicen "Pendiente" — es ruido, y es EXACTO
+// el patrón "hay que leer una etiqueta para saber algo" que el dueño reportó.
+// Cada fila termina mostrando solo el eje que el filtro NO está fijando.
+function ConvRow({ conv, isActive, onClick, filtroActivo }) {
   return (
     <button onClick={onClick} style={{
       width:'100%', textAlign:'left', padding:'10px 14px',
@@ -161,8 +172,8 @@ function ConvRow({ conv, isActive, onClick }) {
         </div>
         <div style={{ display:'flex', gap:4, marginBottom:3, alignItems:'center', flexWrap:'wrap' }}>
           <ChannelBadge channel={conv.canal} />
-          <StatusBadge status={conv.status} />
-          {conv.temperatura && TEMP_META[conv.temperatura] && (
+          {conv.status !== filtroActivo && <StatusBadge status={conv.status} />}
+          {conv.temperatura && TEMP_META[conv.temperatura] && conv.temperatura !== filtroActivo && (
             <span title={`Lead ${TEMP_META[conv.temperatura].label}`} style={{ fontSize:11 }}>{TEMP_META[conv.temperatura].icon}</span>
           )}
           {pautaInfo(conv) && (
@@ -225,6 +236,10 @@ export default function SocialInbox({ active: isVisible }) {
   // que en App.jsx (un solo filtro activo, sin opción "Todas").
   const [bandeja, setBandeja]   = useState('mensajes')
   const [filter, setFilter]     = useState('pendiente')
+  // Canal (FB/IG/Ambos) — ORTOGONAL al filtro de estado, no un chip más que
+  // compita con él: así se puede ver "solo Instagram Y solo pendientes" a la
+  // vez, algo que el viejo chip 💬/✉️ mezclado con el resto no permitía.
+  const [canalFiltro, setCanalFiltro] = useState('todos') // 'todos' | 'FB' | 'IG'
   const [loading, setLoading]   = useState(true)
   const [input, setInput]       = useState('')
   const [sending, setSending]   = useState(false)
@@ -543,9 +558,21 @@ export default function SocialInbox({ active: isVisible }) {
     setSelected(null)
   }
 
+  // Mismo motivo que cambiarFiltro: aunque el canal es ortogonal al estado, si no
+  // cierra el chat abierto uno de otro canal puede quedar en pantalla sin
+  // pertenecer ya a lo que se está mirando.
+  const cambiarCanal = (c) => {
+    setCanalFiltro(c)
+    setSelected(null)
+  }
+
   // La bandeja separa PRIVADO de PÚBLICO por `tipo` (no una etiqueta a leer). Un
   // comentario y un DM del mismo cliente son dos hilos distintos (ver convKey).
-  const porBandeja = convs.filter(c => (bandeja === 'comentarios' ? c.tipo === 'COMENTARIO' : c.tipo !== 'COMENTARIO'))
+  // El canal (FB/IG/Ambos) es un segundo recorte, independiente del estado: por
+  // eso se aplica acá y no como una opción más de `filter`.
+  const porBandeja = convs
+    .filter(c => (bandeja === 'comentarios' ? c.tipo === 'COMENTARIO' : c.tipo !== 'COMENTARIO'))
+    .filter(c => (canalFiltro === 'todos' ? true : c.canal === canalFiltro))
   const esTemp = (key) => TEMP_META[key] !== undefined
   // Un solo filtro activo a la vez (estado O temperatura), igual que en App.jsx —
   // sin opción "Todas": entrar a una bandeja arranca en 🔴 Pendientes, que es lo
@@ -614,6 +641,7 @@ export default function SocialInbox({ active: isVisible }) {
     if (!selectedConv || selectedConv.status === nuevo) return
     const { canal, sender_id, tipo } = selectedConv
     const key = selected
+    const anterior = selectedConv.status
     // Override con vencimiento: sin esto el poll de 8s puede pisar este cambio con
     // el valor viejo si la base todavía no terminó de guardar (ver `load`).
     localEstadoRef.current[key] = { estado: nuevo, expiresAt: Date.now() + 15000 }
@@ -622,13 +650,22 @@ export default function SocialInbox({ active: isVisible }) {
     // archivaba además el DM del cliente y la pantalla mentía hasta el próximo poll.
     setConvs(prev => prev.map(c => convKey(c) === selected ? { ...c, status: nuevo } : c))
     try {
-      await fetch('/api/social/estado', {
+      const res = await fetch('/api/social/estado', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ canal, sender_id, tipo: tipo || 'DM', estado: nuevo }),
       })
+      // fetch solo rechaza por error de RED: un 400/500 llega aquí como respuesta
+      // "normal" y sin este chequeo el fallo pasaba en silencio — la pantalla se
+      // quedaba mostrando el cambio los 15s que dura el override y DESPUÉS el poll
+      // lo devolvía al valor viejo sin avisar. Justo el síntoma "los botones no
+      // funcionan" que esta tarea vino a arreglar.
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
     } catch (e) {
       console.error('Estado error:', e)
+      delete localEstadoRef.current[key]
+      setConvs(prev => prev.map(c => convKey(c) === selected ? { ...c, status: anterior } : c))
+      alert('❌ No se pudo cambiar el estado — reintenta')
     }
   }
 
@@ -647,13 +684,18 @@ export default function SocialInbox({ active: isVisible }) {
       // `temperatura: ''` es un valor válido ("sin clasificar"): /api/social/estado
       // ya distingue "no vino el campo" de "vino vacío", así que este POST sí quita
       // la marca en vez de rebotar con 400.
-      await fetch('/api/social/estado', {
+      const res = await fetch('/api/social/estado', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ canal, sender_id, tipo: tipo || 'DM', temperatura: nueva }),
       })
+      // Mismo motivo que en cambiarEstado: un 400/500 no lanza por sí solo.
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
     } catch (e) {
       console.error('Temperatura error:', e)
+      delete localTempRef.current[key]
+      setConvs(prev => prev.map(c => convKey(c) === selected ? { ...c, temperatura: actual } : c))
+      alert('❌ No se pudo cambiar la temperatura — reintenta')
     }
   }
 
@@ -705,6 +747,25 @@ export default function SocialInbox({ active: isVisible }) {
                 <div style={{ fontSize:8, color: bandeja===key ? color+'a0' : '#2a3f55', whiteSpace:'nowrap' }}>{sub}</div>
               </button>
             ))}
+          </div>
+
+          {/* Canal (FB/IG/Ambos) — ORTOGONAL a la bandeja y al filtro de estado: se
+              puede combinar "solo Instagram" CON "solo pendientes" a la vez, algo
+              que un chip más en la fila de estado no permitía (competía por el
+              mismo filtro en vez de cruzarse con él). */}
+          <div style={{ display:'flex', gap:3, marginBottom:8 }}>
+            {CANALES.map(({ key, icon, label }) => {
+              const active = canalFiltro === key
+              return (
+                <button key={key} onClick={() => cambiarCanal(key)} style={{
+                  flex:1, padding:'3px 4px', fontSize:9, fontWeight:700, borderRadius:6, cursor:'pointer',
+                  background: active ? 'rgba(148,163,184,.15)' : 'transparent',
+                  border: `1px solid ${active ? 'rgba(148,163,184,.45)' : '#1a2d40'}`,
+                  color: active ? '#cbd5e1' : '#334155',
+                  fontFamily:'Outfit,sans-serif', transition:'all .15s',
+                }}>{icon} {label}</button>
+              )
+            })}
           </div>
 
           {/* Franja fija (no un badge por fila): TODO lo que se ve en esta bandeja es
@@ -766,7 +827,7 @@ export default function SocialInbox({ active: isVisible }) {
             <div style={{ padding:28, textAlign:'center', color:'#2a3f55', fontSize:12 }}>Sin conversaciones</div>
           ) : filtered.map(conv => (
             <ConvRow key={convKey(conv)} conv={conv} isActive={selected === convKey(conv)}
-              onClick={() => openConv(conv)} />
+              onClick={() => openConv(conv)} filtroActivo={filter} />
           ))}
         </div>
 
@@ -787,10 +848,10 @@ export default function SocialInbox({ active: isVisible }) {
       {/* ── CHAT ── */}
       {mostrarChat && (selectedConv ? (
         <div style={{ flex:1, display:'flex', flexDirection:'column', minWidth:0, minHeight:0, overflow:'hidden', background:'#080d14' }}>
-          {/* Header chat — flexWrap: con Mensajes (4 botones de estado + hasta 3 de
-              temperatura) ya no caben junto al nombre en ~360px; si no envuelve, la
-              fila se desborda y el propio input de abajo queda descuadrado (mismo
-              tipo de bug que ya pasó una vez en este inbox). */}
+          {/* Header chat — flexWrap: en Mensajes son 5 botones de estado + separador +
+              3 de temperatura (8 en total); ya no caben junto al nombre en ~360px, y
+              sin envolver la fila se desborda y el propio input de abajo queda
+              descuadrado (mismo tipo de bug que ya pasó una vez en este inbox). */}
           <div style={{ padding:'8px 14px', background:'#0a0f1a', borderBottom:'1px solid #111c2a', display:'flex', alignItems:'center', gap:10, rowGap:6, flexWrap:'wrap', flexShrink:0 }}>
             {isMobile && (
               <button onClick={goBack} title="Volver" style={{ flexShrink:0, width:34, height:34, borderRadius:9, background:'#111c2a', border:'1px solid #1e2d3d', color:'#94a3b8', fontSize:18, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>‹</button>
@@ -823,12 +884,18 @@ export default function SocialInbox({ active: isVisible }) {
               )}
               <PautaBadge conv={selectedConv} />
             </div>
-            {/* Botones de estado (Eje 1) + temperatura (Eje 2) — los mismos iconos y
-                colores que la cabecera del chat de WhatsApp en App.jsx. Ahí tampoco
-                hay botón de 'venta' (es automática por pedido): 'venta' se puede
-                filtrar en la lista, pero no se marca a mano desde este botón. */}
+            {/* Botones de estado (Eje 1) + temperatura (Eje 2) — mismos iconos y
+                colores que la cabecera del chat de WhatsApp en App.jsx, PERO leídos
+                de la MISMA lista que los filtros (FILTROS_MENSAJES/COMENTARIOS): si
+                la cabecera tuviera su propio array literal podía volver a divergir,
+                que fue justo el bug de la ronda anterior (Soporte quedaba disponible
+                en un comentario aunque el filtro de Comentarios no lo incluye — el
+                chat se volvía invisible sin forma de sacarlo desde la UI). 'venta' SÍ
+                se marca a mano acá (a diferencia de WhatsApp, donde es automática por
+                pedido): SOCIAL no tiene flujo de pedidos, así que manual es el único
+                camino para que el filtro 💰 Ventas deje de estar muerto. */}
             <div style={{ display:'flex', gap:4, flexShrink:0, flexWrap:'wrap', justifyContent:'flex-end' }}>
-              {['pendiente', 'atendido', 'soporte', 'archivado'].map(s => {
+              {(selectedConv.tipo === 'COMENTARIO' ? FILTROS_COMENTARIOS : FILTROS_MENSAJES).map(s => {
                 const meta = STATUS_META[s]
                 const isActive = selectedConv.status === s
                 return (
@@ -841,6 +908,12 @@ export default function SocialInbox({ active: isVisible }) {
                   }}>{meta.icon}</button>
                 )
               })}
+              {/* Separador entre los dos ejes (igual que App.jsx:1292): con hasta 8
+                  botones seguidos, sin esta línea no se ve dónde termina la bandeja
+                  de estado y empieza la temperatura. */}
+              {selectedConv.tipo !== 'COMENTARIO' && (
+                <span style={{ width:1, alignSelf:'stretch', background:'#1e2d3d', margin:'2px 2px', flexShrink:0 }} />
+              )}
               {/* La temperatura solo tiene sentido en Mensajes: en un comentario el
                   lead y su temperatura se siguen en el DM (restricciones.md). */}
               {selectedConv.tipo !== 'COMENTARIO' && TEMPERATURAS.map(({ key, icon, label, color }) => {
