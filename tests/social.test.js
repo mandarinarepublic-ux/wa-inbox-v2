@@ -52,3 +52,36 @@ test('las conversaciones vienen de la mas reciente a la mas vieja', () => {
 test('una fila sin sender_id se ignora', () => {
   assert.equal(agruparConversaciones([{ ...base, sender_id: '', tipo: 'DM', texto: 'x' }]).length, 0)
 })
+
+import { admiteAdjuntos, cuerpoMensajeMeta } from '../lib/social-envio.js'
+
+test('un DM admite adjuntos', () => {
+  assert.equal(admiteAdjuntos('DM'), true)
+})
+
+test('un comentario NO admite adjuntos', () => {
+  assert.equal(admiteAdjuntos('COMENTARIO'), false)
+})
+
+test('sin tipo se asume DM', () => {
+  assert.equal(admiteAdjuntos(''), true)
+  assert.equal(admiteAdjuntos(undefined), true)
+})
+
+test('el cuerpo de un mensaje de texto', () => {
+  assert.deepEqual(cuerpoMensajeMeta({ texto: 'hola' }), { text: 'hola' })
+})
+
+test('el cuerpo de una imagen es un adjunto reutilizable', () => {
+  assert.deepEqual(cuerpoMensajeMeta({ imagen: 'https://x/f.jpg' }), {
+    attachment: { type: 'image', payload: { url: 'https://x/f.jpg', is_reusable: true } },
+  })
+})
+
+test('Meta no admite texto y adjunto juntos', () => {
+  assert.throws(() => cuerpoMensajeMeta({ texto: 'hola', imagen: 'https://x/f.jpg' }), /mismo mensaje/)
+})
+
+test('un mensaje vacio es un error', () => {
+  assert.throws(() => cuerpoMensajeMeta({}), /vacio/)
+})
