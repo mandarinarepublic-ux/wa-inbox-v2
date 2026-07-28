@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert'
 import { claveConversacion, agruparConversaciones } from '../lib/social-agrupar.js'
-import { admiteAdjuntos, cuerpoMensajeMeta } from '../lib/social-envio.js'
+import { admiteAdjuntos, cuerpoMensajeMeta, esHiloPublico } from '../lib/social-envio.js'
 
 const base = { canal: 'IG', sender_id: '660529760420669', direccion: 'ENTRANTE', estado: 'PENDIENTE' }
 
@@ -91,4 +91,27 @@ test('un tipo desconocido NO admite adjuntos', () => {
 
 test('null se asume DM y admite adjuntos', () => {
   assert.equal(admiteAdjuntos(null), true)
+})
+
+test('esHiloPublico: IG + comment_id sin tipo es publico (el ataque real)', () => {
+  // { canal:'IG', comment_id:'999' } sin tipo: admiteAdjuntos(undefined) daba
+  // 'DM' (true) pero el ruteo por comment_id mandaba al comentario público —
+  // un link de pago real se colaba a la vista de todos. esHiloPublico es la
+  // única fuente de verdad para las dos decisiones.
+  assert.equal(esHiloPublico({ canal: 'IG', comment_id: '999' }), true)
+})
+
+test('esHiloPublico: comentario declarado por tipo, sin importar el canal', () => {
+  assert.equal(esHiloPublico({ tipo: 'COMENTARIO', canal: 'FB' }), true)
+  assert.equal(esHiloPublico({ tipo: 'comentario', canal: 'IG', comment_id: '1' }), true)
+})
+
+test('esHiloPublico: DM de FB no es publico', () => {
+  assert.equal(esHiloPublico({ tipo: 'DM', canal: 'FB' }), false)
+  assert.equal(esHiloPublico({ canal: 'FB' }), false)
+})
+
+test('esHiloPublico: DM de IG sin comment_id no es publico', () => {
+  assert.equal(esHiloPublico({ tipo: 'DM', canal: 'IG' }), false)
+  assert.equal(esHiloPublico({ canal: 'IG' }), false)
 })

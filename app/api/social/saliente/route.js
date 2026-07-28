@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { guardarSocialMensajeSupabase, getTokenPagina, getFbPageId } from '@/lib/social-supabase'
-import { admiteAdjuntos, cuerpoMensajeMeta } from '@/lib/social-envio'
+import { esHiloPublico, cuerpoMensajeMeta } from '@/lib/social-envio'
 import { parseLinkpago, crearLinkPago, mensajeLinkPago } from '@/lib/dlocal'
 
 // Envío saliente del Social Inbox. Cuatro casos, cada uno con su endpoint:
@@ -45,13 +45,19 @@ export async function POST(req) {
     const RUTA_MSGS = `${pageId ? encodeURIComponent(pageId) : 'me'}/messages`
 
     const esIG = String(canal).toUpperCase() === 'IG'
-    const esComentario = String(tipo || '').toUpperCase() === 'COMENTARIO' || (esIG && !!comment_id)
+    // Única fuente de verdad para "¿esto es un comentario?": la misma función
+    // decide el ENRUTAMIENTO (abajo) y las GUARDIAS de foto/LINKPAGO (aquí).
+    // Antes el enrutamiento y admiteAdjuntos(tipo) preguntaban cosas distintas
+    // y podían discrepar — un IG con comment_id pero sin tipo colaba como DM en
+    // la guardia y como comentario en el ruteo: el link de pago se creaba y
+    // salía por la rama pública. Ver lib/social-envio.js.
+    const esComentario = esHiloPublico({ tipo, canal, comment_id })
     const publico = String(modo || '') === 'publico'
 
     // Un comentario es PÚBLICO: una foto ahí quedaría a la vista de todos. Se
     // rechaza acá, con un mensaje que el vendedor entienda, en vez de dejar que
     // Meta conteste un error genérico sobre el adjunto.
-    if (imagen && !admiteAdjuntos(tipo)) {
+    if (imagen && esComentario) {
       return NextResponse.json(
         { error: 'Instagram no admite fotos en un comentario. Responde en privado y mándala por el chat.' },
         { status: 400 }
@@ -66,7 +72,16 @@ export async function POST(req) {
     // Solo en DM: un link de pago no va en un comentario público.
     let texto = String(message || '')
     const monto = parseLinkpago(texto)
-    if (monto && admiteAdjuntos(tipo)) {
+    if (monto && !esComentario) {
+      // Si además viene una foto, cuerpoMensajeMeta se queda con la imagen y
+      // tira el texto: el link ya estaría cobrado en dLocal pero jamás se
+      // manda. Mejor cortar ANTES de crear el cobro que dejar un cobro fantasma.
+      if (imagen) {
+        return NextResponse.json(
+          { error: 'No se puede mandar una foto junto con un LINKPAGO. Mándalos en envíos separados.' },
+          { status: 400 }
+        )
+      }
       const link = await crearLinkPago(monto, `SOCIAL-${Date.now()}`)
       texto = mensajeLinkPago(monto, link)
     }
