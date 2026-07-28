@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert'
 import { claveConversacion, agruparConversaciones } from '../lib/social-agrupar.js'
+import { admiteAdjuntos, cuerpoMensajeMeta } from '../lib/social-envio.js'
 
 const base = { canal: 'IG', sender_id: '660529760420669', direccion: 'ENTRANTE', estado: 'PENDIENTE' }
 
@@ -53,8 +54,6 @@ test('una fila sin sender_id se ignora', () => {
   assert.equal(agruparConversaciones([{ ...base, sender_id: '', tipo: 'DM', texto: 'x' }]).length, 0)
 })
 
-import { admiteAdjuntos, cuerpoMensajeMeta } from '../lib/social-envio.js'
-
 test('un DM admite adjuntos', () => {
   assert.equal(admiteAdjuntos('DM'), true)
 })
@@ -84,4 +83,12 @@ test('Meta no admite texto y adjunto juntos', () => {
 
 test('un mensaje vacio es un error', () => {
   assert.throws(() => cuerpoMensajeMeta({}), /vacio/)
+})
+
+test('un tipo desconocido NO admite adjuntos', () => {
+  assert.equal(admiteAdjuntos('HISTORIA'), false)
+})
+
+test('null se asume DM y admite adjuntos', () => {
+  assert.equal(admiteAdjuntos(null), true)
 })
