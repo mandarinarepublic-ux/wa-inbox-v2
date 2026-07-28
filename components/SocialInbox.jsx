@@ -256,16 +256,12 @@ export default function SocialInbox({ active: isVisible }) {
   const convParaPanel = selectedConv ? {
     telefono: `${selectedConv.canal}:${selectedConv.sender_id}`,
     nombre: selectedConv.nombre,
-    // Todo lo que RightPanel hace con `msgs` (el contador regresivo de 24h Y el
-    // transcript que arma `crearPedido` para mandi-agent) vive detrás de las pestañas
-    // 'respuestas'/'tienda' que SOCIAL sí monta, o de 'ventas', que SOCIAL NUNCA monta
-    // (ver `pestanas` más abajo). Por eso hoy es inofensivo mandar [] en un COMENTARIO:
-    // ni el contador se ve (no hay pestaña que lo pinte) ni `crearPedido` puede
-    // dispararse (su botón vive en 'ventas'). Si algún día SOCIAL habilita 'ventas',
-    // hay que revisar esto: un comentario sin mensajes reales rompería el transcript
-    // que arma un pedido automático, y hoy además se le fuerza windowOpen=true, con lo
-    // que el contador (si llegara a pintarse) mostraría "00:00:00" en rojo debajo de un
-    // "✅ Ventana activa" — la contradicción que este proyecto vino a sacar del inbox.
+    // msgs:[] en un COMENTARIO es inofensivo por DOS razones distintas, no una: el
+    // contador de 24h vive en el header FIJO de RightPanel (fuera de toda pestaña) y
+    // con una lista vacía no encuentra ENTRANTE, así que no pinta el reloj; el
+    // transcript de `crearPedido` (botón CREAR PEDIDO) sí está detrás de la pestaña
+    // 'ventas', que SOCIAL nunca monta (ver `pestanas` más abajo). Si algún día se
+    // habilita 'ventas' en SOCIAL, revisar ese transcript.
     msgs: selectedConv.tipo === 'COMENTARIO' ? [] : selectedConv.messages.map(m => ({
       direccion: m.from === 'user' ? 'ENTRANTE' : 'SALIENTE',
       timestamp: m.time,
@@ -360,7 +356,7 @@ export default function SocialInbox({ active: isVisible }) {
   // Foto suelta desde el computador (botón 📎 del compositor, solo en hilos privados).
   // Sube al bucket propio (inbox-media) y manda la URL. Meta la busca sola: en FB/IG
   // no hace falta subir la imagen a Meta primero, como sí exige WhatsApp.
-  const onElegirFoto = async (e) => {
+  const onElegirFoto = useCallback(async (e) => {
     const file = e.target.files?.[0]
     e.target.value = '' // permite volver a elegir la misma foto
     if (!file) return
@@ -378,7 +374,7 @@ export default function SocialInbox({ active: isVisible }) {
     } finally {
       setSubiendo(false)
     }
-  }
+  }, [enviarSocial, load])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
