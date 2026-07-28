@@ -3,16 +3,19 @@ import { updateSocialEstadoSupabase } from '@/lib/social-supabase'
 
 // Cambia el estado (PENDIENTE/VENTAPROCESO/ATENDIDO/ARCHIVADO) de una conversación
 // del Social Inbox. Actualiza todas las filas de esa conversación en Supabase.
+// Una conversación es canal + TIPO + sender: el comentario y el DM del mismo
+// cliente son hilos distintos, así que el `tipo` tiene que viajar en la petición
+// (si no, tocar uno cambia el otro).
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
 export async function POST(req) {
   try {
-    const { canal, sender_id, estado } = await req.json()
+    const { canal, sender_id, estado, tipo } = await req.json()
     if (!sender_id || !estado) {
       return NextResponse.json({ error: 'faltan sender_id o estado' }, { status: 400 })
     }
-    await updateSocialEstadoSupabase(canal || 'FB', sender_id, estado)
+    await updateSocialEstadoSupabase(canal || 'FB', sender_id, estado, tipo)
     return NextResponse.json({ ok: true })
   } catch (err) {
     console.error('[/api/social/estado]', err)

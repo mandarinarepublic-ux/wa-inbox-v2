@@ -313,13 +313,18 @@ export default function SocialInbox({ active: isVisible }) {
       if (reply.text) { await enviarSocial({ texto: reply.text }); onProgress?.(++hechas, total) }
       for (const url of aMandar) { await enviarSocial({ imagen: url }); onProgress?.(++hechas, total) }
       if (soloTexto && imgs.length) {
-        alert('Es un comentario público: se mandó solo el texto. Responde en privado para poder mandar las fotos.')
+        // Con el comentario vencido (más de 7 días) `iraAlComentario` ya ruteó por DM:
+        // el envío SALIÓ en privado y pedirle "responde en privado" sería pedirle algo
+        // que ya hizo. Las fotos igual no salen, pero por otra razón — decirla.
+        alert(iraAlComentario
+          ? 'Es un comentario público: se mandó solo el texto. Responde en privado para poder mandar las fotos.'
+          : 'Se mandó solo el texto (en privado): las respuestas rápidas no mandan sus fotos desde un hilo de comentarios.')
       }
     } catch (e) {
       alert('❌ No se pudo enviar: ' + e.message)
     }
     load()
-  }, [selectedConv, enviarSocial, load])
+  }, [selectedConv, iraAlComentario, enviarSocial, load])
 
   // `RightPanel` acepta esta prop pero hoy no la invoca en ningún lado (tampoco en
   // WhatsApp: App.jsx la pasa igual, sin que nada la dispare todavía). Se deja cableada
@@ -379,6 +384,15 @@ export default function SocialInbox({ active: isVisible }) {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [selected, convs])
+
+  // Cambiar de conversación vuelve SIEMPRE a 'privado'. El modo es del hilo, no del
+  // vendedor: si se quedara pegado, contestar un comentario en 🌎 Público dejaría el
+  // siguiente hilo en público y lo que se mande ahí —el compositor y las respuestas
+  // rápidas, que son las mismas de WhatsApp y piden nombre, cédula y dirección— se
+  // publicaría a la vista de todos. Privado es el lado seguro.
+  useEffect(() => {
+    setModoRespuesta('privado')
+  }, [selected])
 
   // Trae la publicación/anuncio de Instagram que comentó el cliente, para ver A QUÉ
   // producto se refiere (el comentario suele ser un "precio?" sin contexto).
@@ -500,13 +514,16 @@ export default function SocialInbox({ active: isVisible }) {
 
   const cambiarEstado = async (nuevo) => {
     if (!selectedConv || selectedConv.status === nuevo) return
-    const { canal, sender_id } = selectedConv
+    const { canal, sender_id, tipo } = selectedConv
+    // El update optimista toca UNA sola fila (convKey incluye el tipo), así que el
+    // servidor tiene que filtrar por tipo también: si no, archivar un comentario
+    // archivaba además el DM del cliente y la pantalla mentía hasta el próximo poll.
     setConvs(prev => prev.map(c => convKey(c) === selected ? { ...c, status: nuevo } : c))
     try {
       await fetch('/api/social/estado', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ canal, sender_id, estado: nuevo }),
+        body: JSON.stringify({ canal, sender_id, tipo: tipo || 'DM', estado: nuevo }),
       })
     } catch (e) {
       console.error('Estado error:', e)
