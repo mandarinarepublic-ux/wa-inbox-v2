@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert'
 import { claveConversacion, agruparConversaciones } from '../lib/social-agrupar.js'
-import { admiteAdjuntos, cuerpoMensajeMeta, esHiloPublico } from '../lib/social-envio.js'
+import { cuerpoMensajeMeta, esHiloPublico } from '../lib/social-envio.js'
 import { estadoVentana } from '../lib/social-ventana.js'
 
 const base = { canal: 'IG', sender_id: '660529760420669', direccion: 'ENTRANTE', estado: 'PENDIENTE' }
@@ -55,19 +55,6 @@ test('una fila sin sender_id se ignora', () => {
   assert.equal(agruparConversaciones([{ ...base, sender_id: '', tipo: 'DM', texto: 'x' }]).length, 0)
 })
 
-test('un DM admite adjuntos', () => {
-  assert.equal(admiteAdjuntos('DM'), true)
-})
-
-test('un comentario NO admite adjuntos', () => {
-  assert.equal(admiteAdjuntos('COMENTARIO'), false)
-})
-
-test('sin tipo se asume DM', () => {
-  assert.equal(admiteAdjuntos(''), true)
-  assert.equal(admiteAdjuntos(undefined), true)
-})
-
 test('el cuerpo de un mensaje de texto', () => {
   assert.deepEqual(cuerpoMensajeMeta({ texto: 'hola' }), { text: 'hola' })
 })
@@ -86,20 +73,18 @@ test('un mensaje vacio es un error', () => {
   assert.throws(() => cuerpoMensajeMeta({}), /vacio/)
 })
 
-test('un tipo desconocido NO admite adjuntos', () => {
-  assert.equal(admiteAdjuntos('HISTORIA'), false)
-})
-
-test('null se asume DM y admite adjuntos', () => {
-  assert.equal(admiteAdjuntos(null), true)
-})
-
 test('esHiloPublico: IG + comment_id sin tipo es publico (el ataque real)', () => {
-  // { canal:'IG', comment_id:'999' } sin tipo: admiteAdjuntos(undefined) daba
-  // 'DM' (true) pero el ruteo por comment_id mandaba al comentario público —
-  // un link de pago real se colaba a la vista de todos. esHiloPublico es la
-  // única fuente de verdad para las dos decisiones.
+  // { canal:'IG', comment_id:'999' } sin tipo: la vieja guardia miraba solo
+  // `tipo` y lo daba por 'DM', pero el ruteo por comment_id mandaba al
+  // comentario público — un link de pago real se colaba a la vista de todos.
+  // esHiloPublico es la única fuente de verdad para las dos decisiones.
   assert.equal(esHiloPublico({ canal: 'IG', comment_id: '999' }), true)
+})
+
+test('esHiloPublico: FB + comment_id sin tipo cae a DM (no publica)', () => {
+  // Fija el comportamiento real: el comment_id por sí solo NO alcanza, hace
+  // falta canal IG o tipo COMENTARIO. Un FB sin tipo se trata como privado.
+  assert.equal(esHiloPublico({ canal: 'FB', comment_id: '1' }), false)
 })
 
 test('esHiloPublico: comentario declarado por tipo, sin importar el canal', () => {
