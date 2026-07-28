@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import { guardarSocialMensajeSupabase, getTokenPagina, getFbPageId } from '@/lib/social-supabase'
+import { admiteAdjuntos, cuerpoMensajeMeta } from '@/lib/social-envio'
+import { parseLinkpago, crearLinkPago, mensajeLinkPago } from '@/lib/dlocal'
 
 // Envío saliente del Social Inbox. Cuatro casos, cada uno con su endpoint:
 //   FB · DM         → Send API, recipient {id: PSID}
@@ -32,9 +34,9 @@ export async function POST(req) {
     if (!FB_PAGE_TOKEN) {
       return NextResponse.json({ error: 'FB_PAGE_TOKEN no configurado en el servidor' }, { status: 500 })
     }
-    const { sender_id, message, canal, comment_id, tipo, modo } = await req.json()
-    if (!message || !sender_id) {
-      return NextResponse.json({ error: 'Faltan sender_id o message' }, { status: 400 })
+    const { sender_id, message, canal, comment_id, tipo, modo, imagen } = await req.json()
+    if (!sender_id || (!message && !imagen)) {
+      return NextResponse.json({ error: 'Faltan sender_id y contenido (message o imagen)' }, { status: 400 })
     }
 
     // Mandar a /{page-id}/messages y no a /me/messages: así sirve tanto un token de
@@ -45,11 +47,33 @@ export async function POST(req) {
     const esIG = String(canal).toUpperCase() === 'IG'
     const esComentario = String(tipo || '').toUpperCase() === 'COMENTARIO' || (esIG && !!comment_id)
     const publico = String(modo || '') === 'publico'
-    const texto = String(message)
+
+    // Un comentario es PÚBLICO: una foto ahí quedaría a la vista de todos. Se
+    // rechaza acá, con un mensaje que el vendedor entienda, en vez de dejar que
+    // Meta conteste un error genérico sobre el adjunto.
+    if (imagen && !admiteAdjuntos(tipo)) {
+      return NextResponse.json(
+        { error: 'Instagram no admite fotos en un comentario. Responde en privado y mándala por el chat.' },
+        { status: 400 }
+      )
+    }
 
     if (esComentario && !comment_id) {
       return NextResponse.json({ error: 'falta comment_id para responder al comentario' }, { status: 400 })
     }
+
+    // LINKPAGO35 → link de cobro de dLocal. Mismo comando que en WhatsApp.
+    // Solo en DM: un link de pago no va en un comentario público.
+    let texto = String(message || '')
+    const monto = parseLinkpago(texto)
+    if (monto && admiteAdjuntos(tipo)) {
+      const link = await crearLinkPago(monto, `SOCIAL-${Date.now()}`)
+      texto = mensajeLinkPago(monto, link)
+    }
+
+    // Meta no admite texto y adjunto en el mismo mensaje: con imagen, el texto
+    // (si vino LINKPAGO o algo más) se descarta a favor de la foto.
+    const cuerpo = cuerpoMensajeMeta({ texto: imagen ? '' : texto, imagen })
 
     let r
     if (esComentario && publico) {
@@ -57,13 +81,13 @@ export async function POST(req) {
       r = await graphPost(`${encodeURIComponent(comment_id)}/comments`, { message: texto }, FB_PAGE_TOKEN)
     } else if (esComentario && esIG) {
       // IG: respuesta privada al comentario (abre el DM).
-      r = await graphPost(RUTA_MSGS, { recipient: { comment_id: String(comment_id) }, message: { text: texto } }, FB_PAGE_TOKEN)
+      r = await graphPost(RUTA_MSGS, { recipient: { comment_id: String(comment_id) }, message: cuerpo }, FB_PAGE_TOKEN)
     } else if (esComentario) {
       // FB: respuesta privada al comentario (endpoint propio de la página).
       r = await graphPost(`${encodeURIComponent(comment_id)}/private_replies`, { message: texto }, FB_PAGE_TOKEN)
     } else {
       // DM normal (FB o IG). Ventana de 24 h.
-      const body = { recipient: { id: String(sender_id) }, message: { text: texto } }
+      const body = { recipient: { id: String(sender_id) }, message: cuerpo }
       if (!esIG) body.messaging_type = 'RESPONSE'
       r = await graphPost(RUTA_MSGS, body, FB_PAGE_TOKEN)
     }
@@ -91,6 +115,7 @@ export async function POST(req) {
         sender_id: String(sender_id),
         direccion: 'SALIENTE',
         texto: publico ? `↩️ (público) ${texto}` : texto,
+        media_url: imagen || '',
         msg_id: r.data.message_id || r.data.id || '',
         comment_id: esComentario ? String(comment_id) : '',
         estado: 'ATENDIDO',
