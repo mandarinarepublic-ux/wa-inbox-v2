@@ -23,9 +23,15 @@ const TEMPERATURAS = [
 ]
 const TEMP_META = Object.fromEntries(TEMPERATURAS.map(t => [t.key, t]))
 
-// Hasta dónde puede estirarse la caja de texto antes de sacar su propio scroll:
-// más allá de esto se comería el hilo de mensajes.
-const CAJA_ALTO_MAX = 120
+// La caja de texto arranca en UNA línea y se estira sola. Los números salen de
+// fontSize 14 × lineHeight 1.5 = 21px por línea, más 11px de aire arriba y abajo
+// (lo que centra esa única línea dentro de los 44px de zona táctil del celular).
+// El tope son 6 líneas: el dueño escribe desde el teléfono y con 5 volvía a
+// aparecer scroll dentro de la caja, que es justo lo que se quería sacar.
+const CAJA_LINEA     = 21
+const CAJA_AIRE      = 11
+const CAJA_ALTO_MIN  = 44                                      // zona táctil, no se negocia
+const CAJA_ALTO_MAX  = CAJA_LINEA * 6 + CAJA_AIRE * 2          // 148px ≈ 6 líneas
 
 // La ventana de 24h de Meta arranca en el ÚLTIMO mensaje del cliente. A partir de ahí,
 // un lead 🔥 caliente que se acerca a las 24h de silencio se resalta con ⏰ (hay que
@@ -177,15 +183,39 @@ export default function App() {
 
   // La caja de texto crece con lo que se escribe. Antes tenía altura fija y
   // scroll propio: al pasar de dos líneas el navegador arrastraba la vista para
-  // seguir al cursor y parecía que "saltaba" toda la ventana. Se recalcula por
-  // efecto y no en el onChange para que también valga cuando el texto entra por
-  // código (respuestas rápidas, emojis, copiar al input desde el panel derecho).
-  useLayoutEffect(() => {
-    const ta = taRef.current
+  // seguir al cursor. Y como `.chat-col` tiene overflow:hidden, el que se corría
+  // era ESE contenedor entero —sin barra de scroll para devolverlo—, por eso se
+  // sentía como que "se movía toda la ventana" y no como un scroll de la caja.
+  const ajustarAlto = useCallback((ta) => {
     if (!ta) return
     ta.style.height = 'auto'   // sin esto solo crecería, nunca volvería a achicarse
-    ta.style.height = Math.min(ta.scrollHeight, CAJA_ALTO_MAX) + 'px'
-  }, [input])
+    // Vacía SIEMPRE mide una línea. Se fuerza en vez de medir porque Chrome suma el
+    // placeholder al scrollHeight: si el texto de ayuda envuelve a dos líneas en el
+    // celular, la caja arrancaría en dos aunque no haya nada escrito.
+    ta.style.height = ta.value
+      ? Math.min(ta.scrollHeight, CAJA_ALTO_MAX) + 'px'
+      : CAJA_ALTO_MIN + 'px'
+  }, [])
+
+  // Ref de función: mide en cuanto el <textarea> entra al DOM. Hace falta porque
+  // el compositor se desmonta al volver a la lista y el borrador NO se borra al
+  // cambiar de chat ni de bandeja: al volver, `input` es el mismo, así que un
+  // efecto por dependencias no dispararía y la caja aparecería en su alto mínimo
+  // con el borrador largo adentro y scroll, hasta tocar una tecla.
+  const setTaRef = useCallback((node) => { taRef.current = node; ajustarAlto(node) }, [ajustarAlto])
+
+  // Recalcular cuando cambia el texto —incluido el que entra por código:
+  // respuestas rápidas, emojis, copiar al input, y el setInput('') del envío, que
+  // devuelve la caja a una línea— y cuando cambia el ANCHO disponible, porque el
+  // mismo texto se re-parte en más o menos líneas: al arrastrar el asa del panel
+  // derecho (rightWidth) o al rotar el celular (resize).
+  useLayoutEffect(() => { ajustarAlto(taRef.current) }, [input, active, rightWidth, ajustarAlto])
+
+  useEffect(() => {
+    const alRedimensionar = () => ajustarAlto(taRef.current)
+    window.addEventListener('resize', alRedimensionar)
+    return () => window.removeEventListener('resize', alRedimensionar)
+  }, [ajustarAlto])
 
   // ── Cargar datos ──────────────────────────────────────────────
   const load = useCallback(async () => {
@@ -1478,11 +1508,14 @@ export default function App() {
                   </div>
                 )}
 
-                <div style={{ flex:1, background:'#111c2a', border:'1px solid #1e2d3d', borderRadius:13, padding:'9px 13px', position:'relative' }}>
+                {/* El aire de arriba y abajo lo pone el propio textarea (ver CAJA_AIRE), no
+                    este contenedor: así la zona táctil de 44px es el textarea entero y no
+                    queda un borde muerto que al tocarlo no enfoca nada. */}
+                <div style={{ flex:1, background:'#111c2a', border:'1px solid #1e2d3d', borderRadius:13, padding:'0 13px', position:'relative' }}>
                   {/* Barra de cita: qué mensaje se está respondiendo. Con ✕ para soltarlo. */}
                   {citando && (
                     <div style={{
-                      display:'flex', alignItems:'center', gap:8, marginBottom:8,
+                      display:'flex', alignItems:'center', gap:8, marginTop:8, marginBottom:8,
                       borderLeft:'3px solid #25d366', background:'rgba(0,0,0,.3)',
                       borderRadius:'0 8px 8px 0', padding:'5px 10px',
                     }}>
@@ -1498,15 +1531,23 @@ export default function App() {
                         style={{ background:'transparent', border:'none', color:'#64748b', fontSize:15, cursor:'pointer', lineHeight:1, flexShrink:0 }}>✕</button>
                     </div>
                   )}
-                  {/* rows={1} + minHeight: el alto real lo pone el efecto de auto-crecer.
-                      El scroll propio solo aparece al pasarse del tope. */}
-                  <textarea ref={taRef} value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKey}
-                    placeholder={getModoIA(activeConv?.telefono) ? '🤖 IA respondiendo automáticamente...' : 'Escribe un mensaje... (Ctrl+Enter para enviar)'}
+                  {/* Arranca en UNA línea (rows={1}); el alto real lo pone ajustarAlto. El
+                      minHeight mantiene los 44px de zona táctil aunque la línea sea una
+                      sola, y el padding la centra dentro. El scroll propio solo aparece
+                      al pasarse de las 6 líneas del tope.
+                      La tecla de envío NO se toca: Ctrl+Enter manda, Enter salta de línea.
+                      Es deliberado, para que a nadie se le escape un mensaje a medio
+                      escribir a un cliente real; por eso el placeholder sigue avisándolo,
+                      pero corto: el texto largo envolvía a dos líneas en un celular de
+                      360px y hacía ver la caja vacía del doble de alto. */}
+                  <textarea ref={setTaRef} value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKey}
+                    placeholder={getModoIA(activeConv?.telefono) ? '🤖 IA respondiendo automáticamente...' : 'Mensaje... (Ctrl+Enter envía)'}
                     rows={1}
                     style={{
                       width:'100%', background:'transparent', border:'none', outline:'none',
                       color:'#e2e8f0', fontSize:14, resize:'none', lineHeight:1.5,
-                      minHeight:44, maxHeight:CAJA_ALTO_MAX, overflowY:'auto',
+                      display:'block', boxSizing:'border-box', padding:`${CAJA_AIRE}px 0`,
+                      minHeight:CAJA_ALTO_MIN, maxHeight:CAJA_ALTO_MAX, overflowY:'auto',
                       scrollbarWidth:'thin',
                       scrollbarColor:'#25d366 #111c2a',
                     }} />
