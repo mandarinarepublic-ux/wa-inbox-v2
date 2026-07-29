@@ -7,6 +7,7 @@ import { archivarFoto } from '@/lib/media-archive'
 import { parseLinkpago, crearLinkPago, mensajeLinkPago } from '@/lib/dlocal'
 import { getAutomatizaciones } from '@/lib/automatizaciones'
 import { enviarPush, cuerpoDeMensaje, debeNotificar } from '@/lib/push'
+import { decidirIA } from '@/lib/ia-canal'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -192,10 +193,13 @@ async function procesar(nuevos, origin) {
   const contactos = await getContactos(null).catch(() => [])
   // Config de automatizaciones (saludos). Un fetch por ciclo. Si falla → sin saludos.
   const auto = await getAutomatizaciones().catch(() => null)
-  const modoIAde = (phone) => {
+  // El CORTAFUEGOS por número se aplica ACA y no en cada sitio que llama al
+  // agente: una sola fuente. Es la leccion de los 4 bugs del 27-29 jul, donde
+  // habia cuatro caminos hacia /api/saliente y solo uno inyectaba el canal.
+  const modoIAde = (phone, phoneId) => {
     const t = tail9(phone)
-    const c = contactos.find(c => tail9(c.telefono) === t)
-    return c ? c.modoIA !== false : false // contacto nuevo → IA APAGADA (la prende un humano)
+    const contacto = contactos.find(c => tail9(c.telefono) === t)
+    return decidirIA({ config: auto, phoneId, contacto })
   }
   // Estado de flujo actual del contacto (snapshot de este ciclo). Contacto nuevo → 'pendiente'.
   const estadoDe = (phone) => {
@@ -248,7 +252,7 @@ async function procesar(nuevos, origin) {
   // prendida, el propio agente saluda → evitamos doble mensaje). Nuevo → saludo de
   // bienvenida; reactivación tras N horas de silencio → "hola de vuelta".
   async function saludarSiCorresponde(phone, name, canal) {
-    if (!auto || modoIAde(phone)) return
+    if (!auto || modoIAde(phone, canal)) return
     const t = tail9(phone)
     if (saludados.has(t)) return
     const nuevo = esNuevoDe(phone)
@@ -331,7 +335,7 @@ async function procesar(nuevos, origin) {
     }
 
     // Auto-respuesta IA (solo si el contacto tiene la IA prendida):
-    if (modoIAde(m.telefono)) {
+    if (modoIAde(m.telefono, m.phoneId)) {
       if (m.tipo === 'texto' && String(m.contenido).trim()) {
         // Texto → MANDI responde normalmente.
         await responderConIA(origin, m.telefono, m.nombre, m.contenido, m.phoneId)
