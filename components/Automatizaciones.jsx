@@ -62,6 +62,48 @@ export default function Automatizaciones({ active }) {
       [sub]: { ...((prev?.seguimientos || {})[sub] || {}), [campo]: valor },
     } }))
 
+  // Los INTERRUPTORES se guardan solos, sin pasar por "Guardar cambios".
+  //
+  // Antes solo cambiaban el estado visual: el switch se veía apagado, la
+  // automatización seguía prendida en la base y los saludos seguían saliendo a
+  // clientes reales. Un interruptor que miente sobre si algo está enviando
+  // mensajes no puede depender de que además te acuerdes de apretar Guardar.
+  //
+  // Se manda un patch MÍNIMO (solo el bloque tocado): así una edición de texto a
+  // medio escribir no se guarda de contrabando y el botón Guardar sigue pidiéndola.
+  // Ojo: el merge del servidor es de UN nivel, por eso los interruptores de
+  // seguimientos por temperatura mandan el bloque de esa temperatura completo.
+  const guardarInterruptor = async (patch, aplicar) => {
+    const previa = config
+    setConfig(aplicar(previa))
+    setSaving(true)
+    const r = await saveAutomatizaciones(patch)
+    setSaving(false)
+    if (r?.ok) {
+      setOrig(JSON.stringify(r.config || {}))
+      setToast('✅ Guardado')
+    } else {
+      setConfig(previa) // no se guardó → el switch vuelve donde estaba, sin mentir
+      setToast('❌ No se pudo guardar: ' + (r?.error || 'reintenta'))
+    }
+    setTimeout(() => setToast(null), 2500)
+  }
+
+  const togBloque = (bloque, valor) => guardarInterruptor(
+    { [bloque]: { activo: valor } },
+    prev => ({ ...prev, [bloque]: { ...(prev?.[bloque] || {}), activo: valor } }))
+
+  const togSegG = (valor) => guardarInterruptor(
+    { seguimientos: { activo: valor } },
+    prev => ({ ...prev, seguimientos: { ...(prev?.seguimientos || {}), activo: valor } }))
+
+  // `actual` va completo a propósito: el merge del servidor es de un solo nivel,
+  // así que un patch con solo {activo} borraría las horas y el texto.
+  const togSegT = (key, valor, actual) => guardarInterruptor(
+    { seguimientos: { [key]: { ...actual, activo: valor } } },
+    prev => ({ ...prev, seguimientos: { ...(prev?.seguimientos || {}),
+      [key]: { ...((prev?.seguimientos || {})[key] || {}), activo: valor } } }))
+
   const guardar = async () => {
     setSaving(true)
     const r = await saveAutomatizaciones(config)
@@ -117,7 +159,7 @@ export default function Automatizaciones({ active }) {
                   Se envía la primera vez que alguien te escribe. Atiende al instante aunque la IA esté apagada.
                 </div>
               </div>
-              <Switch on={!!sn.activo} onClick={() => setBloque('saludo_nuevo', 'activo', !sn.activo)} />
+              <Switch on={!!sn.activo} onClick={() => togBloque('saludo_nuevo', !sn.activo)} />
             </div>
             {sn.activo && (
               <textarea
@@ -141,7 +183,7 @@ export default function Automatizaciones({ active }) {
                   Cuando un cliente reaparece después de un tiempo sin escribir.
                 </div>
               </div>
-              <Switch on={!!sr.activo} onClick={() => setBloque('saludo_reactivacion', 'activo', !sr.activo)} />
+              <Switch on={!!sr.activo} onClick={() => togBloque('saludo_reactivacion', !sr.activo)} />
             </div>
             {sr.activo && (<>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
@@ -178,7 +220,7 @@ export default function Automatizaciones({ active }) {
                   Escribe solo, según qué tan caliente esté el lead y cuánto lleva callado — <b style={{ color: '#94a3b8' }}>siempre dentro de la ventana de 24h</b> de WhatsApp. Máx 1 mensaje por ventana; se cancela si el cliente responde.
                 </div>
               </div>
-              <Switch on={!!sg.activo} onClick={() => setSegG('activo', !sg.activo)} />
+              <Switch on={!!sg.activo} onClick={() => togSegG(!sg.activo)} />
             </div>
 
             {sg.activo && (<>
@@ -197,7 +239,7 @@ export default function Automatizaciones({ active }) {
                         <div style={{ fontSize: 13, fontWeight: 800, color: t.activo ? color : '#94a3b8' }}>{label}</div>
                         <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{ayuda}</div>
                       </div>
-                      <Switch on={!!t.activo} onClick={() => setSegT(key, 'activo', !t.activo)} />
+                      <Switch on={!!t.activo} onClick={() => togSegT(key, !t.activo, t)} />
                     </div>
                     {t.activo && (<>
                       {key === 'caliente' && (

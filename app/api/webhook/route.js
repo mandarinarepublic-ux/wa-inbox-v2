@@ -181,7 +181,15 @@ async function procesar(nuevos, origin) {
     return false
   }
 
-  const contactos = await getContactos().catch(() => [])
+  // `null` = TODOS los números. El webhook NO es una bandeja: atiende lo que entre
+  // por cualquier canal, así que su agenda tiene que ser completa.
+  //
+  // Con el default (solo el número principal) un contacto del OTRO número no
+  // aparecía nunca en esta lista, y de ahí salían tres mentiras seguidas:
+  // esNuevoDe() daba siempre true → lo saludaba como nuevo EN CADA MENSAJE;
+  // estadoDe() nunca veía 'atendido' → no lo reabría a PENDIENTE; y modoIAde()
+  // y ultimoEntranteAtDe() lo trataban como si no tuviera historia.
+  const contactos = await getContactos(null).catch(() => [])
   // Config de automatizaciones (saludos). Un fetch por ciclo. Si falla → sin saludos.
   const auto = await getAutomatizaciones().catch(() => null)
   const modoIAde = (phone) => {
