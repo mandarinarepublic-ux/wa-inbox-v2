@@ -42,7 +42,10 @@ export async function GET(req) {
   }
 
   const origin = new URL(req.url).origin
-  const contactos = await getContactos().catch(() => [])
+  // `null` = TODOS los canales. Con el default (solo el número principal) los
+  // contactos de la otra bandeja nunca recibían seguimiento. Cada envío sale por
+  // el número al que ese cliente escribió (`Canal: c.phoneId`).
+  const contactos = await getContactos(null).catch(() => [])
   const now = Date.now()
   const enviados = []
   const errores = []
@@ -79,6 +82,7 @@ export async function GET(req) {
           Telefono: c.telefono,
           Nombre: c.alias || c.nombre || '',
           Mensaje: regla.texto.trim(),
+          Canal: c.phoneId,
         }),
       })
       if (r.ok) {

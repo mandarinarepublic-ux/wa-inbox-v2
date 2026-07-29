@@ -48,6 +48,10 @@ const RE_IMG = /https?:\/\/[^\s)]+?\.(?:png|jpe?g|webp|gif)(?:\?[^\s)]*)?/gi
 // `auto: true` marca que el envío NO lo hizo un humano (IA, saludo automático,
 // LINKPAGO). /api/saliente lo usa para no reiniciar el enfriamiento del aviso push:
 // si la IA está llevando el chat, no hay que empezar a interrumpir al humano.
+//
+// `Canal` es OBLIGATORIO: el número por el que responder es aquel al que el
+// cliente escribió. Sin él, /api/saliente cae al número principal y el cliente
+// que escribió a REPUBLIC recibe la respuesta desde MANDI (otro número).
 async function enviarSaliente(origin, body) {
   return fetch(`${origin}/api/saliente`, {
     method: 'POST',
@@ -62,15 +66,15 @@ const MSG_ESPERA = 'Permíteme un momento por favor 🧡'
 // Handoff invisible: el cliente mandó una imagen → MANDI no vende ni identifica.
 // Marcamos el contacto SOPORTE + HUMANO (la IA se apaga y un ejecutivo lo toma)
 // y respondemos SOLO con el mensaje de espera, en la voz de MANDI.
-async function escalarASoporte(origin, phone, name) {
+async function escalarASoporte(origin, phone, name, canal) {
   await Promise.all([
     updateEstado(phone, 'SOPORTE').catch(e => console.error('[webhook IA] estado SOPORTE:', e.message)),
     updateModoIA(phone, 'HUMANO').catch(e => console.error('[webhook IA] modoIA HUMANO:', e.message)),
   ])
-  await enviarSaliente(origin, { Telefono: phone, Nombre: name || '', Mensaje: MSG_ESPERA })
+  await enviarSaliente(origin, { Telefono: phone, Nombre: name || '', Mensaje: MSG_ESPERA, Canal: canal })
 }
 
-async function responderConIA(origin, phone, name, message) {
+async function responderConIA(origin, phone, name, message, canal) {
   try {
     const r = await fetch(AGENT_URL, {
       method: 'POST',
@@ -98,10 +102,10 @@ async function responderConIA(origin, phone, name, message) {
     if (!texto && !imagenes.length) return
 
     // 1) Primero el texto (descripción, precios, tallas).
-    if (texto) await enviarSaliente(origin, { Telefono: phone, Nombre: name || '', Mensaje: texto })
+    if (texto) await enviarSaliente(origin, { Telefono: phone, Nombre: name || '', Mensaje: texto, Canal: canal })
     // 2) Luego cada foto, en orden.
     for (const url of imagenes) {
-      await enviarSaliente(origin, { Telefono: phone, Nombre: name || '', ImagenURL: url })
+      await enviarSaliente(origin, { Telefono: phone, Nombre: name || '', ImagenURL: url, Canal: canal })
     }
   } catch (e) {
     console.error('[webhook IA] agente falló:', e.message)
@@ -235,7 +239,7 @@ async function procesar(nuevos, origin) {
   // Saludo automático. Solo cuando la IA está APAGADA para el contacto (si está
   // prendida, el propio agente saluda → evitamos doble mensaje). Nuevo → saludo de
   // bienvenida; reactivación tras N horas de silencio → "hola de vuelta".
-  async function saludarSiCorresponde(phone, name) {
+  async function saludarSiCorresponde(phone, name, canal) {
     if (!auto || modoIAde(phone)) return
     const t = tail9(phone)
     if (saludados.has(t)) return
@@ -244,7 +248,7 @@ async function procesar(nuevos, origin) {
       const s = auto.saludo_nuevo
       if (s?.activo && String(s.texto || '').trim()) {
         saludados.add(t)
-        await enviarSaliente(origin, { Telefono: phone, Nombre: name || '', Mensaje: s.texto.trim() })
+        await enviarSaliente(origin, { Telefono: phone, Nombre: name || '', Mensaje: s.texto.trim(), Canal: canal })
       }
       return
     }
@@ -254,7 +258,7 @@ async function procesar(nuevos, origin) {
       const prevMs = ultimoEntranteAtDe(phone)
       if (prevMs && Date.now() - prevMs >= horas * 3600 * 1000) {
         saludados.add(t)
-        await enviarSaliente(origin, { Telefono: phone, Nombre: name || '', Mensaje: s.texto.trim() })
+        await enviarSaliente(origin, { Telefono: phone, Nombre: name || '', Mensaje: s.texto.trim(), Canal: canal })
       }
     }
   }
@@ -300,7 +304,7 @@ async function procesar(nuevos, origin) {
 
     // Saludo automático (bienvenida a nuevo / "hola de vuelta" al reactivarse).
     // Va antes de LINKPAGO/IA y solo dispara con la IA apagada.
-    await saludarSiCorresponde(m.telefono, m.nombre)
+    await saludarSiCorresponde(m.telefono, m.nombre, m.phoneId)
       .catch(e => console.error('[/api/webhook] saludo:', e.message))
 
     // LINKPAGO<monto> entrante → genera link dLocal y lo devuelve al remitente.
@@ -310,7 +314,7 @@ async function procesar(nuevos, origin) {
       if (monto) {
         try {
           const link = await crearLinkPago(monto, `${m.telefono}-${Date.now()}`)
-          await enviarSaliente(origin, { Telefono: m.telefono, Nombre: m.nombre || '', Mensaje: mensajeLinkPago(monto, link) })
+          await enviarSaliente(origin, { Telefono: m.telefono, Nombre: m.nombre || '', Mensaje: mensajeLinkPago(monto, link), Canal: m.phoneId })
         } catch (e) {
           console.error('[webhook LINKPAGO] falló:', e.message)
         }
@@ -322,11 +326,11 @@ async function procesar(nuevos, origin) {
     if (modoIAde(m.telefono)) {
       if (m.tipo === 'texto' && String(m.contenido).trim()) {
         // Texto → MANDI responde normalmente.
-        await responderConIA(origin, m.telefono, m.nombre, m.contenido)
+        await responderConIA(origin, m.telefono, m.nombre, m.contenido, m.phoneId)
       } else if (m.tipo === 'imagen') {
         // Foto del cliente → NO vender/identificar: mensaje de espera + handoff a
         // SOPORTE (apaga la IA para que un ejecutivo tome el chat).
-        await escalarASoporte(origin, m.telefono, m.nombre)
+        await escalarASoporte(origin, m.telefono, m.nombre, m.phoneId)
       }
     }
   }
