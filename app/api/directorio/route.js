@@ -11,7 +11,8 @@ const DIA_MS = 24 * 60 * 60 * 1000
 // (calculada desde ultimo_entrante_at). Alimenta la pestaña CONTACTOS.
 export async function GET() {
   try {
-    const contactos = await getContactos()
+    // Sin filtro de canal: la agenda es UNA sola, compartida por los dos numeros.
+    const contactos = await getContactos(null)
     const now = Date.now()
     const lista = (contactos || [])
       .filter((c) => soloDigitos(c.telefono).length >= 9)

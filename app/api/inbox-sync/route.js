@@ -16,7 +16,15 @@ export async function GET(req) {
     const [lista, rows, contactos, pendientes] = await Promise.all([
       getLista(canal),
       getMensajes(canal),
-      getContactos(canal),
+      // Contactos SIN filtro de canal, a propósito. El estado (pendiente, atendido,
+      // ARCHIVADO, venta…) vive en la conversación, y hay UNA por cliente, no una
+      // por número. En cambio la lista se filtra por el canal del MENSAJE.
+      //
+      // Filtrando los dos igual, un cliente que escribió a los dos números aparecía
+      // en la lista de un canal mientras su ficha quedaba del lado del otro: la
+      // pantalla no encontraba su estado, asumía "pendiente", y ARCHIVAR parecía no
+      // funcionar (se guardaba bien y volvía a pintarse pendiente al refrescar).
+      getContactos(null),
       // De TODOS los canales, no solo del activo: alimenta el contador de la
       // pestaña que no se está mirando.
       contarPendientesPorCanalSupabase().catch(() => ({})),
