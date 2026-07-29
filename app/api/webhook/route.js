@@ -3,7 +3,7 @@ import { waitUntil } from '@vercel/functions'
 import { registrarContactoEntrante, getContactos, updateEstado, updateModoIA, marcarPush } from '@/lib/contactos'
 import { usaSupabaseLectura } from '@/lib/supabase'
 import { guardarMensajeSupabase, existeWamidSupabase, guardarEventoCrudoSupabase, actualizarEstadoEntregaSupabase } from '@/lib/inbox-supabase'
-import { archivarFoto } from '@/lib/media-archive'
+import { archivarMedia } from '@/lib/media-archive'
 import { parseLinkpago, crearLinkPago, mensajeLinkPago } from '@/lib/dlocal'
 import { getAutomatizaciones } from '@/lib/automatizaciones'
 import { enviarPush, cuerpoDeMensaje, debeNotificar } from '@/lib/push'
@@ -250,7 +250,7 @@ async function procesar(nuevos, origin) {
     // Archivar la foto entrante a Supabase Storage (URL estable → media_url). Solo
     // en modo supabase, donde la fila ya quedó insertada por guardarMensajeSupabase arriba.
     if (usaSupabaseLectura() && (m.tipo === 'imagen' || m.tipo === 'sticker') && m.mediaId) {
-      archivos.push(archivarFoto({ mediaId: m.mediaId, wamid: m.wamid }))
+      archivos.push(archivarMedia({ mediaId: m.mediaId, wamid: m.wamid }))
     }
 
     try { await registrarContactoEntrante(m.telefono, m.nombre, m.telefono) }
