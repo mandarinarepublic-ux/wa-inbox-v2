@@ -1,6 +1,7 @@
 'use client'
 import React, { useState, useEffect, useCallback } from 'react'
 import { getAutomatizaciones, saveAutomatizaciones } from '@/lib/api-client'
+import { CANALES } from '@/lib/canales'
 
 // ── Pestaña AUTOMATIZACIONES ──────────────────────────────────────────────────
 // Reglas del inbox que se prenden/apagan. Hoy: dos saludos automáticos. Pensada
@@ -97,6 +98,13 @@ export default function Automatizaciones({ active }) {
     { seguimientos: { activo: valor } },
     prev => ({ ...prev, seguimientos: { ...(prev?.seguimientos || {}), activo: valor } }))
 
+  // Cortafuegos de MANDI AGENT, por canal. Patch plano: el merge del servidor es
+  // de un nivel y con booleanos eso es exactamente lo que queremos (el canal
+  // hermano se conserva solo).
+  const togIA = (canalId, valor) => guardarInterruptor(
+    { ia: { [canalId]: valor } },
+    prev => ({ ...prev, ia: { ...(prev?.ia || {}), [canalId]: valor } }))
+
   // `actual` va completo a propósito: el merge del servidor es de un solo nivel,
   // así que un patch con solo {activo} borraría las horas y el texto.
   const togSegT = (key, valor, actual) => guardarInterruptor(
@@ -148,6 +156,37 @@ export default function Automatizaciones({ active }) {
         {loading && <div style={{ color: '#475569', fontSize: 13, padding: 20 }}>Cargando…</div>}
 
         {!loading && config && (<>
+
+          {/* CORTAFUEGOS: apaga MANDI AGENT entero en un número. Va primero a
+              propósito — es el botón de pánico, no puede estar enterrado abajo. */}
+          <div style={{ background:'#0b1220', border:'1px solid #1e293b', borderRadius:14, padding:16, marginBottom:14 }}>
+            <div style={{ fontWeight:800, fontSize:15, marginBottom:4 }}>🤖 MANDI AGENT</div>
+            <div style={{ fontSize:12, color:'#94a3b8', marginBottom:12 }}>
+              Respuestas automáticas del bot, por número. Apagarlo aquí lo detiene en
+              TODOS los chats de ese número, sin cambiar el ajuste de cada chat: al
+              volver a prenderlo, cada conversación vuelve a como estaba.
+            </div>
+            {CANALES.map(c => {
+              const on = config?.ia?.[c.id] !== false
+              return (
+                <div key={c.id} style={{
+                  display:'flex', alignItems:'center', justifyContent:'space-between',
+                  gap:12, padding:'10px 12px', borderRadius:10, marginTop:8,
+                  background: on ? 'rgba(37,211,102,.06)' : 'rgba(239,68,68,.10)',
+                  border: `1px solid ${on ? 'rgba(37,211,102,.20)' : 'rgba(239,68,68,.35)'}`,
+                }}>
+                  <div>
+                    <div style={{ fontWeight:700, fontSize:13 }}>{c.etiqueta}</div>
+                    <div style={{ fontSize:11, color:'#94a3b8' }}>{c.titulo}</div>
+                    <div style={{ fontSize:11, fontWeight:700, marginTop:2, color: on ? '#25d366' : '#ef4444' }}>
+                      {on ? 'Respondiendo' : '⛔ DETENIDO — el bot no contesta en este número'}
+                    </div>
+                  </div>
+                  <Switch on={on} onClick={() => togIA(c.id, !on)} />
+                </div>
+              )
+            })}
+          </div>
 
           {/* ── Saludo a contacto NUEVO ── */}
           <Card>
