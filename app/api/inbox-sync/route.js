@@ -25,7 +25,11 @@ export async function GET(req) {
       // Cache COMPARTIDO en el edge, corto (5s) para no agregar latencia visible al
       // vendedor: varias pestañas que pollean dentro de la misma ventana comparten
       // UNA ejecución de origen. stale-while-revalidate sirve al instante y revalida.
-      headers: { 'Cache-Control': 's-maxage=5, stale-while-revalidate=20' },
+      // 2 s de caché compartido (antes 5) y ventana corta de stale (antes 20):
+      // con los valores viejos un mensaje entrante podía tardar ~35-45 s en
+      // aparecer, sumando el polling. Ahora el peor caso baja a ~12-15 s.
+      // Cuesta más invocaciones, es el precio de que la bandeja se sienta viva.
+      headers: { 'Cache-Control': 's-maxage=2, stale-while-revalidate=4' },
     })
   } catch (err) {
     console.error('[/api/inbox-sync]', err)
