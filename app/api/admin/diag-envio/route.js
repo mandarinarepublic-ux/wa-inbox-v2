@@ -56,6 +56,25 @@ export async function POST(req) {
   if (!META_TOKEN) return NextResponse.json({ ok: false, error: 'META_TOKEN ausente' }, { status: 500 })
 
   const q = req.nextUrl.searchParams
+
+  // Suscribir la app a una WABA = que Meta nos mande sus mensajes entrantes.
+  // Hacerlo ANTES de que exista el filtro por canal mezcla las bandejas, así que
+  // este paso va siempre al final.
+  const suscribir = q.get('suscribir') || ''
+  if (suscribir) {
+    if (!/^\d{5,25}$/.test(suscribir)) {
+      return NextResponse.json({ ok: false, error: 'waba invalida' }, { status: 400 })
+    }
+    const r = await fetch(`${GRAPH}/${suscribir}/subscribed_apps`, {
+      method: 'POST', headers: { Authorization: `Bearer ${META_TOKEN}` },
+    })
+    const body = await r.json().catch(() => ({}))
+    const ver = await pedir(`${suscribir}/subscribed_apps`)
+    console.log(`[/api/admin/diag-envio] suscribir waba=${suscribir} http=${r.status} ${JSON.stringify(body)}`)
+    return NextResponse.json({ ok: r.ok, http: r.status, respuesta: body, suscritas: ver.body },
+      { status: r.ok ? 200 : 502 })
+  }
+
   const phone = q.get('phone') || ''
   const para = (q.get('para') || '').replace(/\D/g, '')
   const texto = q.get('texto') || 'Prueba tecnica'
