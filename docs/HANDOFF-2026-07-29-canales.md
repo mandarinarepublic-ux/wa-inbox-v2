@@ -118,15 +118,13 @@ es nuevo — si no se quiere todavía, se apaga en la pestaña AUTOS.
 
 ## 6. Pendientes
 
-### 6.1 Borrar las rutas temporales — **el repo es PÚBLICO**
-- `app/api/admin/diag-envio/` ← creada en esta sesión, **BORRAR**
-- `app/api/admin/inbox-migrate/` ← preexistente, ya no se usa
-- Borrar `DIAG_KEY` de las variables de Vercel
+### 6.1 ✅ HECHO — rutas temporales borradas (29-jul)
+Se borraron `app/api/admin/diag-envio/` (mandaba WhatsApp desde tus números) e
+`app/api/admin/inbox-migrate/` (backfill Sheets→Supabase, muerto desde el cutover).
+`app/api/admin/` ya no existe. Sin referencias en el código, build limpio.
 
-`diag-envio` **manda WhatsApp desde tus números** con un POST. Está protegida por
-clave, pero cualquiera que lea el repo sabe que existe y qué hace; lo único que la
-separa de tus números es una variable de entorno. Con eso se tumba el número por
-spam. **Prioridad alta.**
+🔑 **Falta borrar las env vars en Vercel**: `DIAG_KEY` y `MIG_KEY` quedaron sin uso.
+No hacen daño ahí, pero son claves vivas de rutas que ya no existen.
 
 ### 6.2 Reetiquetar 3 mensajes (opcional, cosmético)
 Tres saludos salieron por MANDI a clientes de REPUBLIC el 28-jul (21:19, 21:31,
