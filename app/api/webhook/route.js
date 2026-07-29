@@ -30,6 +30,12 @@ const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || ''
 const AGENT_URL = process.env.MANDI_AGENT_URL || 'https://mandi-agent.vercel.app/api/agent'
 const AGENT_KEY = process.env.MANDI_AGENT_KEY || 'mandi_republic_2024'
 
+// Tipos de medio (según lo devuelve extraer() en lib/wa-mensaje.js) que hay que
+// archivar a Supabase Storage: el media_id que da Meta es temporal (~30 dias) y sin
+// esto el medio queda colgado del id de Meta y deja de reproducirse. Agregar un tipo
+// nuevo aqui alcanza para que empiece a archivarse.
+const TIPOS_MEDIA_ARCHIVABLES = ['imagen', 'sticker', 'audio', 'video', 'documento']
+
 const tail9 = (s) => String(s || '').replace(/\D/g, '').replace(/^593/, '').replace(/^0+/, '').slice(-9)
 
 // Dedup en memoria (sobrevive entre invocaciones en una instancia tibia): atrapa los
@@ -248,9 +254,10 @@ async function procesar(nuevos, origin) {
       phoneId: m.phoneId,
     }).catch(e => console.error('[/api/webhook] guardar entrante:', e.message))
 
-    // Archivar la foto entrante a Supabase Storage (URL estable → media_url). Solo
-    // en modo supabase, donde la fila ya quedó insertada por guardarMensajeSupabase arriba.
-    if (usaSupabaseLectura() && (m.tipo === 'imagen' || m.tipo === 'sticker') && m.mediaId) {
+    // Archivar el medio entrante (foto, sticker, audio, video o documento) a Supabase
+    // Storage (URL estable → media_url). Solo en modo supabase, donde la fila ya quedó
+    // insertada por guardarMensajeSupabase arriba.
+    if (usaSupabaseLectura() && TIPOS_MEDIA_ARCHIVABLES.includes(m.tipo) && m.mediaId) {
       archivos.push(archivarMedia({ mediaId: m.mediaId, wamid: m.wamid }))
     }
 
