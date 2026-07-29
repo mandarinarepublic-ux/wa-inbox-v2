@@ -1,6 +1,6 @@
 'use client'
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
-import { fetchInboxSync, fetchHilo, buscarEnMensajes, sendReply, updateContact, updateTemperatura, isDemo, sendInteractiveButtons, toggleIAMode, sendVideo, sendImageFile, precacheMedia, setCanalActivo } from '@/lib/api-client'
+import { fetchInboxSync, fetchHilo, buscarEnMensajes, sendReply, updateContact, updateTemperatura, isDemo, sendInteractiveButtons, toggleIAMode, sendVideo, sendImageFile, precacheMedia, setCanalActivo, getCanalActivo } from '@/lib/api-client'
 import { buildConvs, fmtDate, parseDate } from '@/lib/utils'
 import { Spinner, Avatar, ContactRow, MessageBubble, Toast } from '@/components/Components'
 import RightPanel from '@/components/RightPanel'
@@ -838,10 +838,15 @@ export default function App() {
   // `mediaId` (opcional) viene pre-resuelto por precacheMedia: con él, el servidor
   // no descarga ni sube nada y la foto sale en milisegundos.
   const sendImageUrl = async (telefono, nombre, imageUrl, mediaId = '') => {
+    // OJO: esta función habla con /api/saliente por su cuenta, sin pasar por
+    // postSaliente de lib/api-client — que es donde se inyecta el canal. Por eso
+    // el `Canal` va explícito acá: sin él las fotos salían por el número
+    // principal aunque estuvieras en la bandeja del otro.
     const res = await fetch('/api/saliente', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         Telefono: telefono, Nombre: nombre, ImagenURL: imageUrl,
+        Canal: getCanalActivo(),
         ...(mediaId ? { ImagenMediaId: mediaId } : {}),
       }),
     })
