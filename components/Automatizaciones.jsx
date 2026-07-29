@@ -47,7 +47,18 @@ export default function Automatizaciones({ active }) {
     setConfig(c); setOrig(JSON.stringify(c)); setLoading(false)
   }, [])
 
-  useEffect(() => { if (active && !config) cargar() }, [active, config, cargar])
+  // Recarga CADA VEZ que se entra a la pestaña (no solo la primera): si el
+  // dueño apaga el cortafuegos desde el celular, un escritorio con esta
+  // pestaña abierta debe dejar de mostrar "Respondiendo" al volver a mirarla.
+  // Sin esto, además, "Guardar cambios" reenviaría ese `config` viejo completo
+  // y desarmaría el cortafuegos ya apagado en la base.
+  //
+  // OJO con las dependencias: `config` NO va en el arreglo. `cargar()` hace
+  // setConfig(...), así que si `config` estuviera aquí cada carga dispararía
+  // el efecto de nuevo → bucle infinito. Con solo [active, cargar] (cargar es
+  // estable, useCallback sin dependencias) el efecto corre únicamente cuando
+  // se entra/sale de la pestaña, que es justo lo que se quiere.
+  useEffect(() => { if (active) cargar() }, [active, cargar])
 
   const dirty = config && orig !== JSON.stringify(config)
 
