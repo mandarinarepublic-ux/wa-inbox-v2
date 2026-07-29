@@ -3,6 +3,7 @@ import { guardarMensajeSupabase } from '@/lib/inbox-supabase'
 import { limpiarPush } from '@/lib/contactos'
 import { parseLinkpago, crearLinkPago, mensajeLinkPago } from '@/lib/dlocal'
 import { resolverMediaId, invalidarMediaId, esErrorDeMediaId, urlLiviana, META_PHONE_ID } from '@/lib/media-id'
+import { CANALES } from '@/lib/canales'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -17,7 +18,15 @@ export const maxDuration = 60
 const META_TOKEN = process.env.META_TOKEN || ''
 // META_PHONE_ID se importa de lib/media-id: la caché de media_id se indexa por ese
 // mismo número, así que tiene que ser exactamente el mismo valor en los dos lados.
-const GRAPH_URL  = `https://graph.facebook.com/v19.0/${META_PHONE_ID}/messages`
+// El canal (número por el que sale) viaja en el body como `Canal`. Se valida
+// contra lib/canales.js: un phone_id arbitrario desde el navegador no puede
+// convertirse en una llamada a Meta con nuestro token.
+const CANALES_VALIDOS = new Set(CANALES.map((c) => String(c.phoneId)))
+const canalDe = (body) => {
+  const p = String(body?.Canal || '').trim()
+  return CANALES_VALIDOS.has(p) ? p : META_PHONE_ID
+}
+const urlGraph = (phoneId) => `https://graph.facebook.com/v19.0/${phoneId}/messages`
 
 // Fallback temporal a Make: mientras META_TOKEN NO esté configurado en Vercel,
 // seguimos enviando por Make para no cortar el servicio. En cuanto agregues el
@@ -184,6 +193,7 @@ function construir(body) {
 export async function POST(req) {
   try {
     const body = await req.json()
+    const canal = canalDe(body)   // numero por el que sale este mensaje
 
     // ── LINKPAGO<monto> ───────────────────────────────────────────────────────
     // Si el ejecutivo escribe "LINKPAGO35" en el chat, NO enviamos ese texto:
@@ -224,7 +234,7 @@ export async function POST(req) {
     if (payload.type === 'image' && payload.image?.link) {
       urlOrigen = payload.image.link
       try {
-        const id = await resolverMediaId(urlOrigen)
+        const id = await resolverMediaId(urlOrigen, canal)
         payload.image = payload.image.caption ? { id, caption: payload.image.caption } : { id }
         mediaId = id
       } catch (e) {
@@ -241,7 +251,7 @@ export async function POST(req) {
       }
     }
 
-    const enviar = () => fetch(GRAPH_URL, {
+    const enviar = () => fetch(urlGraph(canal), {
       method: 'POST',
       headers: { Authorization: `Bearer ${META_TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -255,9 +265,9 @@ export async function POST(req) {
     // el vendedor esto es invisible, solo tarda como antes.
     if (!res.ok && urlOrigen && esErrorDeMediaId(data)) {
       console.warn('[/api/saliente] media id vencido, se re-sube la foto:', urlOrigen)
-      await invalidarMediaId(META_PHONE_ID, urlOrigen)
+      await invalidarMediaId(canal, urlOrigen)
       try {
-        const id = await resolverMediaId(urlOrigen)
+        const id = await resolverMediaId(urlOrigen, canal)
         payload.image = payload.image.caption ? { id, caption: payload.image.caption } : { id }
         mediaId = id
         res  = await enviar()
@@ -299,6 +309,9 @@ export async function POST(req) {
         id: wamid, telefono: telSal, nombre: body.Nombre || '', tipo,
         mensaje: contenido, mediaUrl, timestamp: fechaSal, direccion: 'SALIENTE', mediaId,
         botones: botonesStr,
+        // Por qué número salió: sin esto el mensaje no aparecería en la bandeja
+        // de su canal.
+        phoneId: canal,
         // Solo si la cita SALIÓ de verdad: si Meta la rechazó y reenviamos sin ella,
         // guardarla pintaría en el hilo una cita que el cliente nunca vio.
         contextoId: citaAplicada ? contextoId : '',

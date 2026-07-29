@@ -272,6 +272,7 @@ async function procesar(nuevos, origin) {
       id: m.wamid, telefono: m.telefono, nombre: m.nombre, tipo: m.tipo,
       mensaje: m.contenido, mediaUrl: '', timestamp: m.fecha, direccion: 'ENTRANTE',
       mediaId: m.mediaId, contextoId: m.contextoId, referral: m.referral, raw: m.raw,
+      phoneId: m.phoneId,
     }).catch(e => console.error('[/api/webhook] guardar entrante:', e.message))
 
     // Archivar la foto entrante a Supabase Storage (URL estable → media_url). Solo
@@ -364,6 +365,10 @@ export async function POST(req) {
     for (const entry of entries) {
       for (const change of entry?.changes || []) {
         const value    = change?.value || {}
+        // Por cuál de NUESTROS números entró esto. Con un solo número daba igual;
+        // con dos (MANDI y REPUBLIC) es lo único que permite separar las bandejas
+        // y saber por dónde responder. Meta ya lo manda y se tiraba.
+        const phoneId  = value?.metadata?.phone_number_id || ''
         const contacts = value?.contacts || []
         const nombreDe = {}
         for (const c of contacts) nombreDe[c.wa_id] = c.profile?.name || ''
@@ -381,7 +386,7 @@ export async function POST(req) {
             wamid: msg.id || '',
             telefono,
             nombre: nombreDe[telefono] || '',
-            tipo, contenido, mediaId, contextoId, referral,
+            tipo, contenido, mediaId, contextoId, referral, phoneId,
             raw: msg, // respaldo: objeto crudo del mensaje tal cual de Meta
             fecha: msg.timestamp ? new Date(Number(msg.timestamp) * 1000).toISOString() : new Date().toISOString(),
           })

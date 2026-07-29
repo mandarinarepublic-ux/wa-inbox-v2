@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { resolverMediaId } from '@/lib/media-id'
+import { CANALES } from '@/lib/canales'
 
 // Resuelve VARIAS urls de foto a media_id de Meta EN PARALELO.
 //
@@ -21,13 +22,17 @@ export async function POST(req) {
   try {
     if (!META_TOKEN) return NextResponse.json({ ids: {} })   // el envío caerá a Make/link
 
-    const { urls } = await req.json()
+    const { urls, canal } = await req.json()
+    // El media_id pertenece al numero que lo subio: resolver contra el canal
+    // equivocado devuelve ids que Meta luego rechaza. Se valida contra la lista
+    // conocida para que el navegador no pueda inventar un phone_id.
+    const phoneId = CANALES.some(c => String(c.phoneId) === String(canal)) ? String(canal) : undefined
     const lista = [...new Set((Array.isArray(urls) ? urls : []).filter(Boolean).map(String))].slice(0, MAX_URLS)
     if (!lista.length) return NextResponse.json({ ids: {} })
 
     const resueltas = await Promise.all(lista.map(async (url) => {
       try {
-        return [url, await resolverMediaId(url)]
+        return [url, await resolverMediaId(url, phoneId)]
       } catch (e) {
         // Que una foto no se pueda pre-resolver NO cancela el resto: esa se
         // mandará por link como siempre y /api/saliente decidirá qué hacer.

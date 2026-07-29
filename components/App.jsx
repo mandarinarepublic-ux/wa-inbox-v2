@@ -1,12 +1,12 @@
 'use client'
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
-import { fetchInboxSync, fetchHilo, buscarEnMensajes, sendReply, updateContact, updateTemperatura, isDemo, sendInteractiveButtons, toggleIAMode, sendVideo, sendImageFile, precacheMedia } from '@/lib/api-client'
+import { fetchInboxSync, fetchHilo, buscarEnMensajes, sendReply, updateContact, updateTemperatura, isDemo, sendInteractiveButtons, toggleIAMode, sendVideo, sendImageFile, precacheMedia, setCanalActivo } from '@/lib/api-client'
 import { buildConvs, fmtDate, parseDate } from '@/lib/utils'
 import { Spinner, Avatar, ContactRow, MessageBubble, Toast } from '@/components/Components'
 import RightPanel from '@/components/RightPanel'
 import SetupModal from '@/components/SetupModal'
 import GuideModal from '@/components/GuideModal'
-import RepublicInbox from '@/components/RepublicInbox'
+import { CANALES } from '@/lib/canales'
 import SocialInbox from '@/components/SocialInbox'
 import Contactos, { PlantillaModal } from '@/components/Contactos'
 import Automatizaciones from '@/components/Automatizaciones'
@@ -110,8 +110,15 @@ function EmojiPicker({ onSelect, onClose }) {
 }
 
 export default function App() {
-  // ── Selector de línea: MANDI (API) | REPUBLIC (WA Web) ──────
-  const [linea, setLinea] = useState('MANDI') // 'MANDI' | 'REPUBLIC'
+  // ── Selector de línea ───────────────────────────────────────
+  // MANDI y REPUBLIC son DOS NÚMEROS del mismo inbox, no dos aplicaciones: usan
+  // la misma vista de chat y solo cambia el canal. REPUBLIC antes leía WhatsApp
+  // Web con una extensión de Chrome y un launcher en localhost:3098; ahora es
+  // Cloud API como MANDI. Ver lib/canales.js.
+  const [linea, setLinea] = useState('MANDI') // 'MANDI' | 'REPUBLIC' | 'SOCIAL' | 'CONTACTOS' | 'AUTO'
+  const [pendientes, setPendientes] = useState({})   // { phoneId: nº pendientes }
+  // Las dos pestañas de número comparten la vista de chat de abajo.
+  const esChat = linea === 'MANDI' || linea === 'REPUBLIC'
 
   const [convs,        setConvs]        = useState([])
   const [contacts,     setContacts]     = useState({}) // telefono → {alias, estado}
@@ -225,6 +232,8 @@ export default function App() {
     const lista  = sync?.lista ?? null
     const rows   = sync?.rows ?? null
     const ctList = sync?.contactos ?? null
+    // Pendientes de TODOS los canales (incluido el que no se está mirando).
+    if (sync?.pendientes) setPendientes(sync.pendientes)
     // Combinamos 3 fuentes (buildConvs deduplica por id de mensaje):
     //  · lista → ÚLTIMO msg de CADA conversación sobre TODO el historial → aparecen
     //            también los chats viejos que la ventana de 3000 ocultaba (el bug de
@@ -441,6 +450,29 @@ export default function App() {
     setActive(null)
     activeRef.current = null
     setCitando(null)
+  }
+
+  /**
+   * Cambiar de pestaña. Si se pasa de un número al otro se limpia TODO lo que
+   * pertenece a la bandeja anterior: si quedara el chat abierto o los hilos en
+   * memoria, se vería una conversación del otro número y la respuesta saldría
+   * por el canal equivocado.
+   */
+  const cambiarLinea = (id) => {
+    const eraChat = linea === 'MANDI' || linea === 'REPUBLIC'
+    const vaAChat = id === 'MANDI' || id === 'REPUBLIC'
+    if (vaAChat && eraChat && id !== linea) {
+      setCanalActivo(id)        // manda a api-client: lecturas y envíos van por acá
+      setActive(null); activeRef.current = null
+      setCitando(null)
+      setConvs([]); setContacts({})
+      hilosRef.current = {}     // hilos cargados del canal anterior
+      pendingRef.current = {}   // burbujas optimistas del canal anterior
+      setTimeout(load, 0)       // recarga ya, sin esperar al siguiente poll
+    } else if (vaAChat && !eraChat) {
+      setCanalActivo(id)
+    }
+    setLinea(id)
   }
 
   const openConv = (telefono) => {
@@ -1137,21 +1169,33 @@ export default function App() {
           zIndex:200, overflowX:'auto',
         }}>
           {[
-            { id:'MANDI',    label:'MANDI',    icon:'📱', color:'#25d366', sub:'API' },
-            { id:'REPUBLIC', label:'REPUBLIC', icon:'💬', color:'#f97316', sub:'WA Web' },
+            // Los dos primeros son NÚMEROS (canales), no aplicaciones distintas:
+            // comparten la vista de chat. El contador de pendientes es lo que
+            // impide que la bandeja que no estás mirando se vuelva invisible.
+            ...CANALES.map(c => ({
+              id: c.id, label: c.etiqueta, icon:'💬', color: c.color, sub: c.sub,
+              badge: pendientes[c.phoneId] || 0, title: c.titulo,
+            })),
             { id:'SOCIAL',   label:'SOCIAL',   icon:'🌐', color:'#1877F2', sub:'FB · IG' },
             { id:'CONTACTOS',label:'CONTACTOS',icon:'👥', color:'#38bdf8', sub:'Directorio' },
             { id:'AUTO',     label:'AUTOS',    icon:'⚙️', color:'#f59e0b', sub:'Reglas' },
-          ].map(({ id, label, icon, color, sub }) => (
-            <button key={id} onClick={() => setLinea(id)} style={{
+          ].map(({ id, label, icon, color, sub, badge = 0, title }) => (
+            <button key={id} onClick={() => cambiarLinea(id)} title={title || label} style={{
               padding:'4px 16px', border:'none', cursor:'pointer', flexShrink:0, whiteSpace:'nowrap',
               background: linea===id ? `${color}15` : 'transparent',
               borderBottom: linea===id ? `2px solid ${color}` : '2px solid transparent',
               borderTop: '2px solid transparent',
               fontFamily:'Outfit,sans-serif', transition:'all .2s', height:'100%',
             }}>
-              <div style={{ fontSize:10, fontWeight:800, color: linea===id ? color : '#334155', letterSpacing:'1.5px' }}>
-                {icon} {label}
+              <div style={{ fontSize:10, fontWeight:800, color: linea===id ? color : '#334155', letterSpacing:'1.5px', display:'flex', alignItems:'center', justifyContent:'center', gap:5 }}>
+                <span>{icon} {label}</span>
+                {badge > 0 && (
+                  <span style={{
+                    background:'#f87171', color:'#fff', borderRadius:9, minWidth:16, height:16,
+                    display:'inline-flex', alignItems:'center', justifyContent:'center',
+                    fontSize:9, fontWeight:900, padding:'0 4px', letterSpacing:0,
+                  }}>{badge}</span>
+                )}
               </div>
               <div style={{ fontSize:8, color: linea===id ? color+'80' : '#2a3f55', letterSpacing:'1px' }}>{sub}</div>
             </button>
@@ -1162,7 +1206,7 @@ export default function App() {
         <div className="app-shell" style={{ flex:1, minHeight:0, height:0 }}>
 
         {/* ══════ MANDI (API) ══════ */}
-        {linea === 'MANDI' && (<>
+        {esChat && (<>
         {/* ══════ SIDEBAR ══════ */}
         <div className={`sidebar${showSidebar ? ' open' : ''}`}>
           <div style={{ padding:'14px 14px 10px', borderBottom:'1px solid #162030', flexShrink:0 }}>
@@ -1643,10 +1687,6 @@ export default function App() {
 
         </>)}
 
-        {/* ══════ REPUBLIC ══════ — siempre montado, solo se oculta */}
-        <div style={{ flex:1, display: linea === 'REPUBLIC' ? 'flex' : 'none', overflow:'hidden', height:'100%' }}>
-          <RepublicInbox active={linea === 'REPUBLIC'} />
-        </div>
 
         {/* ══════ SOCIAL ══════ — FB + IG */}
         <div style={{ flex:1, display: linea === 'SOCIAL' ? 'flex' : 'none', overflow:'hidden', height:'100%' }}>

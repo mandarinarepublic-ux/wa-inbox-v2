@@ -1,20 +1,27 @@
 import { NextResponse } from 'next/server'
 import { getLista, getMensajes } from '@/lib/mensajes'
 import { getContactos } from '@/lib/contactos'
+import { contarPendientesPorCanalSupabase } from '@/lib/inbox-supabase'
 
 // Sync unificado del inbox: UNA sola función en vez de 3 (/api/lista +
 // /api/mensajes + /api/contactos) por cada ciclo de polling → 1/3 de las
 // invocaciones. Las tres lecturas corren en paralelo.
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+export async function GET(req) {
   try {
-    const [lista, rows, contactos] = await Promise.all([
-      getLista(),
-      getMensajes(),
-      getContactos(),
+    // ?canal=<phone_id>. Cada bandeja pide la suya; sin parámetro, el número
+    // principal (así una pestaña vieja en caché sigue viendo lo de siempre).
+    const canal = new URL(req.url).searchParams.get('canal') || undefined
+    const [lista, rows, contactos, pendientes] = await Promise.all([
+      getLista(canal),
+      getMensajes(canal),
+      getContactos(canal),
+      // De TODOS los canales, no solo del activo: alimenta el contador de la
+      // pestaña que no se está mirando.
+      contarPendientesPorCanalSupabase().catch(() => ({})),
     ])
-    return NextResponse.json({ lista, rows, contactos }, {
+    return NextResponse.json({ lista, rows, contactos, pendientes }, {
       // Cache COMPARTIDO en el edge, corto (5s) para no agregar latencia visible al
       // vendedor: varias pestañas que pollean dentro de la misma ventana comparten
       // UNA ejecución de origen. stale-while-revalidate sirve al instante y revalida.

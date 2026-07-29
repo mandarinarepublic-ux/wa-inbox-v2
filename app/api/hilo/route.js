@@ -13,7 +13,8 @@ export async function GET(req) {
     const phone  = searchParams.get('phone') || ''
     const limite = Math.min(parseInt(searchParams.get('limite') || '800', 10) || 800, 3000)
     if (!phone) return NextResponse.json({ error: 'falta phone' }, { status: 400 })
-    const mensajes = await getHilo(phone, limite)
+    const canal = searchParams.get('canal') || undefined
+    const mensajes = await getHilo(phone, limite, canal)
     return NextResponse.json(mensajes, {
       headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' },
     })
