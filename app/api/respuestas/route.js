@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getRespuestas, addRespuesta, editRespuesta, deleteRespuesta } from '@/lib/respuestas'
+import { getRespuestas, addRespuesta, editRespuesta, deleteRespuesta, reordenarRespuestas } from '@/lib/respuestas'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,13 +14,15 @@ export async function GET() {
 
 export async function POST(req) {
   try {
-    const { accion, id, texto, imagenUrl, ...extras } = await req.json()
+    const { accion, id, texto, imagenUrl, ids, ...extras } = await req.json()
     if (accion === 'add' || accion === 'agregar') {
       await addRespuesta(id, texto, imagenUrl, extras)
     } else if (accion === 'edit' || accion === 'actualizar') {
       await editRespuesta(id, texto, imagenUrl, extras)
     } else if (accion === 'delete' || accion === 'eliminar') {
       await deleteRespuesta(id)
+    } else if (accion === 'reordenar') {
+      await reordenarRespuestas(ids)
     } else {
       return NextResponse.json({ error: `Accion desconocida: ${accion}` }, { status: 400 })
     }
