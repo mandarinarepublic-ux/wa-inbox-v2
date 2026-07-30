@@ -260,7 +260,11 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
   // reordenar esa fila: ver el comentario en addReply para la carrera que evita.
   const [savingIds, setSavingIds] = useState(() => new Set())
   const [nuevaOpen,     setNuevaOpen]     = useState(false)
-  const [editingIdx,    setEditingIdx]    = useState(null)
+  // Se guarda el ID de la respuesta en edición, NO su índice: con flechas y
+  // arrastre el índice de la fila puede cambiar mientras el formulario de edición
+  // sigue abierto (otra fila se mueve y cruza esa posición). Si se guardara por
+  // índice, `saveEdit` podría escribir el texto sobre OTRA respuesta.
+  const [editingId,      setEditingId]     = useState(null)
   const [editText,      setEditText]      = useState('')
   const [editImgUrls,   setEditImgUrls]   = useState([])
   const [newText,       setNewText]       = useState('')
@@ -371,7 +375,7 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
   // windowOpen viene como prop desde App.jsx (calculado con último msg ENTRANTE)
 
   const startEdit = (idx) => {
-    setEditingIdx(idx); setEditText(replies[idx].text)
+    setEditingId(replies[idx].id); setEditText(replies[idx].text)
     setEditImgUrls(getImgUrls(replies[idx]))
     const b = replies[idx].botones || []
     setEditBotones([b[0] || '', b[1] || '', b[2] || ''])
@@ -379,10 +383,23 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
 
   const saveEdit = async () => {
     if (!editText.trim()) return
+    // Se busca la fila por ID en el momento de GUARDAR (no se reutiliza el índice
+    // que tenía al ABRIR el formulario): entre medio pudo haberse reordenado la
+    // lista con las flechas o el arrastre, y el índice de esta respuesta pudo
+    // haber cambiado. Si la respuesta ya no está (alguien la borró mientras se
+    // editaba) no se escribe nada y se avisa con el mismo mecanismo que el error
+    // de orden.
+    const actual = replies.find(r => r.id === editingId)
+    if (!actual) {
+      setEditingId(null); setEditText(''); setEditImgUrls([]); setEditBotones(['', '', ''])
+      setErrorOrden('Esa respuesta ya no existe. No se guardó.')
+      setTimeout(() => setErrorOrden(''), 4000)
+      return
+    }
     const botones = editBotones.map(s => s.trim()).filter(Boolean).slice(0, 3)
-    const updated = { ...replies[editingIdx], text: editText.trim(), ...urlsToReply(editImgUrls), botones }
-    setReplies(prev => prev.map((r, i) => i === editingIdx ? updated : r))
-    setEditingIdx(null); setEditText(''); setEditImgUrls([]); setEditBotones(['', '', ''])
+    const updated = { ...actual, text: editText.trim(), ...urlsToReply(editImgUrls), botones }
+    setReplies(prev => prev.map(r => r.id === editingId ? updated : r))
+    setEditingId(null); setEditText(''); setEditImgUrls([]); setEditBotones(['', '', ''])
     await writeReply('actualizar', updated)
   }
 
@@ -396,6 +413,17 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
   // anterior y avisa: una lista que se ve reordenada y no lo está en la base es
   // peor que no poder reordenar.
   const reordenar = async (desde, hacia) => {
+    // Bloqueo GLOBAL, no por fila: mientras haya CUALQUIER alta sin confirmar
+    // (savingIds no vacío) no se reordena nada, sea cual sea la fila que se
+    // mueva o sobre la que se suelte. El id de la fila sin confirmar todavía no
+    // existe en la base, y un UPDATE de orden sobre un id inexistente no falla
+    // ni avisa (no afecta ninguna fila) — pero el alta la inserta de todas formas
+    // arriba de todo, así que la pantalla terminaría mostrando un orden que la
+    // base no tiene. Deshabilitar solo la fila afectada no alcanza: arrastrar
+    // OTRA fila y soltarla encima de la que falta confirmar, o subir su vecina
+    // con la flecha, disparan el mismo problema. Bloquear todo es más simple y
+    // más seguro, y la ventana dura lo que tarda un POST.
+    if (savingIds.size > 0) return
     const previa = replies
     const nueva = moverItem(previa, desde, hacia)
     if (nueva.length !== previa.length) return
@@ -515,6 +543,11 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
 
   const contactName = contactInfo?.alias || contactInfo?.nombre || activeConv.nombre
 
+  // Ver el comentario dentro de reordenar(): el bloqueo por alta sin confirmar es
+  // GLOBAL (toda la lista), no solo la fila nueva — se calcula una vez acá para
+  // deshabilitar las flechas de TODAS las filas y para que el onDrop las ignore.
+  const hayAltaPendiente = savingIds.size > 0
+
   return (
     <div style={{ display:'flex', flexDirection:'column', height:'100%', background:'#07111d', overflow:'hidden' }}>
 
@@ -593,7 +626,7 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                 const guardando = savingIds.has(reply.id)
                 return (
                 <div key={reply.id || idx}>
-                  {editingIdx === idx ? (
+                  {editingId === reply.id ? (
                     <div style={{ background:'rgba(255,255,255,.03)', border:'1px solid #25d366', borderRadius:9, padding:'7px', marginBottom:2 }}>
                       <textarea value={editText} onChange={e => setEditText(e.target.value)} rows={5} placeholder="Texto..."
                         style={{ width:'100%', background:'#111c2a', border:'1px solid #25d366', borderRadius:6, color:'#e2e8f0', fontSize:12, padding:'8px 10px', resize:'vertical', outline:'none', fontFamily:'inherit', marginBottom:5, whiteSpace:'pre-wrap', minHeight:100 }} />
@@ -602,7 +635,7 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                       <BotonesEditor botones={editBotones} onChange={setEditBotones} />
                       <div style={{ display:'flex', gap:3, marginTop:7 }}>
                         <button onClick={saveEdit} style={{ flex:1, padding:'4px', background:'rgba(37,211,102,.15)', border:'1px solid rgba(37,211,102,.3)', color:'#25d366', borderRadius:6, fontSize:10, cursor:'pointer', fontFamily:'inherit' }}>✓ Guardar</button>
-                        <button onClick={() => { setEditingIdx(null); setEditText(''); setEditImgUrls([]) }} style={{ flex:1, padding:'4px', background:'transparent', border:'1px solid #2a3f55', color:'#94a3b8', borderRadius:6, fontSize:10, cursor:'pointer', fontFamily:'inherit' }}>✕</button>
+                        <button onClick={() => { setEditingId(null); setEditText(''); setEditImgUrls([]) }} style={{ flex:1, padding:'4px', background:'transparent', border:'1px solid #2a3f55', color:'#94a3b8', borderRadius:6, fontSize:10, cursor:'pointer', fontFamily:'inherit' }}>✕</button>
                       </div>
                     </div>
                   ) : (
@@ -611,7 +644,13 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                       onDragStart={() => setArrastrando(idx)}
                       onDragEnd={() => setArrastrando(null)}
                       onDragOver={e => e.preventDefault()}
-                      onDrop={() => { if (arrastrando !== null && arrastrando !== idx) reordenar(arrastrando, idx); setArrastrando(null) }}
+                      onDrop={() => {
+                        // Se ignora el drop entero (no solo si la fila afectada es la
+                        // que falta confirmar) mientras haya CUALQUIER alta pendiente:
+                        // ver el comentario largo en reordenar().
+                        if (!hayAltaPendiente && arrastrando !== null && arrastrando !== idx) reordenar(arrastrando, idx)
+                        setArrastrando(null)
+                      }}
                       style={{ background:'rgba(255,255,255,.02)', border:'1px solid #111c2a', borderRadius:8, overflow:'hidden', transition:'background .1s',
                         opacity: arrastrando === idx ? .4 : 1,
                         outline: arrastrando !== null && arrastrando !== idx ? '1px dashed #2a3f55' : 'none',
@@ -633,12 +672,12 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                           {imgs.length > 0 && `🖼×${imgs.length} `}{reply.botones?.length > 0 && <span style={{ color:'#f59e0b', fontWeight:700 }}>{`🔘×${reply.botones.length} `}</span>}{reply.text}
                         </span>
                         <div style={{ display:'flex', gap:4, flexShrink:0 }}>
-                          <button onClick={() => reordenar(idx, idx - 1)} disabled={idx === 0 || guardando}
-                            title="Subir"
-                            style={{ background:'transparent', border:'1px solid #1e2d3d', color: (idx === 0 || guardando) ? '#334155' : '#64748b', borderRadius:5, padding:'3px 5px', fontSize:10, cursor: (idx === 0 || guardando) ? 'default' : 'pointer', fontFamily:'inherit' }}>↑</button>
-                          <button onClick={() => reordenar(idx, idx + 1)} disabled={idx === replies.length - 1 || guardando}
-                            title="Bajar"
-                            style={{ background:'transparent', border:'1px solid #1e2d3d', color: (idx === replies.length - 1 || guardando) ? '#334155' : '#64748b', borderRadius:5, padding:'3px 5px', fontSize:10, cursor: (idx === replies.length - 1 || guardando) ? 'default' : 'pointer', fontFamily:'inherit' }}>↓</button>
+                          <button onClick={() => reordenar(idx, idx - 1)} disabled={idx === 0 || hayAltaPendiente}
+                            title={hayAltaPendiente ? 'Espera a que se confirme el alta pendiente' : 'Subir'}
+                            style={{ background:'transparent', border:'1px solid #1e2d3d', color: (idx === 0 || hayAltaPendiente) ? '#334155' : '#64748b', borderRadius:5, padding:'3px 5px', fontSize:10, cursor: (idx === 0 || hayAltaPendiente) ? 'default' : 'pointer', fontFamily:'inherit' }}>↑</button>
+                          <button onClick={() => reordenar(idx, idx + 1)} disabled={idx === replies.length - 1 || hayAltaPendiente}
+                            title={hayAltaPendiente ? 'Espera a que se confirme el alta pendiente' : 'Bajar'}
+                            style={{ background:'transparent', border:'1px solid #1e2d3d', color: (idx === replies.length - 1 || hayAltaPendiente) ? '#334155' : '#64748b', borderRadius:5, padding:'3px 5px', fontSize:10, cursor: (idx === replies.length - 1 || hayAltaPendiente) ? 'default' : 'pointer', fontFamily:'inherit' }}>↓</button>
                           <button onClick={() => handleSendQuick(idx)} disabled={!!sending[idx]||!windowOpen} title="Enviar" style={{ background:'rgba(37,211,102,.12)', border:'1px solid rgba(37,211,102,.2)', color:'#25d366', borderRadius:5, padding:'3px 8px', fontSize:10, fontWeight:700, cursor:'pointer', fontFamily:'inherit', minWidth:56 }}>{sending[idx] || '▶ Enviar'}</button>
                           <button onClick={() => startEdit(idx)} disabled={guardando} title={guardando ? 'Espera a que se confirme el alta' : undefined} style={{ background:'transparent', border:'1px solid #1e2d3d', color: guardando ? '#334155' : '#64748b', borderRadius:5, padding:'3px 6px', fontSize:10, cursor: guardando ? 'default' : 'pointer', fontFamily:'inherit' }}>✏️</button>
                           <button onClick={() => deleteReply(idx)} style={{ background:'transparent', border:'1px solid #1e2d3d', color:'#64748b', borderRadius:5, padding:'3px 6px', fontSize:10, cursor:'pointer', fontFamily:'inherit' }}>🗑</button>
