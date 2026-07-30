@@ -1,8 +1,9 @@
 'use client'
 import { useState, useRef, useEffect } from 'react'
 import { Avatar } from '@/components/Components'
-import { fetchRepliesFromSheet, writeReply, saveNotes, setIdVenta, fetchProductos } from '@/lib/api-client'
+import { fetchRepliesFromSheet, writeReply, reorderReplies, saveNotes, setIdVenta, fetchProductos } from '@/lib/api-client'
 import { parseDate } from '@/lib/utils'
+import { moverItem } from '@/lib/orden-lista'
 
 const MAX_IMGS  = 10
 
@@ -252,6 +253,12 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
   }, [activeConv])
   const [replies,       setReplies]       = useState([])
   const [repliesLoaded, setRepliesLoaded] = useState(false)
+  const [arrastrando, setArrastrando] = useState(null)   // índice que se está arrastrando
+  const [errorOrden, setErrorOrden]   = useState('')     // aviso si el guardado falla
+  // Ids de respuestas cuya ALTA todavía no fue confirmada por el servidor (el POST
+  // de addReply sigue en vuelo). Mientras un id esté aquí no se deja editar ni
+  // reordenar esa fila: ver el comentario en addReply para la carrera que evita.
+  const [savingIds, setSavingIds] = useState(() => new Set())
   const [nuevaOpen,     setNuevaOpen]     = useState(false)
   const [editingIdx,    setEditingIdx]    = useState(null)
   const [editText,      setEditText]      = useState('')
@@ -306,12 +313,22 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
   }
 
   // ── Leer respuestas directamente desde Google Sheets ─────────
-  useEffect(() => {
-    if (repliesLoaded) return
+  // Nombrada aparte del useEffect porque reordenar() la vuelve a llamar cuando el
+  // guardado del orden falla: el servidor escribe el orden fila por fila (no es
+  // atómico), así que un fallo a mitad de camino deja la base con parte del orden
+  // nuevo y parte del viejo. "Volver al orden anterior en memoria" ya no alcanza
+  // porque ese orden anterior puede no ser lo que quedó guardado — hay que traer
+  // la verdad desde el servidor.
+  const cargarReplies = () => {
     fetchRepliesFromSheet().then(data => {
       setReplies(data || [])
       setRepliesLoaded(true)
     })
+  }
+
+  useEffect(() => {
+    if (repliesLoaded) return
+    cargarReplies()
   }, [repliesLoaded])
 
   // Cargar la nota al cambiar de contacto (no pisa lo que estás escribiendo)
@@ -375,13 +392,43 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
     await writeReply('eliminar', reply)
   }
 
+  // Reordena en pantalla YA y guarda detrás. Si el guardado falla, VUELVE al orden
+  // anterior y avisa: una lista que se ve reordenada y no lo está en la base es
+  // peor que no poder reordenar.
+  const reordenar = async (desde, hacia) => {
+    const previa = replies
+    const nueva = moverItem(previa, desde, hacia)
+    if (nueva.length !== previa.length) return
+    if (nueva.every((r, i) => r === previa[i])) return   // no cambió nada
+    setReplies(nueva)
+    setErrorOrden('')
+    const r = await reorderReplies(nueva.map(x => x.id))
+    if (!r?.ok) {
+      setReplies(previa)
+      setErrorOrden('No se pudo guardar el orden. Reintenta.')
+      setTimeout(() => setErrorOrden(''), 4000)
+      // El guardado no es atómico (fila por fila): un fallo a mitad de camino
+      // puede dejar la base con parte del orden nuevo y parte del viejo, así que
+      // "previa" ya no es necesariamente lo que quedó guardado. Se recarga desde
+      // el servidor para que la pantalla termine mostrando lo que hay de verdad.
+      cargarReplies()
+    }
+  }
+
   const addReply = async () => {
     if (!newText.trim()) return
     const botones = newBotones.map(s => s.trim()).filter(Boolean).slice(0, 3)
     const newReply = { id: crypto.randomUUID(), text: newText.trim(), ...urlsToReply(newImgUrls), botones }
-    setReplies(prev => [...prev, newReply])
+    setReplies(prev => [newReply, ...prev])   // la nueva entra PRIMERA, igual que en la base
+    // Se marca como "guardando" mientras el POST de alta sigue en vuelo. addReply
+    // mete la respuesta en el estado ANTES de esperar la confirmación del servidor,
+    // así que si se editara en esa ventana la corrección se perdería: el alta llega
+    // después con el texto ORIGINAL y lo pisa. Mientras esté aquí no se deja editar
+    // ni reordenar esta fila (ver render, más abajo).
+    setSavingIds(prev => new Set(prev).add(newReply.id))
     setNewText(''); setNewImgUrls([]); setNewBotones(['', '', ''])
     await writeReply('agregar', newReply)
+    setSavingIds(prev => { const n = new Set(prev); n.delete(newReply.id); return n })
   }
 
   // No se espera a que termine: se dispara y el botón va mostrando "2/5". Así el
@@ -540,7 +587,11 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
             </div>
 
             <div style={{ padding:'0 12px', display:'flex', flexDirection:'column', gap:5 }}>
-              {replies.map((reply, idx) => { const imgs = getImgUrls(reply); return (
+              {replies.map((reply, idx) => { const imgs = getImgUrls(reply)
+                // Alta todavía sin confirmar (ver addReply): no se deja editar ni
+                // reordenar esta fila hasta que el servidor la confirme.
+                const guardando = savingIds.has(reply.id)
+                return (
                 <div key={reply.id || idx}>
                   {editingIdx === idx ? (
                     <div style={{ background:'rgba(255,255,255,.03)', border:'1px solid #25d366', borderRadius:9, padding:'7px', marginBottom:2 }}>
@@ -555,7 +606,16 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                       </div>
                     </div>
                   ) : (
-                    <div style={{ background:'rgba(255,255,255,.02)', border:'1px solid #111c2a', borderRadius:8, overflow:'hidden', transition:'background .1s' }}
+                    <div
+                      draggable={!guardando}
+                      onDragStart={() => setArrastrando(idx)}
+                      onDragEnd={() => setArrastrando(null)}
+                      onDragOver={e => e.preventDefault()}
+                      onDrop={() => { if (arrastrando !== null && arrastrando !== idx) reordenar(arrastrando, idx); setArrastrando(null) }}
+                      style={{ background:'rgba(255,255,255,.02)', border:'1px solid #111c2a', borderRadius:8, overflow:'hidden', transition:'background .1s',
+                        opacity: arrastrando === idx ? .4 : 1,
+                        outline: arrastrando !== null && arrastrando !== idx ? '1px dashed #2a3f55' : 'none',
+                      }}
                       onMouseEnter={e => e.currentTarget.style.background='rgba(255,255,255,.04)'}
                       onMouseLeave={e => e.currentTarget.style.background='rgba(255,255,255,.02)'}
                     >
@@ -573,8 +633,14 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                           {imgs.length > 0 && `🖼×${imgs.length} `}{reply.botones?.length > 0 && <span style={{ color:'#f59e0b', fontWeight:700 }}>{`🔘×${reply.botones.length} `}</span>}{reply.text}
                         </span>
                         <div style={{ display:'flex', gap:4, flexShrink:0 }}>
+                          <button onClick={() => reordenar(idx, idx - 1)} disabled={idx === 0 || guardando}
+                            title="Subir"
+                            style={{ background:'transparent', border:'1px solid #1e2d3d', color: (idx === 0 || guardando) ? '#334155' : '#64748b', borderRadius:5, padding:'3px 5px', fontSize:10, cursor: (idx === 0 || guardando) ? 'default' : 'pointer', fontFamily:'inherit' }}>↑</button>
+                          <button onClick={() => reordenar(idx, idx + 1)} disabled={idx === replies.length - 1 || guardando}
+                            title="Bajar"
+                            style={{ background:'transparent', border:'1px solid #1e2d3d', color: (idx === replies.length - 1 || guardando) ? '#334155' : '#64748b', borderRadius:5, padding:'3px 5px', fontSize:10, cursor: (idx === replies.length - 1 || guardando) ? 'default' : 'pointer', fontFamily:'inherit' }}>↓</button>
                           <button onClick={() => handleSendQuick(idx)} disabled={!!sending[idx]||!windowOpen} title="Enviar" style={{ background:'rgba(37,211,102,.12)', border:'1px solid rgba(37,211,102,.2)', color:'#25d366', borderRadius:5, padding:'3px 8px', fontSize:10, fontWeight:700, cursor:'pointer', fontFamily:'inherit', minWidth:56 }}>{sending[idx] || '▶ Enviar'}</button>
-                          <button onClick={() => startEdit(idx)} style={{ background:'transparent', border:'1px solid #1e2d3d', color:'#64748b', borderRadius:5, padding:'3px 6px', fontSize:10, cursor:'pointer', fontFamily:'inherit' }}>✏️</button>
+                          <button onClick={() => startEdit(idx)} disabled={guardando} title={guardando ? 'Espera a que se confirme el alta' : undefined} style={{ background:'transparent', border:'1px solid #1e2d3d', color: guardando ? '#334155' : '#64748b', borderRadius:5, padding:'3px 6px', fontSize:10, cursor: guardando ? 'default' : 'pointer', fontFamily:'inherit' }}>✏️</button>
                           <button onClick={() => deleteReply(idx)} style={{ background:'transparent', border:'1px solid #1e2d3d', color:'#64748b', borderRadius:5, padding:'3px 6px', fontSize:10, cursor:'pointer', fontFamily:'inherit' }}>🗑</button>
                         </div>
                       </div>
@@ -582,6 +648,9 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                   )}
                 </div>
               ) })}
+              {errorOrden && (
+                <div style={{ fontSize:11, color:'#ef4444', padding:'6px 8px' }}>⚠️ {errorOrden}</div>
+              )}
             </div>
 
             {/* Nueva respuesta */}
