@@ -10,6 +10,7 @@ import { enviarPush, cuerpoDeMensaje, debeNotificar } from '@/lib/push'
 import { decidirIA } from '@/lib/ia-canal'
 import { extraer } from '@/lib/wa-mensaje'
 import { extraerEchoes } from '@/lib/echoes'
+import { enviarSaliente, responderConIA } from '@/lib/responder-ia'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -23,12 +24,6 @@ export const revalidate = 0
 // En Meta → WhatsApp → Configuration, Callback URL = https://wa-inbox-v2.vercel.app/api/webhook
 // Verify Token = WHATSAPP_VERIFY_TOKEN. Suscribir el campo "messages".
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || ''
-
-// ── Agente IA (mandi-agent) — reemplaza el módulo HTTP que llamaba Make ────────
-// El agente NO envía el WhatsApp: DEVUELVE el texto. Nosotros lo enviamos por
-// /api/saliente (que además lo registra en MENSAJES). Solo si el contacto tiene ModoIA="IA".
-const AGENT_URL = process.env.MANDI_AGENT_URL || 'https://mandi-agent.vercel.app/api/agent'
-const AGENT_KEY = process.env.MANDI_AGENT_KEY || 'mandi_republic_2024'
 
 // Tipos de medio (según lo devuelve extraer() en lib/wa-mensaje.js) que hay que
 // archivar a Supabase Storage: el media_id que da Meta es temporal (~30 dias) y sin
@@ -49,26 +44,6 @@ function marcarNuevo(wamid) {
   return true
 }
 
-// Regex de URLs de imagen (mismas extensiones que extrae el agente).
-const RE_IMG = /https?:\/\/[^\s)]+?\.(?:png|jpe?g|webp|gif)(?:\?[^\s)]*)?/gi
-
-// Envía un mensaje (texto o imagen) por /api/saliente, que lo manda a Meta y lo
-// registra en MENSAJES.
-// `auto: true` marca que el envío NO lo hizo un humano (IA, saludo automático,
-// LINKPAGO). /api/saliente lo usa para no reiniciar el enfriamiento del aviso push:
-// si la IA está llevando el chat, no hay que empezar a interrumpir al humano.
-//
-// `Canal` es OBLIGATORIO: el número por el que responder es aquel al que el
-// cliente escribió. Sin él, /api/saliente cae al número principal y el cliente
-// que escribió a REPUBLIC recibe la respuesta desde MANDI (otro número).
-async function enviarSaliente(origin, body) {
-  return fetch(`${origin}/api/saliente`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...body, auto: true }),
-  }).catch(e => console.error('[webhook IA] envío falló:', e.message))
-}
-
 // Mensaje de espera cuando el cliente manda algo que MANDI no procesa (una foto).
 const MSG_ESPERA = 'Permíteme un momento por favor 🧡'
 
@@ -81,44 +56,6 @@ async function escalarASoporte(origin, phone, name, canal) {
     updateModoIA(phone, 'HUMANO').catch(e => console.error('[webhook IA] modoIA HUMANO:', e.message)),
   ])
   await enviarSaliente(origin, { Telefono: phone, Nombre: name || '', Mensaje: MSG_ESPERA, Canal: canal })
-}
-
-async function responderConIA(origin, phone, name, message, canal) {
-  try {
-    const r = await fetch(AGENT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-mandi-key': AGENT_KEY },
-      body: JSON.stringify({ phone, name: name || '', message, source: 'webhook' }),
-      signal: AbortSignal.timeout(22000),
-    })
-    const data = await r.json().catch(() => ({}))
-    if (!r.ok) { console.error('[webhook IA] agente', r.status, data?.error || ''); return }
-    const reply = String(data?.reply_clean || data?.reply || '').trim()
-
-    // Fotos que MANDI incluyó en su respuesta. El agente las devuelve en
-    // data.imagenes; si no vinieran, las extraemos del propio texto.
-    let imagenes = Array.isArray(data?.imagenes) ? data.imagenes.filter(Boolean) : []
-    if (!imagenes.length) imagenes = reply.match(RE_IMG) || []
-    // Dedup preservando el orden.
-    imagenes = [...new Set(imagenes)]
-
-    // Quitamos las URLs de imagen del texto para NO mandar links crudos al
-    // cliente: cada una se envía aparte como foto real.
-    let texto = reply
-    for (const u of imagenes) texto = texto.split(u).join('')
-    texto = texto.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
-
-    if (!texto && !imagenes.length) return
-
-    // 1) Primero el texto (descripción, precios, tallas).
-    if (texto) await enviarSaliente(origin, { Telefono: phone, Nombre: name || '', Mensaje: texto, Canal: canal })
-    // 2) Luego cada foto, en orden.
-    for (const url of imagenes) {
-      await enviarSaliente(origin, { Telefono: phone, Nombre: name || '', ImagenURL: url, Canal: canal })
-    }
-  } catch (e) {
-    console.error('[webhook IA] agente falló:', e.message)
-  }
 }
 
 // ── Verificación del webhook (GET) ────────────────────────────────────────────
