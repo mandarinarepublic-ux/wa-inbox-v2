@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getContactos, marcarSeguimiento } from '@/lib/contactos'
 import { getAutomatizaciones } from '@/lib/automatizaciones'
+import { caminoDeSeguimiento } from '@/lib/camino-seguimiento'
+import { responderConIA } from '@/lib/responder-ia'
 
 // Cron de SEGUIMIENTOS automáticos por temperatura del lead (Eje 2).
 // Lo llama Vercel Cron (ver vercel.json). Dispara según las horas de SILENCIO del cliente
@@ -58,7 +60,9 @@ export async function GET(req) {
     const estado = String(c.estado || '').toLowerCase()
     if (estado === 'archivado') continue
     if (String(c.idVenta || '').trim()) continue          // ya es venta → sin seguimiento comercial
-    if (seg.solo_ia_apagada && c.modoIA === true) continue // IA prendida → la maneja el agente
+    // Tres caminos posibles; ver lib/camino-seguimiento.js.
+    const camino = caminoDeSeguimiento({ config: cfg, contacto: c })
+    if (camino === 'saltar') continue
 
     const entMs = c.ultimoEntranteAt ? new Date(c.ultimoEntranteAt).getTime() : 0
     if (!entMs) continue
@@ -75,24 +79,33 @@ export async function GET(req) {
 
     evaluados++
     try {
-      const r = await fetch(`${origin}/api/saliente`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          Telefono: c.telefono,
-          Nombre: c.alias || c.nombre || '',
-          Mensaje: regla.texto.trim(),
-          Canal: c.phoneId,
-        }),
-      })
-      if (r.ok) {
-        await marcarSeguimiento(c.telefono).catch(() => {})
-        enviados.push({ telefono: c.telefono, temp })
+      let ok = false
+      if (camino === 'despertar') {
+        // El bot está activo: que retome él la conversación. `responderConIA` ya
+        // manda lo que el agente devuelva (texto y fotos) por el canal correcto.
+        await responderConIA(origin, c.telefono, c.alias || c.nombre || '', '', c.phoneId, 'seguimiento')
+        ok = true
       } else {
-        errores.push({ telefono: c.telefono, status: r.status })
+        const r = await fetch(`${origin}/api/saliente`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            Telefono: c.telefono,
+            Nombre: c.alias || c.nombre || '',
+            Mensaje: regla.texto.trim(),
+            Canal: c.phoneId,
+          }),
+        })
+        ok = r.ok
+      }
+      if (ok) {
+        await marcarSeguimiento(c.telefono).catch(() => {})
+        enviados.push({ telefono: c.telefono, temp, camino })
+      } else {
+        errores.push({ telefono: c.telefono, camino })
       }
     } catch (e) {
-      errores.push({ telefono: c.telefono, error: e.message })
+      errores.push({ telefono: c.telefono, camino, error: e.message })
     }
   }
 
