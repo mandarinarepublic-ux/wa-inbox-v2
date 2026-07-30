@@ -63,7 +63,6 @@ export default function GuideModal({ onClose }) {
         'Ve a vercel.com → New Project → Import tu repositorio',
         'O instala Vercel CLI: npm i -g vercel → vercel deploy',
         'Vercel te da una URL pública gratis (ej: wa-inbox.vercel.app)',
-        'Opcional: en Vercel → Settings → Environment Variables agrega VITE_MAKE_READ_WEBHOOK y VITE_MAKE_SEND_WEBHOOK',
       ],
     },
   ]

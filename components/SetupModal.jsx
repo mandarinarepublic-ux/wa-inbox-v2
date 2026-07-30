@@ -3,14 +3,10 @@ import { useState } from 'react'
 import { CFG } from '@/lib/config'
 
 export default function SetupModal({ onClose }) {
-  const [read,  setRead]  = useState(CFG.MAKE_READ_WEBHOOK)
-  const [send,  setSend]  = useState(CFG.MAKE_SEND_WEBHOOK)
   const [poll,  setPoll]  = useState(CFG.POLL_INTERVAL)
   const [saved, setSaved] = useState(false)
 
   const save = () => {
-    CFG.MAKE_READ_WEBHOOK = read
-    CFG.MAKE_SEND_WEBHOOK = send
     CFG.POLL_INTERVAL     = Number(poll)
     setSaved(true)
     setTimeout(() => { setSaved(false); onClose() }, 1400)
@@ -50,31 +46,6 @@ export default function SetupModal({ onClose }) {
               Conecta tus escenarios de Make
             </p>
           </div>
-        </div>
-
-        {/* webhooks */}
-        <div style={{ marginBottom: 16 }}>
-          <label style={labelStyle}>WEBHOOK — LEER MENSAJES (Make devuelve JSON del Sheet)</label>
-          <input
-            value={read} onChange={e => setRead(e.target.value)}
-            placeholder="https://hook.eu2.make.com/xxxxxxxxxxxx"
-            style={inputStyle}
-          />
-          <p style={{ margin: '4px 0 0', fontSize: 11, color: '#334155' }}>
-            Escenario Make: Google Sheets Watch Rows → Webhook Response (JSON)
-          </p>
-        </div>
-
-        <div style={{ marginBottom: 16 }}>
-          <label style={labelStyle}>WEBHOOK — ENVIAR RESPUESTAS (POST de esta web a Make)</label>
-          <input
-            value={send} onChange={e => setSend(e.target.value)}
-            placeholder="https://hook.eu2.make.com/xxxxxxxxxxxx"
-            style={inputStyle}
-          />
-          <p style={{ margin: '4px 0 0', fontSize: 11, color: '#334155' }}>
-            Escenario Make: Custom Webhook → HTTP Meta API → Sheets Add Row
-          </p>
         </div>
 
         <div style={{ marginBottom: 22 }}>

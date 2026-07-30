@@ -28,26 +28,8 @@ const canalDe = (body) => {
 }
 const urlGraph = (phoneId) => `https://graph.facebook.com/v19.0/${phoneId}/messages`
 
-// Fallback temporal a Make: mientras META_TOKEN NO esté configurado en Vercel,
-// seguimos enviando por Make para no cortar el servicio. En cuanto agregues el
-// token, esta ruta pasa sola a enviar DIRECTO a Meta y Make queda bypasseado.
-const MAKE_SEND_WEBHOOK = process.env.MAKE_SEND_WEBHOOK || 'https://hook.us2.make.com/2j5dzq4gjqkjjnyxiyb46bons15awy2k'
-
 // La conversión URL → media_id (descarga + subida a Meta + caché) vive en
 // lib/media-id.js: la comparten esta ruta y /api/media/precache.
-
-async function enviarPorMake(body) {
-  try {
-    const res = await fetch(MAKE_SEND_WEBHOOK, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    return NextResponse.json({ ok: res.ok, via: 'make' })
-  } catch (err) {
-    return NextResponse.json({ ok: false, error: err.message, via: 'make' }, { status: 502 })
-  }
-}
 
 const soloDigitos = (s) => String(s || '').replace(/\D/g, '')
 
@@ -212,8 +194,17 @@ export async function POST(req) {
       }
     }
 
-    // Sin token todavía → no cortamos el servicio: enviamos por Make (temporal).
-    if (!META_TOKEN) return enviarPorMake(body)
+    // Sin META_TOKEN no hay forma de hablarle a la Cloud API de Meta. Antes esto
+    // caia a un respaldo por Make (apagado desde el 28-jul); ahora falla claro
+    // en vez de intentar contra Meta con un token vacio y devolver un error de
+    // Meta que no explica nada.
+    if (!META_TOKEN) {
+      console.error('[/api/saliente] falta META_TOKEN en las variables de entorno')
+      return NextResponse.json(
+        { ok: false, error: 'Falta configurar META_TOKEN en Vercel: no se puede enviar por WhatsApp.' },
+        { status: 500 },
+      )
+    }
 
     const construido = construir(body)
     const { payload, tipo, contenido, mediaUrl, botones } = construido
