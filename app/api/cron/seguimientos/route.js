@@ -70,7 +70,11 @@ export async function GET(req) {
     if (silencioH >= 24) continue                          // ventana de 24h cerrada
 
     const regla = seg[temp]
-    if (!regla?.activo || !String(regla.texto || '').trim()) continue
+    if (!regla?.activo) continue
+    // El texto de la regla solo hace falta en el camino 'texto': 'despertar' no
+    // lo usa (lo escribe el agente). Exigirlo para los dos saltaba en silencio
+    // los chats con IA activa que no tenian texto cargado.
+    if (camino === 'texto' && !String(regla.texto || '').trim()) continue
     if (silencioH < (Number(regla.horas) || 24)) continue  // aún no toca
 
     // ¿Ya seguimos en ESTA ventana? (el último seguimiento es posterior al último entrante)
@@ -82,9 +86,10 @@ export async function GET(req) {
       let ok = false
       if (camino === 'despertar') {
         // El bot está activo: que retome él la conversación. `responderConIA` ya
-        // manda lo que el agente devuelva (texto y fotos) por el canal correcto.
-        await responderConIA(origin, c.telefono, c.alias || c.nombre || '', '', c.phoneId, 'seguimiento')
-        ok = true
+        // manda lo que el agente devuelva (texto y fotos) por el canal correcto,
+        // y devuelve si de verdad se intento el envio (agente caido o respuesta
+        // vacia cuentan como false, para no marcar el seguimiento en falso).
+        ok = await responderConIA(origin, c.telefono, c.alias || c.nombre || '', '', c.phoneId, 'seguimiento')
       } else {
         const r = await fetch(`${origin}/api/saliente`, {
           method: 'POST',
