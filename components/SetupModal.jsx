@@ -43,7 +43,7 @@ export default function SetupModal({ onClose }) {
           <div>
             <h2 style={{ margin: 0, color: '#f1f5f9', fontSize: 19, fontWeight: 800 }}>Configuración</h2>
             <p style={{ margin: '3px 0 0', color: '#475569', fontSize: 13 }}>
-              Conecta tus escenarios de Make
+              Cada cuánto se actualiza la bandeja
             </p>
           </div>
         </div>
@@ -54,26 +54,6 @@ export default function SetupModal({ onClose }) {
             type="number" value={poll} onChange={e => setPoll(e.target.value)}
             min={5} max={60} style={inputStyle}
           />
-        </div>
-
-        {/* flow summary */}
-        <div style={{
-          background: 'rgba(37,211,102,.04)', border: '1px solid rgba(37,211,102,.12)',
-          borderRadius: 12, padding: 14, marginBottom: 22,
-        }}>
-          <p style={{ margin: '0 0 8px', fontSize: 11, color: '#25d366', fontWeight: 700 }}>
-            📋 FLUJO COMPLETO
-          </p>
-          {[
-            '① WhatsApp → Meta Webhook → Make lo recibe',
-            '② Make escribe la fila en tu Google Sheet',
-            '③ Esta web lee el Sheet cada ' + poll + ' segundos',
-            '④ Escribes la respuesta aquí → POST a Make',
-            '⑤ Make llama a Meta API → envía el WhatsApp',
-            '⑥ Make escribe la respuesta en el Sheet',
-          ].map((s, i) => (
-            <p key={i} style={{ margin: '2px 0', fontSize: 12, color: '#475569' }}>{s}</p>
-          ))}
         </div>
 
         <div style={{ display: 'flex', gap: 10 }}>
@@ -89,7 +69,7 @@ export default function SetupModal({ onClose }) {
             fontSize: 14, fontWeight: 800, cursor: 'pointer',
             fontFamily: 'inherit', transition: 'all .2s',
           }}>
-            {saved ? '✓ Guardado' : 'Guardar y conectar'}
+            {saved ? '✓ Guardado' : 'Guardar'}
           </button>
         </div>
       </div>
