@@ -242,6 +242,16 @@ export async function POST(req) {
       }
     }
 
+    // Imagen enviada con un media_id YA pre-resuelto (precache de las respuestas
+    // rápidas): llega en `ImagenMediaId`, así que el payload va como { id } SIN
+    // `link` y el bloque de arriba ni lo miró. Guardamos su URL de origen para poder
+    // re-subir la foto si Meta rechaza el id. Sin esto un id malo (vencido, o subido
+    // por otro número: la caché es por (phone_id, url)) mataba el envío en silencio
+    // —sin reintento, sin fallback, sin registro—: por eso las fotos de Shopify de
+    // las respuestas rápidas dejaron de salir de un día para el otro.
+    const idPreresuelto = payload.type === 'image' && Boolean(payload.image?.id) && !urlOrigen
+    if (idPreresuelto && body.ImagenURL) urlOrigen = String(body.ImagenURL)
+
     const enviar = () => fetch(urlGraph(canal), {
       method: 'POST',
       headers: { Authorization: `Bearer ${META_TOKEN}`, 'Content-Type': 'application/json' },
@@ -251,11 +261,15 @@ export async function POST(req) {
     let res  = await enviar()
     let data = await res.json().catch(() => ({}))
 
-    // El media id que teníamos guardado ya no le sirve a Meta (caducó, o lo borró).
-    // Lo sacamos de la caché, subimos la foto de nuevo y reintentamos UNA vez: para
-    // el vendedor esto es invisible, solo tarda como antes.
-    if (!res.ok && urlOrigen && esErrorDeMediaId(data)) {
-      console.warn('[/api/saliente] media id vencido, se re-sube la foto:', urlOrigen)
+    // El media id que teníamos guardado ya no le sirve a Meta (caducó, lo borró, o
+    // venía de otro número). Lo sacamos de la caché, subimos la foto de nuevo POR
+    // ESTE canal y reintentamos UNA vez: para el vendedor esto es invisible, solo
+    // tarda como antes. Para un id PRE-RESUELTO reintentamos ante cualquier rechazo:
+    // el "(#100) Object ... does not exist" de un id de otro número no menciona
+    // "media", así que `esErrorDeMediaId` no lo cazaría, y sin URL de origen guardada
+    // el envío se caía en silencio.
+    if (!res.ok && urlOrigen && (esErrorDeMediaId(data) || idPreresuelto)) {
+      console.warn('[/api/saliente] media id rechazado, se re-sube la foto:', urlOrigen, '·', data?.error?.message || `HTTP ${res.status}`)
       await invalidarMediaId(canal, urlOrigen)
       try {
         const id = await resolverMediaId(urlOrigen, canal)
@@ -264,7 +278,16 @@ export async function POST(req) {
         res  = await enviar()
         data = await res.json().catch(() => ({}))
       } catch (e) {
-        console.error('[/api/saliente] re-subida tras media id vencido falló:', e.message)
+        // Si al re-subir resulta que la foto pesa más de lo que Meta acepta, decirlo:
+        // mejor un error visible que un 502 mudo sin causa.
+        if (e.demasiadoGrande) {
+          console.error('[/api/saliente] imagen rechazada por tamaño al re-subir:', e.message)
+          return NextResponse.json(
+            { ok: false, error: `No se pudo enviar la foto: ${e.message}. Súbela más liviana.` },
+            { status: 502 },
+          )
+        }
+        console.error('[/api/saliente] re-subida tras media id rechazado falló:', e.message)
       }
     }
 
