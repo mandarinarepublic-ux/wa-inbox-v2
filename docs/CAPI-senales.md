@@ -43,7 +43,7 @@ crudo y la columna). Son tres cosas, y dos se curan solas con el tiempo:
 
 | Evento | Quién lo manda | Cuándo |
 |---|---|---|
-| `Lead` | el inbox (`lib/capi.js`) | el chat llega a **4 mensajes entrantes**, dentro de 72 h desde el click |
+| `LeadSubmitted` | el inbox (`lib/capi.js`) | el chat llega a **4 mensajes entrantes**, dentro de 72 h desde el click |
 | `InitiateCheckout` | el inbox (`lib/capi.js`) | **venta en proceso**: 🔥 CALIENTE **o** bandeja SOPORTE **o** más de 5 mensajes del cliente. Ventana de 7 días |
 | `Purchase` | **el CRM** (`MANDARINACRM/lib/metaCapi.js`) | al crear el pedido |
 
@@ -71,11 +71,32 @@ espera un embudo real, no uno reconstruido.
 misma venta y el revenue reportado saldría al doble. El CRM es además el único
 que sabe de pagos.
 
+## ⚠️ Requisito en Meta: la WABA tiene que estar asociada al dataset
+
+Sin esto, **todos** los eventos rebotan con `error_subcode 2804132`:
+
+> *"Para los eventos de clic a WhatsApp, el identificador del conjunto de datos que
+> se use para enviar los eventos a la API de conversiones debe tener una cuenta de
+> WhatsApp Business asociada."*
+
+Se arregla en **Events Manager → el dataset → Configuración → conectar la cuenta
+de WhatsApp Business**. Hay que asociar **las dos WABAs de cada marca** (tabla más
+abajo), no solo una: si el cliente entró por el número que no está asociado, su
+evento rebota igual.
+
+No es un problema de token: el token puede estar perfecto y esto falla igual. Es
+configuración, de la misma familia que el episodio del 25-jul.
+
 ## Las cuatro cosas que hay que entender antes de tocar esto
 
 1. **`action_source: 'business_messaging'` + `messaging_channel: 'whatsapp'`.**
    Con cualquier otro `action_source` Meta responde 200 OK y no atribuye nada:
    el evento se pierde en silencio. Un 200 no es prueba de nada.
+
+   Y ese `action_source` trae **su propio vocabulario de eventos**: `Lead` no
+   existe acá, se llama **`LeadSubmitted`**. Lo natural es escribir `Lead` y Meta
+   lo rechaza con `error_subcode 2804066`. La lista del pixel web no sirve de
+   guía — antes de agregar un evento nuevo, comprobarlo contra Meta.
 
 2. **La llave es el `ctwa_clid`, no el teléfono ni el email.** Sin click id no
    hay nada que atribuir y el evento se descarta. Meta lo manda en el `referral`
