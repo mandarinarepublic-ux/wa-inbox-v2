@@ -1140,7 +1140,14 @@ export default function App() {
           .show-mobile{ display:inline !important; }
           .overlay{ display:block; position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:90; }
           .msgs-scroll{ padding:12px 14px !important; }
-          .input-bar{ padding-bottom:env(safe-area-inset-bottom,12px) !important; }
+          /* En celular la caja necesita SIEMPRE un colchón abajo. `env(safe-area-
+             inset-bottom)` sirve para eso, pero iOS lo reporta como 0px cuando el
+             viewport no es `viewport-fit=cover` (que no lo es): 0px NO es "no
+             soportado", así que el fallback de 12px del env() nunca entraba y la
+             caja quedaba pegada al borde —tapada por la barra de gestos—. El
+             max() garantiza el piso de 12px y, si algún día se activa cover, usa
+             el inset real del equipo. */
+          .input-bar{ padding-bottom:max(12px, env(safe-area-inset-bottom, 12px)) !important; }
           /* Header en 2 filas: info arriba, acciones en tira scrollable abajo */
           .chat-header-left{ flex:1 1 100% !important; }
           .chat-actions{ flex:1 1 100% !important; flex-wrap:nowrap !important; overflow-x:auto; justify-content:flex-start !important; padding-bottom:2px; scrollbar-width:none; -webkit-overflow-scrolling:touch; }
