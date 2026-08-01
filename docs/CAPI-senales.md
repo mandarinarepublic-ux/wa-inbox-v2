@@ -44,8 +44,27 @@ crudo y la columna). Son tres cosas, y dos se curan solas con el tiempo:
 | Evento | Quién lo manda | Cuándo |
 |---|---|---|
 | `Lead` | el inbox (`lib/capi.js`) | el chat llega a **4 mensajes entrantes**, dentro de 72 h desde el click |
-| `InitiateCheckout` | *(sin implementar — falta definir el disparador)* | — |
+| `InitiateCheckout` | el inbox (`lib/capi.js`) | **venta en proceso**: 🔥 CALIENTE **o** bandeja SOPORTE **o** más de 5 mensajes del cliente. Ventana de 7 días |
 | `Purchase` | **el CRM** (`MANDARINACRM/lib/metaCapi.js`) | al crear el pedido |
+
+"Venta en proceso" son esas tres condiciones en OR, definidas por el negocio el
+1-ago-2026. `revisarVentaEnProceso()` las relee de la base en vez de confiar en
+quien la llama, así que da igual si entra por el webhook (mensaje nuevo) o por
+`/api/contactos/estado` (el agente tocó un botón): el resultado es el mismo y
+repetirla no cuesta nada, el `UNIQUE` deja pasar uno solo.
+
+En la práctica **casi todo lo dispara el conteo de mensajes**: de los 161 chats
+que hoy calificarían, 159 lo hacen por los 6 mensajes y solo 11 por CALIENTE y 3
+por SOPORTE (esas dos marcas se usan muy poco). El embudo actual:
+
+| | con clid | ≥4 → Lead | venta en proceso |
+|---|---|---|---|
+| IND | 962 | 182 | 99 |
+| MANDI | 323 | 107 | 62 |
+
+**No hay relleno hacia atrás.** Si un contacto se marca CALIENTE con dos
+mensajes, sale `InitiateCheckout` y NO se manda el `Lead` que nunca ocurrió: Meta
+espera un embudo real, no uno reconstruido.
 
 **Purchase no sale del inbox a propósito.** Un evento solo puede tener un
 `action_source`, así que mandar otro desde acá significaría dos Purchase por la
@@ -168,12 +187,18 @@ nada. Las estadísticas tardan ~30 min.
 
 ## Lo que quedó pendiente
 
-- **`InitiateCheckout` no tiene disparador.** El plan original apuntaba a un
-  estado `VENTAPROCESO` que ya no existe (es vocabulario muerto, solo queda una
-  mención en `lib/social-agrupar.js`). Los estados reales hoy son `PENDIENTE`,
-  `ATENDIDO`, `ARCHIVADO`, `SOPORTE` y `VENTA` (esta última con 1 sola
-  conversación en IND). Hay que decidir cuál es la señal de "propuesta enviada"
-  antes de implementarlo.
+- **Nada mide todavía si CALIENTE y SOPORTE valen la pena como señal.** Se usan
+  tan poco (11 y 3 chats en total) que su aporte es ruido estadístico frente a
+  los 159 que entran por conteo de mensajes. Vale revisar en un mes si conviene
+  dejarlas o si solo agregan ruido al embudo que ve Meta.
+- **~25 % de los pedidos tienen un celular que nunca escribió por WhatsApp.** El
+  vendedor registra un número distinto al del chat, y esa venta es inatribuible
+  por diseño. Es el hueco más grande que queda abierto y no lo cierra este
+  trabajo.
+- El plan original apuntaba `InitiateCheckout` a un estado `VENTAPROCESO` que ya
+  no existe (vocabulario muerto, solo queda una mención en
+  `lib/social-agrupar.js`). Los estados reales son `PENDIENTE`, `ATENDIDO`,
+  `ARCHIVADO`, `SOPORTE` y `VENTA` (esta última con 1 sola conversación).
 - **El backfill sirvió para guardar el clid, no para mandar eventos viejos.**
   Meta rechaza eventos de más de 7 días: de los 297 contactos que califican como
   Lead, solo ~41 caían dentro de la ventana. El valor está de aquí en adelante.

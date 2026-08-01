@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { updateEstado, updateModoIA, updateNotas, updateAlias, updateIdVenta, updateTemperatura } from '@/lib/contactos'
+import { revisarVentaEnProceso } from '@/lib/capi'
 
 // PATCH /api/contactos/estado
 // Body: { telefono, campo, valor }
@@ -34,6 +35,16 @@ export async function PATCH(req) {
       default:
         return NextResponse.json({ error: `Campo desconocido: ${campo}` }, { status: 400 })
     }
+
+    // Marcar 🔥 CALIENTE o mandar el chat a SOPORTE es, para el negocio, una
+    // venta en proceso → InitiateCheckout. La función relee las tres condiciones
+    // de la base, así que no hace falta filtrar por `campo` acá: si el agente
+    // marcó otra cosa, no se cumple ninguna y no se manda nada.
+    //
+    // Sin await a propósito: el botón del inbox no puede quedarse esperando a
+    // Meta, y si esto falla el cambio de estado ya está guardado igual.
+    revisarVentaEnProceso(telefono)
+      .catch(e => console.error('[/api/contactos/estado] venta capi:', e.message))
 
     return NextResponse.json(result)
   } catch (err) {

@@ -11,7 +11,7 @@ import { decidirIA } from '@/lib/ia-canal'
 import { extraer } from '@/lib/wa-mensaje'
 import { extraerEchoes } from '@/lib/echoes'
 import { enviarSaliente, responderConIA } from '@/lib/responder-ia'
-import { capturarCtwaClid, revisarLeadAutomatico } from '@/lib/capi'
+import { capturarCtwaClid, revisarLeadAutomatico, revisarVentaEnProceso } from '@/lib/capi'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -213,6 +213,8 @@ async function procesar(nuevos, origin) {
       .catch(e => console.error('[/api/webhook] ctwa:', e.message))
     await revisarLeadAutomatico(m.telefono)
       .catch(e => console.error('[/api/webhook] lead capi:', e.message))
+    await revisarVentaEnProceso(m.telefono)
+      .catch(e => console.error('[/api/webhook] venta capi:', e.message))
 
     // Aviso al equipo. Va DESPUÉS de registrarContactoEntrante para que la
     // conversación exista y se le pueda escribir ultimo_push_at.
