@@ -7,8 +7,37 @@
 
 Meta ve el click en el anuncio y ahí se le corta el rastro. No sabe cuáles de esas
 conversaciones avanzaron ni cuáles compraron, así que optimiza hacia quien **abre
-un chat**, no hacia quien **paga**. En IND eso son 1 002 de 1 498 conversaciones
-(67 %) que nacieron de un anuncio y no le reportan nada de vuelta.
+un chat**, no hacia quien **paga**.
+
+Y eso no es teórico. Medido el 1-ago-2026 sobre las conversaciones nacidas desde
+el 14-jul (cuando arrancó la captura del clid):
+
+| | conversaciones nuevas | vinieron de un anuncio | **convierten** |
+|---|---|---|---|
+| IND | 1 199 | 79,6 % | **1,15 %** |
+| IND (otro origen) | 245 | — | **13,06 %** |
+| MANDI | 385 | 82,1 % | **1,27 %** |
+| MANDI (otro origen) | 69 | — | **8,70 %** |
+
+**El 80 % del volumen viene de pauta y convierte 10 veces peor que el que llega
+por otro lado.** Eso es exactamente lo que pasa cuando Meta optimiza hacia el
+abridor de chats más barato: trae muchísimo clic frío. Devolverle Lead y Purchase
+es lo que le permite empezar a buscar compradores en vez de curiosos.
+
+### Por qué el porcentaje de ventas atribuidas se ve bajo al principio
+
+No es que falte captura (se verificó: **0 referrals perdidos** entre el payload
+crudo y la columna). Son tres cosas, y dos se curan solas con el tiempo:
+
+1. **La captura es joven.** Un comprador que escribió por primera vez antes del
+   14-jul no tiene clid y nunca lo va a tener. Esto se va a cero solo.
+2. **Los otros números no grababan.** REPUBLIC (MANDARINA) y el 9804 (IND) recién
+   entraron a Cloud API el 28/29-jul. Antes de esa fecha, el cruce de ventas
+   contra conversaciones daba 14 % en MANDARINA; después, 62 %. En IND: 49 % → 82 %.
+   Las ventas "sin conversación" sí la tenían — en el número que no se grababa.
+3. **~25 % de los pedidos tienen un celular que nunca escribió.** Ese sí es un
+   hueco real de datos (el vendedor registra otro número que el del chat) y no lo
+   arregla este trabajo.
 
 ## Cómo queda el circuito
 
