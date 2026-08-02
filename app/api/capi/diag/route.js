@@ -83,32 +83,50 @@ export async function GET(req) {
       //
       // Antes se mandaba `data: []`, pero Meta corta antes con "param data must
       // be non-empty" y la prueba no decía nada de los permisos.
-      const re = await fetch(`https://graph.facebook.com/v21.0/${fila.dataset}/events`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          data: [{
-            event_name: '__sonda_diagnostico__',
-            event_time: Math.floor(Date.now() / 1000),
-            action_source: 'business_messaging',
-            messaging_channel: 'whatsapp',
-            user_data: { whatsapp_business_account_id: c.wabaId, ctwa_clid: 'sonda' },
-          }],
-          access_token: capiToken,
-        }),
-      })
-      const be = await re.json().catch(() => ({}))
-      const sub = Number(be?.error?.error_subcode)
-      const codigo = Number(be?.error?.code)
+      //
+      // Se prueban LOS DOS tokens: el de CAPI y el de la Cloud API. El de CAPI
+      // se genera desde un dataset concreto y no sirve para otro (subcode 33,
+      // "missing permissions"); el de la Cloud API es el que CREÓ estos datasets,
+      // así que puede que sí tenga acceso. Saberlo evita mandar a generar un
+      // token que a lo mejor no hace falta.
+      async function sondar(token) {
+        if (!token) return { ok: false, error: 'sin token' }
+        const re = await fetch(`https://graph.facebook.com/v21.0/${fila.dataset}/events`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            data: [{
+              event_name: '__sonda_diagnostico__',
+              event_time: Math.floor(Date.now() / 1000),
+              action_source: 'business_messaging',
+              messaging_channel: 'whatsapp',
+              user_data: { whatsapp_business_account_id: c.wabaId, ctwa_clid: 'sonda' },
+            }],
+            access_token: token,
+          }),
+        })
+        const be = await re.json().catch(() => ({}))
+        const sub = Number(be?.error?.error_subcode)
+        // 2804066 = "el nombre del evento no es válido" → pasó la puerta.
+        if (re.ok || sub === 2804066) return { ok: true }
+        return {
+          ok: false,
+          codigo: Number(be?.error?.code) || undefined,
+          subcodigo: sub || undefined,
+          error: be?.error?.error_user_msg || be?.error?.message || `HTTP ${re.status}`,
+        }
+      }
 
-      // 2804066 = "el nombre del evento no es válido" → pasó la puerta.
-      fila.puedePublicar = re.ok || sub === 2804066
-      if (!fila.puedePublicar) {
-        fila.codigo = codigo
-        fila.subcodigo = sub || undefined
-        // Acá es donde Meta explica de verdad. El `message` suele ser un
-        // "Invalid parameter" que no dice nada.
-        fila.error = be?.error?.error_user_msg || be?.error?.message || `HTTP ${re.status}`
+      const conCapi = await sondar(capiToken)
+      fila.conTokenCapi = conCapi.ok ? 'sí' : conCapi.error
+      if (!conCapi.ok) {
+        const conWaba = await sondar(metaToken)
+        fila.conTokenWaba = conWaba.ok ? 'sí' : conWaba.error
+        fila.puedePublicar = conWaba.ok
+        fila.tokenQueSirve = conWaba.ok ? 'META_TOKEN' : null
+      } else {
+        fila.puedePublicar = true
+        fila.tokenQueSirve = 'META_CAPI_TOKEN'
       }
 
       // Se guarda lo resuelto para que el envío real no lo vuelva a pedir.
