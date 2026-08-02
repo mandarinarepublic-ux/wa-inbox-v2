@@ -3,15 +3,15 @@
 // Comprueba de una que las señales a Meta están bien enchufadas, SIN esperar a
 // que caiga un cliente real:
 //
-//   1. ¿El token de Meta sirve para ESTE dataset? Se resuelve leyendo el
-//      dataset, no mandando un evento: un evento de prueba ensuciaría las
-//      estadísticas de la pauta, y encima Meta tarda ~30 min en mostrarlo, así
-//      que ni siquiera serviría para saberlo ahora. Si el token está vencido o
-//      es de otro dataset, la lectura falla con el mismo error que fallaría el
-//      envío ("cannot be loaded due to missing permissions") — que es
-//      exactamente el que costó tiempo el 25-jul.
+//   1. Para CADA número: cuál es su dataset de mensajería y si el token puede
+//      publicar ahí. Un dataset por WABA, no el pixel del sitio.
 //   2. ¿Sale el aviso por Telegram? Manda un mensaje de prueba al chat.
 //   3. Cuántos contactos hay listos para disparar.
+//
+// Correr esto CREA el dataset de la WABA si aún no existe (POST /{waba}/dataset
+// devuelve el que haya, o lo crea). Es justamente lo que hay que hacer: no
+// existe forma de asociar una WABA a un dataset desde el panel — esa sección no
+// está, se recorrió entera el 1-ago buscándola.
 //
 // Protegida con DIAG_KEY porque estos repos son PÚBLICOS: sin llave, cualquiera
 // que encuentre la ruta podría llenar de mensajes el chat del equipo. Si la
@@ -20,6 +20,7 @@ import { NextResponse } from 'next/server'
 import { getSupabase, CUENTA } from '@/lib/supabase'
 import { capiConfigurado, LEAD_UMBRAL, VENTA_UMBRAL } from '@/lib/capi'
 import { env, revisarEnv } from '@/lib/env'
+import { CANALES } from '@/lib/canales'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,46 +34,72 @@ export async function GET(req) {
 
   const out = { cuenta: CUENTA, configurado: capiConfigurado(), umbrales: { lead: LEAD_UMBRAL, venta: VENTA_UMBRAL } }
 
-  // ── 1. Token de Meta ──────────────────────────────────────────────────────
+  // ── 1. Un dataset POR CANAL ───────────────────────────────────────────────
   //
-  // Se prueba con un POST de lista VACÍA al MISMO endpoint que usamos de verdad.
+  // Los eventos de Click-to-WhatsApp van a un dataset atado a la WABA, NO al
+  // pixel del sitio. Para cada número se resuelve (o se crea) el suyo y se prueba
+  // que el token pueda publicar ahí.
   //
-  // La primera versión leía el dataset (`GET /{pixel}`) y daba un falso negativo
-  // gordo: "(#100) Missing Permission", como si el token estuviera roto. Un token
-  // de CAPI puede PUBLICAR eventos sin poder LEER los metadatos del dataset —
-  // son permisos distintos. Casi mandamos a regenerar un token que estaba bien.
-  //
-  // Con `data: []` Meta valida el token y el acceso al dataset, responde 200 con
-  // events_received: 0, y no se crea ninguna conversión: cero contaminación de
+  // La prueba de publicación se hace con un POST de lista VACÍA al MISMO endpoint
+  // que usamos de verdad: Meta valida token y acceso, responde 200 con
+  // events_received: 0, y no se crea ninguna conversión — cero contaminación de
   // las estadísticas de la pauta.
-  const pixel = env('META_CAPI_PIXEL_ID')
-  const token = env('META_CAPI_TOKEN')
-  if (!pixel || !token) {
-    out.meta = { ok: false, error: `falta ${!pixel ? 'META_CAPI_PIXEL_ID' : 'META_CAPI_TOKEN'}` }
-  } else {
+  //
+  // La primera versión probaba el token LEYENDO el dataset y daba un falso
+  // negativo gordo ("Missing Permission"), como si estuviera roto: un token de
+  // CAPI puede PUBLICAR sin poder LEER metadatos. Casi mandamos a regenerar un
+  // token que estaba perfecto.
+  const capiToken = env('META_CAPI_TOKEN')
+  const metaToken = env('META_TOKEN')
+  out.canales = []
+
+  for (const c of CANALES) {
+    const fila = { canal: c.id, numero: c.etiqueta, waba: c.wabaId }
     try {
-      const r = await fetch(`https://graph.facebook.com/v21.0/${pixel}/events`, {
+      // 1. ¿Cuál es su dataset? POST devuelve el que ya exista, o lo crea.
+      const rd = await fetch(`https://graph.facebook.com/v21.0/${c.wabaId}/dataset`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: [], access_token: token }),
+        body: JSON.stringify({ access_token: metaToken }),
       })
-      const b = await r.json().catch(() => ({}))
-      out.meta = r.ok
-        ? { ok: true, pixel, nota: 'el token publica en este dataset' }
-        : {
-            ok: false, pixel,
-            codigo: b?.error?.code,
-            subcodigo: b?.error?.error_subcode,
-            error: b?.error?.message || `HTTP ${r.status}`,
-            // Acá es donde Meta explica de verdad qué pasa. El `message` suele ser
-            // un "Invalid parameter" que no dice nada.
-            detalle: b?.error?.error_user_msg || undefined,
-          }
+      const bd = await rd.json().catch(() => ({}))
+      fila.dataset = bd?.id || bd?.dataset_id || null
+      if (!fila.dataset) {
+        fila.error = bd?.error?.error_user_msg || bd?.error?.message || `HTTP ${rd.status}`
+        out.canales.push(fila)
+        continue
+      }
+
+      // 2. ¿El token de CAPI puede publicar ahí? Lista vacía: valida el acceso
+      //    sin crear ninguna conversión.
+      const re = await fetch(`https://graph.facebook.com/v21.0/${fila.dataset}/events`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: [], access_token: capiToken }),
+      })
+      const be = await re.json().catch(() => ({}))
+      fila.puedePublicar = re.ok
+      if (!re.ok) {
+        fila.codigo = be?.error?.code
+        fila.subcodigo = be?.error?.error_subcode
+        // Acá es donde Meta explica de verdad. El `message` suele ser un
+        // "Invalid parameter" que no dice nada.
+        fila.error = be?.error?.error_user_msg || be?.error?.message || `HTTP ${re.status}`
+      }
     } catch (e) {
-      out.meta = { ok: false, pixel, error: e.message }
+      fila.error = e.message
     }
-    const problema = revisarEnv('META_CAPI_TOKEN')
-    if (problema) out.meta.avisoVariable = `META_CAPI_TOKEN ${problema}`
+    out.canales.push(fila)
+  }
+
+  out.meta = {
+    ok: out.canales.length > 0 && out.canales.every(c => c.puedePublicar),
+    tokenCapi: capiToken ? 'puesto' : 'FALTA META_CAPI_TOKEN',
+    tokenWaba: metaToken ? 'puesto' : 'FALTA META_TOKEN',
+  }
+  for (const v of ['META_CAPI_TOKEN', 'META_TOKEN']) {
+    const p = revisarEnv(v)
+    if (p) out.meta.avisoVariable = `${v} ${p}`
   }
 
   // ── 2. Telegram ───────────────────────────────────────────────────────────
@@ -105,8 +132,8 @@ export async function GET(req) {
       `🧪 *PRUEBA — no es una venta ni un error*\n` +
       `Diagnóstico de las señales de pauta desde *${CUENTA}*.\n\n` +
       `Envío a Meta: ${out.meta?.ok
-        ? '✅ el token publica en el dataset'
-        : `❌ ${out.meta?.detalle || out.meta?.error || 'falla'}`}\n\n` +
+        ? `✅ los ${out.canales.length} números pueden publicar`
+        : `❌ ${out.canales.find(c => c.error)?.error || 'falla'}`}\n\n` +
       `Si estás leyendo esto, el aviso por Telegram funciona.`
     try {
       const r = await fetch(`https://api.telegram.org/bot${bot}/sendMessage`, {

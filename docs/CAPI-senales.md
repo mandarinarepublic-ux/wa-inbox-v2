@@ -71,21 +71,39 @@ espera un embudo real, no uno reconstruido.
 misma venta y el revenue reportado saldría al doble. El CRM es además el único
 que sabe de pagos.
 
-## ⚠️ Requisito en Meta: la WABA tiene que estar asociada al dataset
+## ⚠️ El dataset NO es el pixel del sitio
 
-Sin esto, **todos** los eventos rebotan con `error_subcode 2804132`:
+Esto costó una tarde, así que léelo antes de tocar nada.
+
+Los eventos de Click-to-WhatsApp van a **un dataset propio de cada WABA**, no al
+pixel de la web. Si se mandan al pixel, Meta los rebota con `error_subcode
+2804132`:
 
 > *"Para los eventos de clic a WhatsApp, el identificador del conjunto de datos que
 > se use para enviar los eventos a la API de conversiones debe tener una cuenta de
 > WhatsApp Business asociada."*
 
-Se arregla en **Events Manager → el dataset → Configuración → conectar la cuenta
-de WhatsApp Business**. Hay que asociar **las dos WABAs de cada marca** (tabla más
-abajo), no solo una: si el cliente entró por el número que no está asociado, su
-evento rebota igual.
+**Ese mensaje induce a error**: suena a que hay que ir a asociar la WABA al pixel
+desde el panel. **No existe esa opción.** Se recorrió entera la configuración del
+dataset (Detalles, Vinculación, Configuración del píxel, API de conversiones,
+Permisos de tráfico…), Configuración del negocio → Orígenes de datos → Activos
+conectados (solo ofrece cuentas publicitarias) y las fichas de cada WABA (solo
+Resumen, Personas, Socios, Números, Preferencias). No está por ningún lado.
 
-No es un problema de token: el token puede estar perfecto y esto falla igual. Es
-configuración, de la misma familia que el episodio del 25-jul.
+La asociación **se hace por API y es automática**:
+
+```
+POST /{WABA_ID}/dataset   → devuelve el dataset si ya existe, o lo crea
+GET  /{WABA_ID}/dataset   → devuelve el existente
+```
+
+Requiere `META_TOKEN` (el de la Cloud API, con permiso sobre la WABA), no el de
+CAPI. Lo hace solo `datasetDeWaba()` en `lib/capi.js`, cacheado en
+`inbox.capi_datasets`: un número nuevo resuelve su dataset la primera vez que
+alguien escribe, sin desplegar ni tocar Vercel. Correr `/api/capi/diag` también
+los crea todos de una.
+
+**Un dataset por WABA**, así que cada marca tiene dos.
 
 ## Las cuatro cosas que hay que entender antes de tocar esto
 
@@ -132,30 +150,38 @@ Confirmados contra `entry[0].id` de `inbox.webhook_eventos`:
 | IND | +593 99 995 3326 | `1153686904504422` | `1043571971409840` |
 | IND | +593 98 415 9804 | `2241248862581450` | `396966121059860` |
 
-Pixels (negocio `114968056344676`): MANDARINA `612911870044679`
-("PixelFinalMandarinaRepublic"), IND `1520595899347453` ("IND WEB").
+Los pixels del sitio (`612911870044679` "PixelFinalMandarinaRepublic" y
+`1520595899347453` "IND WEB") **NO se usan acá** — ver la sección de arriba.
 
 **Si se migra un número de WABA** (pasó con el 3326 el 28-jul-2026) hay que
 actualizar `lib/canales.js` de ese inbox **y** el mapa `WABA_POR_PHONE_ID` de
-`MANDARINACRM/lib/metaCapi.js`. Nada se rompe visiblemente: lo único que se cae
-es la atribución, en silencio y semanas después.
+`MANDARINACRM/lib/metaCapi.js`. El dataset en cambio se resuelve solo. Nada se
+rompe visiblemente: lo único que se cae es la atribución, en silencio y semanas
+después.
 
 ## Variables de entorno
 
-Sin estas dos, `capiConfigurado()` es `false` y **no se manda nada** (el inbox
-funciona igual). Es el interruptor: quitarlas revierte la función sin desplegar.
+Sin `META_CAPI_TOKEN`, `capiConfigurado()` es `false` y **no se manda nada** (el
+inbox funciona igual). Es el interruptor: quitarla revierte la función sin
+desplegar.
 
-| Variable | MANDI | IND |
-|---|---|---|
-| `META_CAPI_PIXEL_ID` | `612911870044679` | `1520595899347453` |
-| `META_CAPI_TOKEN` | token del dataset de Mandarina | token del dataset IND WEB |
-| `CAPI_LEAD_UMBRAL` | opcional, default `4` | igual |
-| `CAPI_VENTANA_HORAS` | opcional, default `72` | igual |
+| Variable | para qué |
+|---|---|
+| `META_CAPI_TOKEN` | publicar los eventos |
+| `META_TOKEN` | resolver el dataset de cada WABA (ya estaba, es el de la Cloud API) |
+| `TELEGRAM_BOT_TOKEN` | el aviso de error. Sin ella el evento igual queda en el tablero |
+| `DIAG_KEY` | habilita `/api/capi/diag`. Sin ella la ruta responde 404 |
+| `CAPI_LEAD_UMBRAL` | opcional, default `4` |
+| `CAPI_VENTA_UMBRAL` | opcional, default `6` |
+| `CAPI_VENTANA_HORAS` | opcional, default `72` (Lead) |
+| `CAPI_VENTANA_VENTA_HORAS` | opcional, default `168` (venta en proceso) |
 
-Los tokens de CAPI quedan **atados al dataset desde el que se generan**: el de
-Mandarina no sirve para IND WEB (Meta responde "Object with ID … cannot be
-loaded due to missing permissions"). El CRM ya tiene los dos, en
-`META_CAPI_TOKEN` y `META_CAPI_TOKEN_INDSTORE` — son esos mismos.
+`META_CAPI_PIXEL_ID` **ya no se usa**: el dataset sale de la WABA.
+
+⚠️ Cargar variables desde PowerShell les pega un **BOM invisible**. El token de
+Telegram entra dentro de la URL, así que un BOM la vuelve una ruta inexistente y
+la API responde `404 Not Found`, como si el bot no existiera (pasó el 1-ago).
+Por eso todo esto se lee con `lib/env.js`, que lo limpia.
 
 ## Consultas de salud
 
