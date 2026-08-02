@@ -70,21 +70,51 @@ export async function GET(req) {
         continue
       }
 
-      // 2. ¿El token de CAPI puede publicar ahí? Lista vacía: valida el acceso
-      //    sin crear ninguna conversión.
+      // 2. ¿El token de CAPI puede publicar ahí?
+      //
+      // La sonda manda UN evento con un nombre inventado. Suena raro, pero es lo
+      // único que distingue las dos cosas sin crear una conversión falsa:
+      //
+      //   - Meta valida el token y el acceso al dataset PRIMERO. Si eso falla,
+      //     responde permisos (190 / "Missing Permission") y ni mira el evento.
+      //   - Si el token está bien, llega a validar el contenido y se queja del
+      //     nombre del evento (subcode 2804066). Ese rechazo es la PRUEBA de que
+      //     el token publica ahí, y no se registra nada.
+      //
+      // Antes se mandaba `data: []`, pero Meta corta antes con "param data must
+      // be non-empty" y la prueba no decía nada de los permisos.
       const re = await fetch(`https://graph.facebook.com/v21.0/${fila.dataset}/events`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: [], access_token: capiToken }),
+        body: JSON.stringify({
+          data: [{
+            event_name: '__sonda_diagnostico__',
+            event_time: Math.floor(Date.now() / 1000),
+            action_source: 'business_messaging',
+            messaging_channel: 'whatsapp',
+            user_data: { whatsapp_business_account_id: c.wabaId, ctwa_clid: 'sonda' },
+          }],
+          access_token: capiToken,
+        }),
       })
       const be = await re.json().catch(() => ({}))
-      fila.puedePublicar = re.ok
-      if (!re.ok) {
-        fila.codigo = be?.error?.code
-        fila.subcodigo = be?.error?.error_subcode
+      const sub = Number(be?.error?.error_subcode)
+      const codigo = Number(be?.error?.code)
+
+      // 2804066 = "el nombre del evento no es válido" → pasó la puerta.
+      fila.puedePublicar = re.ok || sub === 2804066
+      if (!fila.puedePublicar) {
+        fila.codigo = codigo
+        fila.subcodigo = sub || undefined
         // Acá es donde Meta explica de verdad. El `message` suele ser un
         // "Invalid parameter" que no dice nada.
         fila.error = be?.error?.error_user_msg || be?.error?.message || `HTTP ${re.status}`
+      }
+
+      // Se guarda lo resuelto para que el envío real no lo vuelva a pedir.
+      if (fila.dataset) {
+        await getSupabase().from('capi_datasets')
+          .upsert({ waba_id: c.wabaId, dataset_id: String(fila.dataset) }, { onConflict: 'waba_id' })
       }
     } catch (e) {
       fila.error = e.message
