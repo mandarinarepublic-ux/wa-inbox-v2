@@ -202,6 +202,15 @@ select cuenta,
        round(100.0 * count(*) filter (where ctwa_clid is not null) / count(*), 1) pct
 from inbox.conversaciones group by 1;
 
+-- Marcas TRABADAS: se insertaron pero nunca se resolvieron (la función murió
+-- entre el insert y la respuesta de Meta). Deberían ser 0 o casi: se liberan
+-- solas cuando el contacto vuelve a escribir. Si se acumulan, es que algo está
+-- matando la función a mitad y hay que mirar los logs de Vercel.
+select cuenta, event_name, telefono, sent_at
+from inbox.capi_events
+where http_status is null and sent_at < now() - interval '10 minutes'
+order by sent_at desc;
+
 -- Los que fallaron, con el motivo que dio Meta
 select cuenta, telefono, event_name, http_status,
        meta_response->'error'->>'message' motivo, sent_at
