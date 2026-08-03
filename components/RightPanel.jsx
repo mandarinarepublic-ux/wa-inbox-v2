@@ -1,7 +1,8 @@
 'use client'
 import { useState, useRef, useEffect } from 'react'
 import { Avatar } from '@/components/Components'
-import { fetchRepliesFromSheet, writeReply, reorderReplies, saveNotes, setIdVenta, fetchProductos } from '@/lib/api-client'
+import { fetchRepliesFromSheet, writeReply, reorderReplies, addNota, setIdVenta, fetchProductos } from '@/lib/api-client'
+import Notas from './Notas'
 import { parseDate } from '@/lib/utils'
 import { moverItem } from '@/lib/orden-lista'
 
@@ -279,10 +280,10 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
   const [aliasInput,    setAliasInput]    = useState('')
 
   // ── Notas del vendedor ───────────────────────────────────────
-  const [notasInput,  setNotasInput]  = useState('')
-  const [notasSaving, setNotasSaving] = useState(false)
-  const [notasSaved,  setNotasSaved]  = useState(false)
-  const notasLoadedRef = useRef(null)
+  // El componente <Notas/> se maneja solo (lee y escribe su propia tabla). Este
+  // contador es la única señal que necesita de afuera: CREAR PEDIDO deja el link
+  // del pedido como nota y lo sube para que la lista se repinte.
+  const [notasRefrescar, setNotasRefrescar] = useState(0)
 
   // ── Crear pedido (botón que lee la conversación y crea el pedido en el CRM) ──
   const [pedidoLoading, setPedidoLoading] = useState(false)
@@ -335,16 +336,12 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
     cargarReplies()
   }, [repliesLoaded])
 
-  // Cargar la nota al cambiar de contacto (no pisa lo que estás escribiendo)
+  // Limpiar el resultado del último CREAR PEDIDO al cambiar de contacto — si no,
+  // el pedido del chat anterior sigue en pantalla. (Las notas las carga <Notas/>
+  // por su cuenta cuando cambia el teléfono.)
   useEffect(() => {
-    if (!activeConv) return
-    if (notasLoadedRef.current !== activeConv.telefono) {
-      notasLoadedRef.current = activeConv.telefono
-      setNotasInput(contactInfo?.notas || '')
-      setNotasSaved(false)
-      setPedidoRes(null)
-    }
-  }, [activeConv, contactInfo])
+    if (activeConv) setPedidoRes(null)
+  }, [activeConv?.telefono])
 
   // Cargar historial de pedidos al cambiar de contacto (una sola vez por teléfono).
   // Solo tiene sentido si la pestaña Ventas está habilitada: en SOCIAL no lo está
@@ -518,27 +515,18 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
       const res = await r.json()
       setPedidoRes(res)
       if (res?.ok && res.pedidoId) {
-        // Persiste el pedido en NOTAS y marca idVenta → queda en 💰 Ventas y no se pierde el link
-        const linea = `📦 Pedido ${res.pedidoId} · $${res.montoTotal}\n${res.url}`
-        const base = String(notasInput || '')
-        const nueva = base.includes(res.pedidoId) ? base : (base.trim() ? `${base.trim()}\n${linea}` : linea)
-        setNotasInput(nueva)
-        saveNotes(activeConv.telefono, contactInfo?.nombre || activeConv.nombre, nueva).catch(() => {})
+        // Persiste el pedido como NOTA y marca idVenta → queda en 💰 Ventas y no
+        // se pierde el link. Antes se anexaba al final de la nota única; ahora es
+        // su propia nota, así queda fechada y no se mezcla con lo que escribió
+        // el vendedor.
+        addNota(activeConv.telefono, `📦 Pedido ${res.pedidoId} · $${res.montoTotal}\n${res.url}`)
+          .then(() => setNotasRefrescar(n => n + 1))
+          .catch(() => {})
         setIdVenta(activeConv.telefono, res.pedidoId).catch(() => {})
       }
     } catch {
       setPedidoRes({ ok: false, error: 'No se pudo conectar con MANDI' })
     } finally { setPedidoLoading(false) }
-  }
-
-  const handleSaveNotas = async () => {
-    if (notasSaving) return
-    setNotasSaving(true)
-    try {
-      await saveNotes(activeConv.telefono, contactInfo?.nombre || activeConv.nombre, notasInput)
-      setNotasSaved(true)
-      setTimeout(() => setNotasSaved(false), 2500)
-    } finally { setNotasSaving(false) }
   }
 
   const contactName = contactInfo?.alias || contactInfo?.nombre || activeConv.nombre
@@ -755,27 +743,12 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
               )}
             </div>
 
-            {/* NOTAS DEL VENDEDOR */}
+            {/* NOTAS DEL VENDEDOR — varias por chat, cada una con su fecha */}
             <div style={{ padding:'10px 12px', borderTop:'1px solid #111c2a', marginTop:8, background:'#0a1019' }}>
-              <p style={{ fontSize:10, color:'#f59e0b', fontWeight:700, letterSpacing:'.08em', margin:'0 0 6px', display:'flex', alignItems:'center', gap:5 }}>
+              <p style={{ fontSize:10, color:'#f59e0b', fontWeight:700, letterSpacing:'.08em', margin:'0 0 6px' }}>
                 📝 NOTAS
-                {notasSaved && <span style={{ fontSize:8, background:'rgba(37,211,102,.15)', color:'#25d366', borderRadius:10, padding:'1px 6px' }}>Guardado ✓</span>}
               </p>
-              {(() => { const u = (String(notasInput || '').match(/https?:\/\/\S+\/dashboard\/pedido\/\S+/) || [])[0]; return u ? (
-                <a href={u} target="_blank" rel="noreferrer" style={{ display:'inline-block', marginBottom:6, padding:'4px 9px', background:'rgba(16,185,129,.15)', border:'1px solid rgba(16,185,129,.35)', color:'#10b981', borderRadius:6, fontSize:11, fontWeight:700, textDecoration:'none' }}>📄 Ver pedido</a>
-              ) : null })()}
-              <textarea
-                value={notasInput}
-                onChange={e => { setNotasInput(e.target.value); setNotasSaved(false) }}
-                placeholder="Ej: Falta que envíe la foto del pago..."
-                rows={3}
-                style={{ width:'100%', background:'#111c2a', border:'1px solid #1e2d3d', borderRadius:7, color:'#ffffff', fontSize:11, padding:'6px 8px', resize:'vertical', outline:'none', fontFamily:'inherit', whiteSpace:'pre-wrap', minHeight:56 }}
-                onFocus={e => e.target.style.borderColor='#f59e0b'} onBlur={e => e.target.style.borderColor='#1e2d3d'}
-              />
-              <button onClick={handleSaveNotas} disabled={notasSaving}
-                style={{ width:'100%', marginTop:5, padding:'6px', background: notasSaving ? '#111c2a' : 'rgba(245,158,11,.12)', border:'1px solid rgba(245,158,11,.3)', color:'#f59e0b', borderRadius:7, fontSize:11, fontWeight:700, cursor: notasSaving ? 'default' : 'pointer', fontFamily:'inherit', transition:'all .15s' }}>
-                {notasSaving ? '⏳ Guardando...' : '💾 Guardar nota'}
-              </button>
+              <Notas telefono={activeConv.telefono} refrescar={notasRefrescar} />
             </div>
 
             {/* HISTORIAL DE PEDIDOS */}
