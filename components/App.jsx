@@ -1686,7 +1686,7 @@ export default function App() {
               contactInfo={currentContact}
               onQuickReply={handleQuickReply}
               onSendText={handleSendText}
-              onSendImage={handleSendAIImage}
+              onSendImage={handleSendAIImage} onSendProducto={handleSendProducto}
               onUpdateContact={handleUpdateContact}
               windowOpen={windowOpen}
             />
