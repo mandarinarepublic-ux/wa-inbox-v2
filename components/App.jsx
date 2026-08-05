@@ -1131,9 +1131,12 @@ export default function App() {
         .show-mobile{ display:none !important; }
         .overlay    { display:none; }
         @media (max-width:767px){
-          .sidebar{ position:fixed !important; left:0; top:0; bottom:0; z-index:100; width:100% !important; max-width:100% !important; box-shadow:4px 0 32px rgba(0,0,0,.6); transform:translateX(-100%); transition:transform .25s ease; }
+          /* Los cajones arrancan DEBAJO de la barra de pestañas (alto 38px, z-index
+             200), no en top:0. Si no, la barra tapa la cabecera del sidebar (logo,
+             "En vivo", botones). El env() suma el notch cuando aplica. */
+          .sidebar{ position:fixed !important; left:0; top:calc(38px + env(safe-area-inset-top, 0px)); bottom:0; z-index:100; width:100% !important; max-width:100% !important; box-shadow:4px 0 32px rgba(0,0,0,.6); transform:translateX(-100%); transition:transform .25s ease; }
           .sidebar.open{ transform:translateX(0); }
-          .right-col{ position:fixed !important; right:0; top:0; bottom:0; z-index:100; width:88% !important; max-width:300px; box-shadow:-4px 0 32px rgba(0,0,0,.6); animation:slideR .25s ease; }
+          .right-col{ position:fixed !important; right:0; top:calc(38px + env(safe-area-inset-top, 0px)); bottom:0; z-index:100; width:88% !important; max-width:300px; box-shadow:-4px 0 32px rgba(0,0,0,.6); animation:slideR .25s ease; }
           .desktop-right{ display:none !important; }
           .mob-ham{ display:flex !important; }
           .hide-mobile{ display:none !important; }
