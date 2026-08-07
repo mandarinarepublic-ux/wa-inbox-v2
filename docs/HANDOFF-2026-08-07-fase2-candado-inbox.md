@@ -90,8 +90,19 @@ Las seis reglas del spec (§3), en orden de ejecución:
    habría rechazado. 24-48 h con tráfico real, incluido un fin de semana. Se
    activa cuando el registro esté en cero rechazos legítimos.
 3. **`AUTH_MODO`** con `observar` · `bloquear` · `apagado`. Si algo se rompe de
-   madrugada, se cambia la variable en Vercel y vuelve todo en 30 segundos, sin
-   commit ni build.
+   madrugada, se cambia la variable en Vercel **y se redespliega**.
+
+   > ⚠️ **CORREGIDO EL 7-AGO-2026, CON MEDICIÓN.** Este documento decía que el
+   > interruptor vuelve todo "en 30 segundos, sin commit ni build". **Es falso.**
+   > Next incrusta `process.env` en el bundle de Edge al compilar: puesta la
+   > variable en `apagado`, el middleware siguió comportándose igual 3 minutos y
+   > dos sondas después, y recién cambió tras un redespliegue.
+   >
+   > Lo cierto: **sin commit y sin tocar código, pero CON redespliegue, ~1 minuto.**
+   > ```bash
+   > vercel redeploy <url-del-deploy-actual> --scope mandarinarepublic-6819s-projects
+   > ```
+   > Importa para la Fase 5 en IND, que hereda este mismo middleware.
 4. **Los webhooks fuera por configuración**, no por lista: excluidos en el
    `matcher`, más una prueba que falle el build si alguien los mete al camino
    protegido. Confirmadas como externas: `/api/webhook`, `/api/social/webhook`,

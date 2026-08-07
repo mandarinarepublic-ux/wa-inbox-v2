@@ -18,7 +18,17 @@ import { puedeEntrar } from '@/lib/acceso'
 //   observar → NO rechaza nada, solo anota lo que habría rechazado (arranca así)
 //   bloquear → rechaza de verdad
 //   apagado  → ni siquiera mira; es el interruptor de pánico
-// Cambiar la variable en Vercel surte efecto sin desplegar.
+//
+// ⚠️ MEDIDO el 7-ago-2026, y NO es lo que decía el plan: cambiar AUTH_MODO en
+// Vercel **no surte efecto solo**. Next incrusta process.env en el bundle de Edge
+// al compilar, así que el middleware sigue con el valor con el que se construyó.
+// Se comprobó con tres sondas: puesta la variable en `apagado`, el middleware
+// siguió anotando 3 minutos después; recién dejó de hacerlo tras redesplegar.
+//
+// Entonces, para usar el interruptor de pánico de madrugada:
+//   1. cambiar AUTH_MODO en Vercel
+//   2. `vercel redeploy <url-del-deploy-actual> --scope mandarinarepublic-6819s-projects`
+// Sigue sin necesitar commit ni tocar código, pero tarda ~1 minuto, no 30 segundos.
 const LOGIN = 'https://crm.apps.mandarinaec.com'
 
 const modo = () => (process.env.AUTH_MODO || 'observar').trim().toLowerCase()

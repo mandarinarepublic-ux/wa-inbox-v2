@@ -405,7 +405,8 @@ import { puedeEntrar } from '@/lib/acceso'
 //   observar → NO rechaza nada, solo anota lo que habría rechazado (arranca así)
 //   bloquear → rechaza de verdad
 //   apagado  → ni siquiera mira; es el interruptor de pánico
-// Cambiar la variable en Vercel surte efecto sin desplegar.
+// ⚠️ Cambiar la variable NO basta: hay que redesplegar. Medido el 7-ago; el
+// comentario completo, con el porqué y el comando, está en middleware.js.
 const LOGIN = 'https://crm.apps.mandarinaec.com'
 
 const modo = () => (process.env.AUTH_MODO || 'observar').trim().toLowerCase()
@@ -658,7 +659,7 @@ Esperado: `fallidos = 0` y los otros dos subiendo.
 - [ ] `/api/webhook` y `/api/pago-dlocal` **siguen respondiendo igual que antes** desde el host viejo.
 - [ ] Un mensaje real entra y sale, con `delivered` confirmado.
 - [ ] 3 h de tráfico posterior con `fallidos = 0`.
-- [ ] `AUTH_MODO=apagado` revierte todo sin desplegar (probarlo una vez, a propósito, para saber que el interruptor funciona antes de necesitarlo).
+- [x] `AUTH_MODO=apagado` revierte todo (probado a propósito el 7-ago, antes de necesitarlo). **Resultado: NO revierte sin desplegar — hay que redesplegar.** Justo para esto servía probarlo antes.
 
 ## Lo que queda para después
 
