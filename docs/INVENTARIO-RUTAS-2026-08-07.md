@@ -70,9 +70,26 @@ desde otro repo.
 
 **`/api/conversacion` merece atención.** Nació para que MANDI tuviera memoria, y
 memoria es justo lo que ya falló una vez y costó ventas. Hoy `mandi-agent` **no
-la llama** —lo verifiqué en su código— pero sigue abierta y devuelve el historial
-de conversación de cualquier teléfono a quien la invoque. Si de verdad nadie la
-usa, protegerla no rompe nada; borrarla es aún mejor. **Confirmar antes de tocar.**
+la llama** —verificado en su código, y su repo local está idéntico al remoto
+(`7b34086`), así que es lo que está desplegado— pero sigue abierta y devuelve el
+historial de conversación de cualquier teléfono a quien la invoque.
+
+Candidatos a llamador, y cómo quedó cada uno:
+
+- `mandi-agent`, `indx-agent`, CRM, IND inbox, La Mata → **descartados**, verificados en su código.
+- **Make** → prácticamente descartado: Rodrigo apagó **todos los webhooks de Make
+  a mediados de julio**, así que ningún escenario disparado por webhook ha podido
+  llamarla en tres semanas. *(Queda el resquicio teórico de un escenario por
+  HORARIO que llame hacia afuera: apagar webhooks mata a los que se disparaban
+  por webhook, no a los programados.)*
+- Un script o marcador de alguien → no verificable por código.
+
+**Decisión tomada: no se toca por ahora.** Protegerla NO es más seguro que
+borrarla —un llamador desconocido no tiene sesión, así que recibiría 401 con el
+candado o 404 con el borrado, y se rompe igual en los dos casos—. Se deja como
+está y **el modo observación de la Fase 2 la delata**: si nadie la llama en esa
+ventana, se borra sin riesgo. La información llega sola, gratis, con trabajo que
+ya se va a hacer.
 
 ## Datos que cambian decisiones de la Fase 2
 
