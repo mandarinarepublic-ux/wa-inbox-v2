@@ -8,6 +8,24 @@
 
 **Tech Stack:** Next.js App Router, runtime Edge para el middleware, Node 24, Supabase (schemas `inbox` y `crm`), Vercel. Pruebas con `node --test`, sin dependencias nuevas.
 
+## Estado al 7-ago-2026, 16:30
+
+**Tareas 1 a 4 HECHAS y en producción.** Falta la 5 (redirección del host viejo)
+y la 6 (ventana de observación y encendido).
+
+- Producción corriendo `fdf70f4` con **`AUTH_MODO=observar`**: anota y **no rechaza
+  a nadie**. Verificado: `/api/lista` y `/inbox` siguen dando 200 sin cookie,
+  `/api/webhook` sigue en 403 y `/api/pago-dlocal` en 405, iguales que antes.
+- Mensajería intacta tras el despliegue: 8 entrantes, 9 salientes, **0 fallidos**
+  en 3 h.
+- `SESSION_SECRET` cargado en `wa-inbox-v2` y en `ind-inbox-v2` (7-ago).
+- ⚠️ **Antes de la Tarea 6 hay que repartir el permiso.** Medido en la base ese
+  día: de 14 personas, **solo 2 tienen `INBOX_MANDARINA`** (Andrés Admin y Xavier
+  Castillo). Rodrigo, Camila y todas las vendedoras lo tienen vacío. Si se
+  enciende `bloquear` así, el equipo entero queda fuera del inbox.
+- ⚠️ El push de `fdf70f4` **no disparó build solo** — hubo que correr
+  `vercel --prod --yes`. Vale la pena mirar antes de suponer que un push desplegó.
+
 ## Global Constraints
 
 - **Repo: `C:\Users\RodrigoWork\Desktop\wa-inbox-next`** (proyecto Vercel `wa-inbox-v2`). Producción = `main`.
@@ -50,7 +68,7 @@ El inbox **solo verifica**, nunca emite cookies: eso lo hace el CRM. Pero el arc
 - Consumes: nada.
 - Produces: `verificarSesion(token: string, secreto: string): Promise<{id, rol, exp} | null>` y `secretoSesion(): string`, `COOKIE_SESION = 'mp_sesion'`.
 
-- [ ] **Step 1: Copiar el archivo tal cual**
+- [x] **Step 1: Copiar el archivo tal cual**
 
 ```bash
 cd /c/Users/RodrigoWork/Desktop/wa-inbox-next
@@ -59,7 +77,7 @@ cp /c/Users/RodrigoWork/Desktop/MANDARINACRM/lib/sesion.js lib/sesion.js
 
 No se le quita nada, ni siquiera `cookieSesion`/`cookieBorrada`, que el inbox no usa.
 
-- [ ] **Step 2: Agregar la nota de que es una copia**
+- [x] **Step 2: Agregar la nota de que es una copia**
 
 Justo debajo del comentario de cabecera que ya trae el archivo, agregar:
 
@@ -74,7 +92,7 @@ Justo debajo del comentario de cabecera que ya trae el archivo, agregar:
 // siendo comparable línea por línea con el del CRM.
 ```
 
-- [ ] **Step 3: Escribir la prueba que falla**
+- [x] **Step 3: Escribir la prueba que falla**
 
 Crear `tests/sesion.test.js`:
 
@@ -125,7 +143,7 @@ test('el nombre de la cookie es el mismo que emite el CRM', () => {
 })
 ```
 
-- [ ] **Step 4: Correr y ver que pasa**
+- [x] **Step 4: Correr y ver que pasa**
 
 ```bash
 npm test
@@ -133,7 +151,7 @@ npm test
 
 Esperado: las 6 nuevas en verde, más las que ya existían en `tests/`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add lib/sesion.js tests/sesion.test.js
@@ -157,7 +175,7 @@ Sale del inventario medido (`docs/INVENTARIO-RUTAS-2026-08-07.md`). Vive en su p
 - Consumes: nada.
 - Produces: `esRutaPublica(pathname: string): boolean` y `RUTAS_PUBLICAS: string[]`.
 
-- [ ] **Step 1: Escribir las pruebas que fallan**
+- [x] **Step 1: Escribir las pruebas que fallan**
 
 Crear `tests/rutas-publicas.test.js`. **Las 35 rutas del inventario, una por una** — si alguien agrega una ruta pública sin pensarlo, esta prueba se lo dice:
 
@@ -220,7 +238,7 @@ test('la barra final no cambia la decisión', () => {
 })
 ```
 
-- [ ] **Step 2: Correr y ver que falla**
+- [x] **Step 2: Correr y ver que falla**
 
 ```bash
 npm test
@@ -228,7 +246,7 @@ npm test
 
 Esperado: FALLA — `lib/rutas-publicas.js` no existe.
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 Crear `lib/rutas-publicas.js`:
 
@@ -264,7 +282,7 @@ export function esRutaPublica(pathname) {
 }
 ```
 
-- [ ] **Step 4: Correr las pruebas**
+- [x] **Step 4: Correr las pruebas**
 
 ```bash
 npm test
@@ -272,7 +290,7 @@ npm test
 
 Esperado: las 40 nuevas en verde (4 públicas + 33 protegidas + 3 de bordes), más las de la Tarea 1.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add lib/rutas-publicas.js tests/rutas-publicas.test.js
@@ -293,7 +311,7 @@ git push origin main
 
 > **Por qué `fetch` y no `@supabase/supabase-js`:** el middleware corre en Edge, donde el cliente pesa y arrastra el `fetch` parcheado de Next, que **cachea las respuestas GET y devolvería el permiso congelado para siempre**. Ese bug ya costó siete diagnósticos equivocados en este proyecto. Con `fetch` directo y `cache: 'no-store'` el problema no existe.
 
-- [ ] **Step 1: Implementar**
+- [x] **Step 1: Implementar**
 
 Crear `lib/acceso.js`:
 
@@ -353,7 +371,7 @@ export async function puedeEntrar(usuarioId) {
 }
 ```
 
-- [ ] **Step 2: Comprobar que compila**
+- [x] **Step 2: Comprobar que compila**
 
 ```bash
 npm run build
@@ -361,7 +379,7 @@ npm run build
 
 Esperado: compila. (No lleva prueba unitaria propia: es una llamada de red. Se verifica de punta a punta en la Tarea 6.)
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add lib/acceso.js
@@ -380,7 +398,7 @@ git push origin main
 - Consumes: `verificarSesion`, `secretoSesion` (T1); `esRutaPublica` (T2); `puedeEntrar` (T3).
 - Produces: nada que otras tareas consuman.
 
-- [ ] **Step 1: Implementar**
+- [x] **Step 1: Implementar**
 
 Crear `middleware.js` en la raíz del repo:
 
@@ -478,13 +496,13 @@ export const config = {
 }
 ```
 
-- [ ] **Step 2: Comprobar que compila y que las pruebas siguen bien**
+- [x] **Step 2: Comprobar que compila y que las pruebas siguen bien**
 
 ```bash
 npm run build && npm test
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add middleware.js
@@ -492,7 +510,7 @@ git commit -m "feat(auth): puerta del inbox en modo observacion (no rechaza nada
 git push origin main
 ```
 
-- [ ] **Step 4: Poner las variables en Vercel (proyecto `wa-inbox-v2`, Production)**
+- [x] **Step 4: Poner las variables en Vercel (proyecto `wa-inbox-v2`, Production)**
 
 | Variable | Valor |
 |---|---|
@@ -501,7 +519,7 @@ git push origin main
 
 `SESSION_SECRET` hay que copiarlo a mano desde el panel del CRM: Vercel no deja leer variables cifradas por CLI. **Si los dos valores no coinciden, nadie podrá entrar cuando se active el bloqueo** — y en modo observación no se nota, porque no rechaza nada.
 
-- [ ] **Step 5: Comprobar que NADA cambió**
+- [x] **Step 5: Comprobar que NADA cambió**
 
 ```bash
 curl -sS -o /dev/null -w "inbox   -> %{http_code}\n" https://inbox.apps.mandarinaec.com/api/plantillas?canal=1024077200794372
