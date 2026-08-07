@@ -8,23 +8,54 @@
 
 **Tech Stack:** Next.js App Router, runtime Edge para el middleware, Node 24, Supabase (schemas `inbox` y `crm`), Vercel. Pruebas con `node --test`, sin dependencias nuevas.
 
-## Estado al 7-ago-2026, 16:30
+## Estado al 7-ago-2026
 
-**Tareas 1 a 4 HECHAS y en producción.** Falta la 5 (redirección del host viejo)
-y la 6 (ventana de observación y encendido).
+**Tareas 1 a 5 HECHAS y en producción. Solo falta la Tarea 6**, que es dejar
+correr la ventana de observación y encender el bloqueo.
 
-- Producción corriendo `fdf70f4` con **`AUTH_MODO=observar`**: anota y **no rechaza
-  a nadie**. Verificado: `/api/lista` y `/inbox` siguen dando 200 sin cookie,
-  `/api/webhook` sigue en 403 y `/api/pago-dlocal` en 405, iguales que antes.
-- Mensajería intacta tras el despliegue: 8 entrantes, 9 salientes, **0 fallidos**
-  en 3 h.
+- Producción con **`AUTH_MODO=observar`**: anota y **no rechaza a nadie**.
+- Verificado tras la Tarea 5: las páginas del host viejo dan **307** al dominio
+  nuevo (`/inbox` y la raíz), y las APIs **no se movieron** — `/api/webhook` 403,
+  `/api/pago-dlocal` 405, `/api/plantillas` 200. El 403 es la respuesta propia de
+  la ruta, o sea que Meta sigue llegando al handler.
+- Mensajería intacta: 0 fallidos.
 - `SESSION_SECRET` cargado en `wa-inbox-v2` y en `ind-inbox-v2` (7-ago).
-- ⚠️ **Antes de la Tarea 6 hay que repartir el permiso.** Medido en la base ese
-  día: de 14 personas, **solo 2 tienen `INBOX_MANDARINA`** (Andrés Admin y Xavier
-  Castillo). Rodrigo, Camila y todas las vendedoras lo tienen vacío. Si se
-  enciende `bloquear` así, el equipo entero queda fuera del inbox.
-- ⚠️ El push de `fdf70f4` **no disparó build solo** — hubo que correr
-  `vercel --prod --yes`. Vale la pena mirar antes de suponer que un push desplegó.
+
+### Lo que hay que hacer ANTES de encender el bloqueo
+
+1. ⚠️ **Repartir el permiso.** Medido en la base el 7-ago: de 14 personas, **solo
+   2 tienen `INBOX_MANDARINA`** (Andrés Admin y Xavier Castillo). Rodrigo, Camila
+   y todas las vendedoras lo tienen vacío. Si se enciende `bloquear` así, el
+   equipo entero queda fuera del inbox.
+2. Avisar que usen `https://inbox.apps.mandarinaec.com` y que **vuelvan a aceptar
+   los avisos push**, que se re-piden por ser otro origen.
+
+### Dos cosas medidas que contradicen lo que decía este plan
+
+- **El interruptor `AUTH_MODO` NO surte efecto sin redesplegar** (ver la nota en
+  la regla 3 y el comentario largo en `middleware.js`).
+- **Un push a `main` no siempre dispara build en Vercel.** Le pasó a `fdf70f4`:
+  hubo que correr `vercel --prod --yes`. Confirmar con `vercel ls <proy> --prod`
+  en vez de suponer que el push desplegó.
+
+### Método útil que salió de acá
+
+Para decidir si una pausa en los mensajes es una caída o es tráfico flojo, **no
+mires el último mensaje: mide los huecos normales primero.**
+
+```sql
+with huecos as (
+  select recibido_en - lag(recibido_en) over (order by recibido_en) as hueco
+  from inbox.webhook_eventos
+  where cuenta='MANDI' and recibido_en > now() - interval '24 hours')
+select count(*) filter (where hueco > interval '10 minutes') as huecos_10min,
+       max(hueco) as el_mas_largo from huecos;
+```
+
+El 7-ago dio **27 huecos de más de 10 minutos en 24 h, el más largo de 4 h 18**.
+O sea que en MANDI un silencio de 10 minutos es lo normal y no prueba nada, ni
+para bien ni para mal. Sin ese número, el hueco que quedó justo después del
+despliegue parecía una caída.
 
 ## Global Constraints
 
@@ -539,7 +570,7 @@ Va **antes** de bloquear, a propósito. La cookie tiene `Domain=.apps.mandarinae
 
 **Interfaces:** ninguna.
 
-- [ ] **Step 1: Agregar la redirección**
+- [x] **Step 1: Agregar la redirección**
 
 En `next.config.js`, dentro del objeto de configuración:
 
@@ -560,13 +591,13 @@ En `next.config.js`, dentro del objeto de configuración:
 
 `permanent: false` a propósito: un 308 se queda cacheado en los navegadores y revertirlo es un dolor.
 
-- [ ] **Step 2: Comprobar que compila**
+- [x] **Step 2: Comprobar que compila**
 
 ```bash
 npm run build
 ```
 
-- [ ] **Step 3: Commit y desplegar**
+- [x] **Step 3: Commit y desplegar**
 
 ```bash
 git add next.config.js
@@ -574,7 +605,7 @@ git commit -m "feat(dominio): mandar las paginas del host viejo al nuevo, sin to
 git push origin main
 ```
 
-- [ ] **Step 4: Verificar que las APIs del host viejo NO se redirigieron**
+- [x] **Step 4: Verificar que las APIs del host viejo NO se redirigieron**
 
 ```bash
 curl -sS -o /dev/null -w "webhook viejo   -> %{http_code}\n" https://wa-inbox-v2.vercel.app/api/webhook
@@ -586,7 +617,7 @@ Esperado: los dos primeros **iguales que antes** (403 y 200). El tercero, **307*
 
 ⚠️ Si `/api/webhook` empezó a devolver 307, **revertir de inmediato**: Meta no sigue redirecciones y se estarían perdiendo mensajes.
 
-- [ ] **Step 5: Confirmar que siguen entrando mensajes**
+- [x] **Step 5: Confirmar que siguen entrando mensajes**
 
 ```sql
 select count(*) filter (where direccion='ENTRANTE') as entrantes,
