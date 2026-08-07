@@ -11,6 +11,7 @@ import SocialInbox from '@/components/SocialInbox'
 import Contactos, { PlantillaModal } from '@/components/Contactos'
 import Automatizaciones from '@/components/Automatizaciones'
 import PushToggle from '@/components/PushToggle'
+import AvisoSesion from '@/components/AvisoSesion'
 import { actualizarNoLeidos, notificar } from '@/lib/notif'
 
 // ── Dos ejes de estado ────────────────────────────────────────────
@@ -1100,6 +1101,9 @@ export default function App() {
 
   return (
     <>
+      {/* Va lo primero y fuera de todo layout: es fixed y tiene que verse aunque
+          la pantalla esté en cualquier pestaña o con el cajón móvil abierto. */}
+      <AvisoSesion />
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap');
         *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
