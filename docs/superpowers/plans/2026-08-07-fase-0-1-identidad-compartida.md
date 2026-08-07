@@ -200,27 +200,11 @@ Tarea de configuración, no de código. Es la única que toca DNS.
 - Consumes: `COOKIE_DOMINIO` de la Tarea 1.
 - Produces: los tres dominios respondiendo, y la cookie emitida con `Domain=.apps.mandarinaec.com`.
 
-- [ ] **Step 1: Averiguar dónde se administra el DNS de mandarinaec.com**
+**El DNS de `mandarinaec.com` está en GoDaddy.** Los registros se crean ahí, en Mis productos → `mandarinaec.com` → DNS → Agregar registro.
 
-```bash
-nslookup -type=NS mandarinaec.com
-```
+- [ ] **Step 1: Agregar cada dominio a su proyecto de Vercel (PRIMERO)**
 
-Anotar el proveedor que salga (registrador, Cloudflare, Shopify…). Ahí se agregan los registros del paso 2.
-
-- [ ] **Step 2: Crear los tres registros CNAME**
-
-En el panel de DNS, tres registros nuevos apuntando a Vercel:
-
-| Nombre | Tipo | Valor |
-|---|---|---|
-| `crm.apps` | CNAME | `cname.vercel-dns.com` |
-| `inbox.apps` | CNAME | `cname.vercel-dns.com` |
-| `ind-inbox.apps` | CNAME | `cname.vercel-dns.com` |
-
-**No se toca el registro del apex (`mandarinaec.com`) ni el de `www`:** esos son de la tienda Shopify y deben quedar exactamente como están.
-
-- [ ] **Step 3: Agregar cada dominio a su proyecto de Vercel**
+Va antes que el DNS a propósito: al agregarlo, **Vercel imprime el valor exacto del CNAME que hay que crear**. Ya no siempre es `cname.vercel-dns.com` — según la cuenta puede darte otro host. Usar el que diga Vercel, no el que uno recuerde.
 
 ```bash
 cd C:\Users\RodrigoWork\Desktop\MANDARINACRM
@@ -233,7 +217,31 @@ cd C:\Users\RodrigoWork\Desktop\ind-inbox-next
 vercel domains add ind-inbox.apps.mandarinaec.com ind-inbox-v2
 ```
 
-Nunca `vercel alias set`: un alias fijado no sigue a los despliegues nuevos y el proyecto queda sirviendo una versión vieja.
+Anotar el valor de CNAME que devuelva cada uno. Nunca `vercel alias set`: un alias fijado no sigue a los despliegues nuevos y el proyecto queda sirviendo una versión vieja.
+
+- [ ] **Step 2: Crear los tres registros CNAME en GoDaddy**
+
+En GoDaddy el campo **Nombre** lleva solo la parte de la izquierda, **sin** el dominio (GoDaddy le agrega `.mandarinaec.com` solo):
+
+| Nombre | Tipo | Valor | TTL |
+|---|---|---|---|
+| `crm.apps` | CNAME | el que dio Vercel | 1 hora (el de por defecto) |
+| `inbox.apps` | CNAME | el que dio Vercel | 1 hora |
+| `ind-inbox.apps` | CNAME | el que dio Vercel | 1 hora |
+
+⚠️ **No se toca el registro del apex (`@`) ni el de `www`:** esos apuntan a la tienda Shopify y deben quedar exactamente como están. Si GoDaddy ofrece "reenvío de dominio" o cambiar los servidores de nombres, **no aceptar**: solo se agregan tres registros CNAME.
+
+- [ ] **Step 3: Esperar la propagación y confirmarla**
+
+GoDaddy suele tardar de 5 a 30 minutos.
+
+```bash
+nslookup crm.apps.mandarinaec.com
+nslookup inbox.apps.mandarinaec.com
+nslookup ind-inbox.apps.mandarinaec.com
+```
+
+Esperado: los tres resuelven al host de Vercel. Mientras digan "Non-existent domain", esperar — no seguir al paso 4.
 
 - [ ] **Step 4: Verificar que los tres responden**
 
