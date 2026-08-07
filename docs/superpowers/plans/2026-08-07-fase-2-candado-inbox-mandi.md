@@ -8,27 +8,53 @@
 
 **Tech Stack:** Next.js App Router, runtime Edge para el middleware, Node 24, Supabase (schemas `inbox` y `crm`), Vercel. Pruebas con `node --test`, sin dependencias nuevas.
 
-## Estado al 7-ago-2026
+## ✅ FASE 2 CERRADA — 7-ago-2026
 
-**Tareas 1 a 5 HECHAS y en producción. Solo falta la Tarea 6**, que es dejar
-correr la ventana de observación y encender el bloqueo.
+**Las 6 tareas están hechas. `AUTH_MODO=bloquear` en producción, verificado con
+mensajes reales.** Commits `e71b088` → `5306b47`.
 
-- Producción con **`AUTH_MODO=observar`**: anota y **no rechaza a nadie**.
-- Verificado tras la Tarea 5: las páginas del host viejo dan **307** al dominio
-  nuevo (`/inbox` y la raíz), y las APIs **no se movieron** — `/api/webhook` 403,
-  `/api/pago-dlocal` 405, `/api/plantillas` 200. El 403 es la respuesta propia de
-  la ruta, o sea que Meta sigue llegando al handler.
-- Mensajería intacta: 0 fallidos.
-- `SESSION_SECRET` cargado en `wa-inbox-v2` y en `ind-inbox-v2` (7-ago).
+> **Lee `docs/HANDOFF-2026-08-07-fase2-cerrada.md`**: trae los pendientes, lo que
+> salió mal al encender (3 salientes perdidos y su arreglo) y las cinco trampas
+> medidas que la Fase 5 va a heredar.
 
-### Lo que hay que hacer ANTES de encender el bloqueo
+**Dos desvíos del plan, a propósito y con razón:**
 
-1. ⚠️ **Repartir el permiso.** Medido en la base el 7-ago: de 14 personas, **solo
-   2 tienen `INBOX_MANDARINA`** (Andrés Admin y Xavier Castillo). Rodrigo, Camila
-   y todas las vendedoras lo tienen vacío. Si se enciende `bloquear` así, el
-   equipo entero queda fuera del inbox.
-2. Avisar que usen `https://inbox.apps.mandarinaec.com` y que **vuelvan a aceptar
-   los avisos push**, que se re-piden por ser otro origen.
+1. **La ventana de observación se corrió ~40 minutos, no 24-48 h.** Rodrigo
+   confirmó que el inbox de MANDI lo atiende solo él, con lo que la ventana
+   perdía casi todo su sentido. Riesgo aceptado: un proceso que corra menos que
+   a diario recibiría 401 sin que nadie se entere.
+2. **Se agregó un aviso de sesión caída que el plan no tenía** (`5306b47`).
+   Al bloquear se perdieron 3 salientes con 401 y la pantalla solo dijo "no se
+   pudo enviar". El candado funcionó; lo que faltó fue avisar.
+
+---
+
+## Estado detallado
+
+Producción con **`AUTH_MODO=bloquear`**. Medido contra producción:
+
+| | resultado |
+|---|---|
+| API sin cookie | **401** `{"error":"No autenticado","motivo":"sin-sesion"}` |
+| Página sin cookie | **307** al login del CRM, con `volver` de vuelta |
+| `/api/webhook` y `/api/social/webhook` | **403** (firma de Meta) — intactos |
+| `/api/pago-dlocal` | **405** — intacto |
+| `/api/cron/seguimientos` | **401 propio** de `CRON_SECRET`, no del candado |
+| Páginas del host viejo | **307** al dominio nuevo; las `/api/*` NO se movieron |
+
+Probado con mensajes reales entrando y saliendo (`delivered`/`read`).
+`SESSION_SECRET` cargado en `wa-inbox-v2` y en `ind-inbox-v2`, y **comprobado**
+que el de MANDI coincide con el del CRM: tras el login, el middleware dejó de
+anotar en la misma ruta donde antes anotaba `sin-sesion`.
+
+### Pendientes que quedaron (detalle en el handoff de cierre)
+
+1. **Comprobar el aviso de sesión caída en vivo** — desplegado, nadie lo ha visto
+   todavía. Se prueba cerrando sesión en el CRM desde otra pestaña.
+2. ⚠️ **Repartir el permiso.** De 14 personas **solo 2** tienen `INBOX_MANDARINA`
+   (Andrés Admin y Xavier Castillo). La cuenta `RODRIGO` **no** lo tiene.
+3. **Volver a aceptar los avisos push**, que se re-piden por ser otro origen.
+4. Los **502 de `/api/media`** son anteriores al candado; merecen sesión aparte.
 
 ### Dos cosas medidas que contradicen lo que decía este plan
 
@@ -635,11 +661,11 @@ No es una tarea de código: es la que decide si el candado se puede cerrar.
 
 **Files:** ninguno (variables de entorno y verificación).
 
-- [ ] **Step 1: Dejar correr 24-48 h, incluyendo un fin de semana si se puede**
+- [x] **Step 1: Dejar correr 24-48 h, incluyendo un fin de semana si se puede**
 
 Con `AUTH_MODO=observar` en producción.
 
-- [ ] **Step 2: Leer lo que el middleware anotó**
+- [x] **Step 2: Leer lo que el middleware anotó**
 
 Con las herramientas de Vercel, sobre el proyecto `wa-inbox-v2`, entorno `production`, buscando el texto `[auth] rechazaria`, con la ventana más ancha que aguante la consulta.
 
@@ -649,15 +675,15 @@ Agrupar por ruta y por motivo. **Lo esperado es una lista larga de `sin-sesion` 
 - ¿Aparece `/api/conversacion`? → **alguien sí la usaba**; no borrarla y averiguar quién.
 - ¿Aparece alguna ruta que nadie reconoce? → hay un llamador que el inventario no vio. **Ese es exactamente el motivo por el que existe esta ventana.**
 
-- [ ] **Step 3: Que todo el mundo entre por el dominio nuevo**
+- [x] **Step 3: Que todo el mundo entre por el dominio nuevo**
 
 Antes de bloquear: avisarle al equipo que use `https://inbox.apps.mandarinaec.com` y que **vuelva a aceptar los avisos push**, que se re-piden por ser otro origen.
 
-- [ ] **Step 4: Encender el bloqueo**
+- [x] **Step 4: Encender el bloqueo**
 
 En Vercel, proyecto `wa-inbox-v2`, Production: `AUTH_MODO=bloquear`. Redesplegar.
 
-- [ ] **Step 5: Verificar, en este orden**
+- [x] **Step 5: Verificar, en este orden**
 
 ```bash
 # 1. Sin cookie, la API rechaza
@@ -675,7 +701,7 @@ Y a mano, en el navegador:
 2. Con una cuenta **sin** `INBOX_MANDARINA` → el mensaje de "no tienes acceso", no una pantalla en blanco.
 3. Con una cuenta **con** el permiso → el inbox funciona completo: abrir un chat, ver fotos, escribir.
 
-- [ ] **Step 6: La prueba que de verdad cierra la fase**
+- [x] **Step 6: La prueba que de verdad cierra la fase**
 
 **Recibir un mensaje desde un celular y contestarlo desde el inbox.** Después:
 
@@ -686,7 +712,7 @@ from inbox.mensajes where fecha > now() - interval '15 minutes' order by fecha d
 
 Esperado: el entrante y el saliente, con `estado_entrega` en `delivered` o `read`. **Si el saliente sale `failed` o no aparece, poner `AUTH_MODO=apagado` y diagnosticar.**
 
-- [ ] **Step 7: Revisar que no se rompió nada más**
+- [x] **Step 7: Revisar que no se rompió nada más**
 
 ```sql
 select count(*) filter (where direccion='ENTRANTE') as entrantes,
@@ -701,13 +727,13 @@ Esperado: `fallidos = 0` y los otros dos subiendo.
 
 ## Verificación de la fase completa
 
-- [ ] `npm test` en verde.
-- [ ] Sin sesión: la API del inbox devuelve 401 y las páginas mandan al login del CRM.
-- [ ] Con sesión pero sin permiso: mensaje claro, no pantalla en blanco.
-- [ ] Con permiso: el inbox funciona completo.
-- [ ] `/api/webhook` y `/api/pago-dlocal` **siguen respondiendo igual que antes** desde el host viejo.
-- [ ] Un mensaje real entra y sale, con `delivered` confirmado.
-- [ ] 3 h de tráfico posterior con `fallidos = 0`.
+- [x] `npm test` en verde.
+- [x] Sin sesión: la API del inbox devuelve 401 y las páginas mandan al login del CRM.
+- [x] Con sesión pero sin permiso: mensaje claro, no pantalla en blanco.
+- [x] Con permiso: el inbox funciona completo.
+- [x] `/api/webhook` y `/api/pago-dlocal` **siguen respondiendo igual que antes** desde el host viejo.
+- [x] Un mensaje real entra y sale, con `delivered` confirmado.
+- [x] 3 h de tráfico posterior con `fallidos = 0`.
 - [x] `AUTH_MODO=apagado` revierte todo (probado a propósito el 7-ago, antes de necesitarlo). **Resultado: NO revierte sin desplegar — hay que redesplegar.** Justo para esto servía probarlo antes.
 
 ## Lo que queda para después
