@@ -77,9 +77,12 @@ export default function MarcoCRM({ titulo, src, tituloIframe, onCerrar, iframeRe
         <span style={{ fontSize:12, fontWeight:800, color:'#e2e8f0', letterSpacing:'.03em' }}>
           {titulo}
         </span>
+        {/* En rojo a pedido de Rodrigo: en gris se le perdía de vista contra la
+            cabecera oscura, y es el único camino de salida de estas dos vistas.
+            Al vivir acá, vale para PEDIDO MANUAL y para VER PEDIDO de una vez. */}
         <button onClick={onCerrar} style={{
-          background:'#111c2a', border:'1px solid #1e2d3d', color:'#94a3b8',
-          borderRadius:6, padding:'4px 10px', fontSize:11, fontWeight:700,
+          background:'rgba(248,113,113,.15)', border:'1px solid rgba(248,113,113,.5)', color:'#f87171',
+          borderRadius:6, padding:'4px 10px', fontSize:11, fontWeight:800,
           cursor:'pointer', fontFamily:'inherit',
         }}>✕ Cerrar</button>
       </div>
