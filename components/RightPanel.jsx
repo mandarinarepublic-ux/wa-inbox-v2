@@ -538,7 +538,11 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
         // se pierde el link. Antes se anexaba al final de la nota única; ahora es
         // su propia nota, así queda fechada y no se mezcla con lo que escribió
         // el vendedor.
-        addNota(activeConv.telefono, `📦 Pedido ${res.pedidoId} · $${res.montoTotal}\n${res.url}`)
+        //
+        // Mismo armador que el camino manual: si al agente le faltara el monto o
+        // el link, la nota decía `$undefined`. Con los tres campos —lo normal—
+        // el texto sale IDÉNTICO al de antes; hay una prueba que lo vigila.
+        addNota(activeConv.telefono, textoNotaPedido(res))
           .then(() => setNotasRefrescar(n => n + 1))
           .catch(() => {})
         setIdVenta(activeConv.telefono, res.pedidoId).catch(() => {})

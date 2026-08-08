@@ -351,10 +351,12 @@ export default function App() {
   // los ejecuta dos veces en modo estricto y el ancho quedaría mal guardado.
   const anchoPrevioRef = useRef(null)
 
-  // Qué panel tiene el formulario abierto. Son DOS y no uno solo porque en el
-  // celular el panel de escritorio sigue MONTADO (lo esconde el CSS): si esto
-  // fuera un booleano suelto, el aviso de "false" que manda un panel al montarse
-  // borraría el "true" del otro y dejaríamos de preguntar.
+  // Qué panel tiene el formulario abierto. Son DOS y no un booleano suelto: el
+  // panel de escritorio se pinta con `{activeConv && …}`, y `activeConv` sale de
+  // un `find` sobre `convs` que se recalcula en CADA sondeo. Si un ciclo deja
+  // fuera el chat activo, ese panel se desmonta y remonta, y su limpieza manda un
+  // "false" mientras el cajón sigue con el formulario abierto. Con un booleano,
+  // ese "false" apagaba el guard y volvíamos a descartar pedidos sin preguntar.
   const manualesRef = useRef({ escritorio: false, cajon: false })
 
   const alPedidoManual = useCallback((donde, abierto) => {
@@ -395,6 +397,16 @@ export default function App() {
     manualesRef.current = { escritorio: false, cajon: false }
     return true
   }, [])
+
+  // La ✕ del cajón móvil (y tocar fuera, que hace lo mismo) cierra el panel
+  // derecho entero y con él el formulario. No es "cambiar de conversación", pero
+  // para quien lo usa es el mismo gesto y se pierde lo mismo: pasa por el mismo
+  // guard. Decisión de Rodrigo — preguntar en un caso y no en el otro se sentía
+  // arbitrario.
+  const cerrarCajonDerecho = useCallback(() => {
+    if (!puedoDejarLaConversacion(null)) return
+    setShowRight(false)
+  }, [puedoDejarLaConversacion])
 
   useEffect(() => {
     try {
@@ -1233,7 +1245,7 @@ export default function App() {
       {showSetup && <SetupModal onClose={() => { setShowSetup(false); load() }} />}
       {showGuide && <GuideModal onClose={() => setShowGuide(false)} />}
       {(showSidebar && active) && <div className="overlay" onClick={() => setShowSidebar(false)} />}
-      {showRight            && <div className="overlay" onClick={() => setShowRight(false)} />}
+      {showRight            && <div className="overlay" onClick={cerrarCajonDerecho} />}
 
       <div style={{ display:'flex', flexDirection:'column', height:'100dvh', overflow:'hidden' }}>
 
@@ -1302,7 +1314,10 @@ export default function App() {
               <div style={{ display:'flex', gap:4 }}>
                 <a href="/dashboard" title="Dashboard" style={{ background:'rgba(16,185,129,.14)', border:'1px solid rgba(16,185,129,.3)', color:'#10b981', borderRadius:8, width:28, height:28, cursor:'pointer', fontSize:13, display:'flex', alignItems:'center', justifyContent:'center', textDecoration:'none' }}>📊</a>
                 <button onClick={() => setShowGuide(true)} style={{ background:'rgba(99,102,241,.12)', border:'1px solid rgba(99,102,241,.2)', color:'#818cf8', borderRadius:8, width:28, height:28, cursor:'pointer', fontSize:12 }}>📖</button>
-                <button onClick={() => setLinea('AUTO')} title="Mensajes de saludo (automatizaciones)" style={{ background:'rgba(245,158,11,.14)', border:'1px solid rgba(245,158,11,.35)', color:'#f59e0b', borderRadius:8, width:28, height:28, cursor:'pointer', fontSize:13 }}>👋</button>
+                {/* Por `cambiarLinea` y no por `setLinea` a pelo: salir de la
+                    pestaña de chats desmonta el panel derecho y tiraría el
+                    PEDIDO MANUAL en silencio. Es el mismo salto, con el guard. */}
+                <button onClick={() => cambiarLinea('AUTO')} title="Mensajes de saludo (automatizaciones)" style={{ background:'rgba(245,158,11,.14)', border:'1px solid rgba(245,158,11,.35)', color:'#f59e0b', borderRadius:8, width:28, height:28, cursor:'pointer', fontSize:13 }}>👋</button>
                 <PushToggle />
                 <button onClick={() => setShowSetup(true)} style={{ background:'rgba(255,255,255,.04)', border:'1px solid #1a2d40', color:'#64748b', borderRadius:8, width:28, height:28, cursor:'pointer', fontSize:12 }}>⚙</button>
               </div>
@@ -1750,7 +1765,7 @@ export default function App() {
         {showRight && (
           <div className="right-col">
             <div style={{ display:'flex', justifyContent:'flex-end', padding:'10px 10px 0' }}>
-              <button onClick={() => setShowRight(false)} style={{ background:'transparent', border:'none', color:'#475569', cursor:'pointer', fontSize:17 }}>✕</button>
+              <button onClick={cerrarCajonDerecho} style={{ background:'transparent', border:'none', color:'#475569', cursor:'pointer', fontSize:17 }}>✕</button>
             </div>
             <RightPanel
               activeConv={activeConv}

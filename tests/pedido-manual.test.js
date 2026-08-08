@@ -181,3 +181,30 @@ test('el aviso no afirma que haya algo escrito', () => {
   assert.ok(/Aceptar =/.test(AVISO_DESCARTAR_PEDIDO))
   assert.ok(/Cancelar =/.test(AVISO_DESCARTAR_PEDIDO))
 })
+
+test('el camino con IA sale IDÉNTICO al texto de antes', () => {
+  // ⚠️ El botón "🤖 Crear con IA" es el que funciona hoy y no se puede alterar.
+  // `textoNotaPedido` también arma SU nota; mientras el agente mande los tres
+  // campos —que es lo normal— el texto tiene que salir igual carácter por
+  // carácter que la plantilla cruda que había antes. Esta prueba es el candado.
+  const plantillaVieja = (res) => `📦 Pedido ${res.pedidoId} · $${res.montoTotal}\n${res.url}`
+  const respuestasDelAgente = [
+    { pedidoId: 'MAN-2026-0412', montoTotal: 78.9,    url: 'https://crm.apps.mandarinaec.com/dashboard/pedido/MAN-2026-0412' },
+    { pedidoId: 'MAN-2026-0413', montoTotal: 120,     url: 'https://crm.apps.mandarinaec.com/dashboard/pedido/MAN-2026-0413' },
+    { pedidoId: 'MAN-2026-0414', montoTotal: '45.00', url: 'https://crm.apps.mandarinaec.com/dashboard/pedido/MAN-2026-0414' },
+    { pedidoId: 9981,            montoTotal: 0,       url: 'https://crm.apps.mandarinaec.com/dashboard/pedido/9981' },
+  ]
+  for (const res of respuestasDelAgente) {
+    assert.strictEqual(textoNotaPedido(res), plantillaVieja(res), `cambió la nota de ${res.pedidoId}`)
+  }
+})
+
+test('el 👋 y la ✕ del cajón también preguntan', () => {
+  // Los dos descartan el formulario sin cambiar de chat: el 👋 salta a
+  // AUTOMATIZACIONES y la ✕ cierra el cajón del celular. Se expresan igual que
+  // cerrar el chat — `destino` en null — para que pasen por el mismo guard.
+  assert.strictEqual(hayQueConfirmarDescarte({ escritorio: true, cajon: false }, '593999989663', null), true)
+  assert.strictEqual(hayQueConfirmarDescarte({ escritorio: false, cajon: true }, '593999989663', null), true)
+  // Y sin el formulario abierto, ninguno de los dos molesta.
+  assert.strictEqual(hayQueConfirmarDescarte(NADA, '593999989663', null), false)
+})
