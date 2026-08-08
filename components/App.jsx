@@ -385,13 +385,42 @@ export default function App() {
   // puede reaccionar a un ref: esto es solo para enganchar y soltar el aviso de
   // `beforeunload` de las navegaciones duras.
   const [hayManualAbierto, setHayManualAbierto] = useState(false)
+
+  // Qué panel está MIRANDO un pedido (VER PEDIDO, solo lectura). Va en un mapa
+  // aparte del de arriba y NO entra en `hayQueConfirmarDescarte` a propósito:
+  // ahí no hay nada escrito que perder, así que preguntar "¿lo descartas?" al
+  // cerrarlo o al cambiar de chat sería molestar de gusto — y un aviso que
+  // molesta de gusto se aprende a ignorar, que es como se pierde el que sí
+  // importa. Lo ÚNICO que comparte con el formulario es el ancho del panel.
+  const veresRef = useRef({ escritorio: false, cajon: false })
+  // Espejo en estado de los DOS mapas: es lo que sube el piso del asa, y ese
+  // piso hace falta con cualquiera de las dos vistas (el CRM se pasa a diseño de
+  // celular por debajo de 768 px internos, mire uno o llene el otro). El aviso
+  // de `beforeunload` NO usa este: ese sigue atado solo al formulario.
+  const [hayAnchoPedido, setHayAnchoPedido] = useState(false)
+
+  const recalcularAncho = useCallback(() => {
+    setHayAnchoPedido(
+      Object.values(manualesRef.current).some(Boolean) ||
+      Object.values(veresRef.current).some(Boolean)
+    )
+  }, [])
+
   const anotarManuales = useCallback((mapa) => {
     manualesRef.current = mapa
     setHayManualAbierto(Object.values(mapa).some(Boolean))
-  }, [])
+    recalcularAncho()
+  }, [recalcularAncho])
 
-  const alPedidoManual = useCallback((donde, abierto) => {
-    anotarManuales({ ...manualesRef.current, [donde]: abierto })
+  const anotarVeres = useCallback((mapa) => {
+    veresRef.current = mapa
+    recalcularAncho()
+  }, [recalcularAncho])
+
+  // El ancho del panel, compartido por las dos vistas del CRM. Se llama DESPUÉS
+  // de anotar el mapa correspondiente, porque para decidir si devolver el ancho
+  // necesita ver el estado ya actualizado.
+  const ajustarAnchoDelCrm = useCallback((abierto) => {
     if (abierto) {
       if (anchoPrevioRef.current === null) anchoPrevioRef.current = rightWidthRef.current
       // El ancho EXACTO del formulario, no "el que había si era mayor": si el
@@ -399,8 +428,10 @@ export default function App() {
       setRightWidth(ANCHO_PEDIDO)
       return
     }
-    // Si el otro panel todavía lo tiene abierto, el ancho se queda como está.
+    // Si otro panel —o la otra vista— todavía tiene algo del CRM abierto, el
+    // ancho se queda como está.
     if (Object.values(manualesRef.current).some(Boolean)) return
+    if (Object.values(veresRef.current).some(Boolean)) return
     if (anchoPrevioRef.current !== null) {
       setRightWidth(anchoPrevioRef.current)
       anchoPrevioRef.current = null
@@ -409,13 +440,27 @@ export default function App() {
     // Sin ancho guardado (lo abrió el otro panel): al menos volver al techo
     // normal, que si no el panel se queda más ancho de lo que el asa permite.
     setRightWidth(w => Math.min(ANCHO_MAX, w))
-  }, [anotarManuales])
+  }, [])
+
+  const alPedidoManual = useCallback((donde, abierto) => {
+    anotarManuales({ ...manualesRef.current, [donde]: abierto })
+    ajustarAnchoDelCrm(abierto)
+  }, [anotarManuales, ajustarAnchoDelCrm])
+
+  // El camino de VER PEDIDO: ensancha igual y no toca `manualesRef`, o sea que
+  // el guard ni se entera. Esa separación es todo el punto.
+  const alVerPedido = useCallback((donde, abierto) => {
+    anotarVeres({ ...veresRef.current, [donde]: abierto })
+    ajustarAnchoDelCrm(abierto)
+  }, [anotarVeres, ajustarAnchoDelCrm])
 
   // Una por instancia, y ESTABLES: `RightPanel` las tiene como dependencia de un
   // efecto, así que una función nueva en cada render lo dispararía a cada rato y
   // le pelearía el ancho al que esté arrastrando el asa.
   const alPedidoManualEscritorio = useCallback((abierto) => alPedidoManual('escritorio', abierto), [alPedidoManual])
   const alPedidoManualCajon      = useCallback((abierto) => alPedidoManual('cajon', abierto), [alPedidoManual])
+  const alVerPedidoEscritorio    = useCallback((abierto) => alVerPedido('escritorio', abierto), [alVerPedido])
+  const alVerPedidoCajon         = useCallback((abierto) => alVerPedido('cajon', abierto), [alVerPedido])
 
   /**
    * ¿Se puede soltar la conversación abierta? Decisión de Rodrigo: el asistente
@@ -467,10 +512,10 @@ export default function App() {
   // los lados), así que el techo sigue siendo el de siempre.
   const limitesRef = useRef({ min: ANCHO_MIN, max: ANCHO_MAX })
   useEffect(() => {
-    limitesRef.current = hayManualAbierto
+    limitesRef.current = hayAnchoPedido
       ? { min: ANCHO_MIN_PEDIDO, max: ANCHO_MAX }
       : { min: ANCHO_MIN,        max: ANCHO_MAX }
-  }, [hayManualAbierto])
+  }, [hayAnchoPedido])
 
   useEffect(() => {
     try {
@@ -1864,6 +1909,7 @@ export default function App() {
                 onUpdateContact={handleUpdateContact}
                 windowOpen={windowOpen}
                 onPedidoManual={alPedidoManualEscritorio}
+                onVerPedido={alVerPedidoEscritorio}
               />
             </div>
           </div>
@@ -1882,6 +1928,7 @@ export default function App() {
               onUpdateContact={handleUpdateContact}
               windowOpen={windowOpen}
               onPedidoManual={alPedidoManualCajon}
+              onVerPedido={alVerPedidoCajon}
             />
           </div>
         )}

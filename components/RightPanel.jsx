@@ -4,6 +4,7 @@ import { Avatar } from '@/components/Components'
 import { fetchRepliesFromSheet, writeReply, reorderReplies, addNota, setIdVenta, fetchProductos } from '@/lib/api-client'
 import Notas from './Notas'
 import PedidoManual from './PedidoManual'
+import VerPedido from './VerPedido'
 import { textoNotaPedido } from '@/lib/pedido-manual'
 import { parseDate } from '@/lib/utils'
 import { moverItem } from '@/lib/orden-lista'
@@ -139,7 +140,7 @@ function BotonesEditor({ botones, onChange }) {
 }
 
 // ── Tarjeta de un pedido del historial (MANDARINACRM) ────────────
-function PedidoCard({ p }) {
+function PedidoCard({ p, onVer }) {
   const est       = String(p.estado || '').toUpperCase()
   const pago      = String(p.estadoPago || '').toUpperCase()
   const entregado = /ENTREG/.test(est)
@@ -167,7 +168,16 @@ function PedidoCard({ p }) {
       <div style={{ display:'flex', alignItems:'center', gap:5, marginTop:5, flexWrap:'wrap' }}>
         <span style={{ fontSize:8.5, fontWeight:800, color:estColor, background:`${estColor}1e`, border:`1px solid ${estColor}44`, borderRadius:5, padding:'1px 6px' }}>{p.estado || '—'}</span>
         <span style={{ fontSize:8.5, fontWeight:800, color: pagado ? '#10b981' : '#f87171', background: pagado ? 'rgba(16,185,129,.12)' : 'rgba(248,113,113,.12)', border:`1px solid ${pagado ? 'rgba(16,185,129,.35)' : 'rgba(248,113,113,.35)'}`, borderRadius:5, padding:'1px 6px' }}>{p.estadoPago || 'PENDIENTE'}</span>
-        {p.url && <a href={p.url} target="_blank" rel="noreferrer" style={{ marginLeft:'auto', fontSize:9, fontWeight:700, color:'#60a5fa', textDecoration:'none' }}>Ver →</a>}
+        {/* "Ver" abre el pedido DENTRO del panel, no en una pestaña nueva: eso
+            te sacaba del chat justo cuando estás atendiendo. Se necesita el
+            número de pedido, que es con lo que se arma la url (ver
+            `urlVerPedido`); sin número no hay a dónde ir y no se pinta. */}
+        {p.id && onVer && (
+          <button onClick={() => onVer(p.id)} title="Ver el pedido acá mismo"
+            style={{ marginLeft:'auto', background:'transparent', border:'none', padding:0, fontSize:9, fontWeight:700, color:'#60a5fa', cursor:'pointer', fontFamily:'inherit' }}>
+            Ver →
+          </button>
+        )}
       </div>
     </div>
   )
@@ -226,7 +236,7 @@ const CATALOGO_LABEL = 'Mandarina'
 // (WhatsApp), así App.jsx sigue igual sin tocar una línea. SOCIAL pasa un subconjunto:
 // nunca 'ventas' (escribiría contactos basura con el sender_id como si fuera teléfono),
 // y en un hilo de COMENTARIO tampoco 'tienda' (es público).
-export default function RightPanel({ activeConv, onQuickReply, onSendText, onSendImage, onSendProducto, contactInfo, onUpdateContact, windowOpen, onPedidoManual, pestanas = ['respuestas', 'ventas', 'tienda'] }) {
+export default function RightPanel({ activeConv, onQuickReply, onSendText, onSendImage, onSendProducto, contactInfo, onUpdateContact, windowOpen, onPedidoManual, onVerPedido, pestanas = ['respuestas', 'ventas', 'tienda'] }) {
   const [tab, setTab]           = useState(pestanas[0] || 'respuestas')
   // El panel NO se desmonta al cambiar de conversación (SOCIAL reutiliza la misma
   // instancia entre chats): si `tab` quedó en una pestaña que la conversación nueva
@@ -294,6 +304,19 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
 
   // ── PEDIDO MANUAL: el formulario del CRM dentro de este panel ──
   const [manualAbierto, setManualAbierto] = useState(false)
+
+  // ── VER PEDIDO: un pedido del CRM, de solo lectura, en este mismo panel ──
+  // Guarda el NÚMERO del pedido que se está mirando (null = ninguno). El número
+  // y no la url: la url se arma sola en `urlVerPedido`, contra el dominio del
+  // CRM donde vale la sesión.
+  //
+  // ⚠️ Es un estado APARTE de `manualAbierto` y avisa por un camino APARTE
+  // (`onVerPedido`, no `onPedidoManual`). Mezclarlos era lo fácil —los dos
+  // ensanchan el panel— y habría metido esta vista en el guard que pregunta
+  // "¿lo descartas?": acá no hay nada escrito que perder, así que preguntar
+  // sería puro ruido cada vez que alguien cierra un pedido que solo estaba
+  // mirando.
+  const [verPedidoId, setVerPedidoId] = useState(null)
 
   // ── Historial de pedidos del cliente (desde MANDARINACRM) ────
   const [historial,   setHistorial]   = useState(null)  // null = cargando
@@ -371,6 +394,22 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
   // desmontaje. Sin ella, la URL conserva el teléfono del cliente anterior y el
   // siguiente pedido sale a nombre equivocado, sin ningún error a la vista.
   useEffect(() => { setManualAbierto(false) }, [activeConv?.telefono])
+
+  // Avisarle al padre cuando se abre o se cierra VER PEDIDO: con eso ensancha el
+  // panel, que es lo ÚNICO que comparte con el formulario. NO toca el guard.
+  useEffect(() => { onVerPedido?.(verPedidoId != null) }, [verPedidoId, onVerPedido])
+
+  // Igual que con el formulario: si el panel se desmonta, el padre tiene que
+  // enterarse o se queda con el panel ancho para siempre.
+  const avisarVerRef = useRef(onVerPedido)
+  useEffect(() => { avisarVerRef.current = onVerPedido }, [onVerPedido])
+  useEffect(() => () => { avisarVerRef.current?.(false) }, [])
+
+  // ☠️ Al cambiar de conversación se cierra, por el mismo motivo que el
+  // formulario: `MarcoCRM` congela su url al MONTAR, y este desmontaje es lo
+  // único que la vuelve a inicializar. Sin esto te quedarías mirando el pedido
+  // del cliente anterior mientras la cabecera dice otro nombre.
+  useEffect(() => { setVerPedidoId(null) }, [activeConv?.telefono])
 
   // Cargar historial de pedidos al cambiar de contacto (una sola vez por teléfono).
   // Solo tiene sentido si la pestaña Ventas está habilitada: en SOCIAL no lo está
@@ -728,7 +767,10 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
             envoltorio no genere caja y el layout quede exactamente igual que
             antes; cuando no hay manual abierto, el bloque se desmonta como
             siempre y no cambia nada. */}
-        {(tabActiva === 'ventas' || manualAbierto) && (
+        {/* VER PEDIDO se cuela en la misma condición: recargar el pedido cada
+            vez que pasas por "Tienda" sería una vuelta al CRM al pepe y
+            perderías dónde ibas leyendo. Cuesta lo mismo dejarlo montado. */}
+        {(tabActiva === 'ventas' || manualAbierto || verPedidoId != null) && (
           <div style={{ display: tabActiva === 'ventas' ? 'contents' : 'none' }}>
             {/* PEDIDO MANUAL: el único camino para crear un pedido */}
             {manualAbierto ? (
@@ -759,6 +801,18 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                   }}
                 />
               </div>
+            ) : verPedidoId != null ? (
+              // Mismo hueco y mismo alto que el formulario. El `key` es lo que
+              // hace que tocar "Ver" en OTRO pedido remonte el componente: sin
+              // él, `MarcoCRM` se queda con la url que congeló al montar y
+              // seguirías viendo el pedido anterior.
+              <div style={{ height:'100%', minHeight:380 }}>
+                <VerPedido
+                  key={verPedidoId}
+                  pedidoId={verPedidoId}
+                  onCerrar={() => setVerPedidoId(null)}
+                />
+              </div>
             ) : (
               <div style={{ padding:'12px 12px 4px' }}>
                 <button onClick={() => setManualAbierto(true)}
@@ -782,11 +836,14 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                       no existe: hoy nunca viene y no se pinta " ·  días" vacío.
                       La guarda se queda por si el CRM algún día lo manda. */}
                   <div style={{ fontSize:11, color:'#94a3b8', marginTop:2 }}>Total ${pedidoRes.montoTotal ?? '—'}{pedidoRes.diasCalculado ? ` · ${pedidoRes.diasCalculado} días` : ''}</div>
-                  {/* El enlace solo si hay a dónde ir: por el camino manual la url
-                      es opcional, y un "Ver pedido" que no lleva a ningún lado es
-                      peor que no mostrarlo. */}
-                  {pedidoRes.url && (
-                    <a href={pedidoRes.url} target="_blank" rel="noreferrer" style={{ display:'inline-block', marginTop:6, padding:'5px 10px', background:'rgba(16,185,129,.15)', border:'1px solid rgba(16,185,129,.35)', color:'#10b981', borderRadius:6, fontSize:11, fontWeight:700, textDecoration:'none' }}>📄 Ver pedido</a>
+                  {/* Abre el pedido recién creado ACÁ MISMO, igual que el "Ver →"
+                      del historial: antes se iba a una pestaña nueva y te sacaba
+                      del chat. Alcanza con el número (la url la arma
+                      `urlVerPedido`), y el número siempre viene — es lo único que
+                      `leerAvisoPedido` exige. */}
+                  {pedidoRes.pedidoId && (
+                    <button onClick={() => setVerPedidoId(pedidoRes.pedidoId)}
+                      style={{ display:'inline-block', marginTop:6, padding:'5px 10px', background:'rgba(16,185,129,.15)', border:'1px solid rgba(16,185,129,.35)', color:'#10b981', borderRadius:6, fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:'inherit' }}>📄 Ver pedido</button>
                   )}
                 </div>
               )}
@@ -830,8 +887,19 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                 justo cuando el pedido se crea. Desmontado en ese momento, la
                 nota 📦 recién hecha podía no aparecer al cerrar el formulario.
                 El aviso "✅ Pedido creado" queda FUERA de este envoltorio: esa
-                confirmación se tiene que ver siempre. */}
-            <div style={{ display: manualAbierto ? 'none' : 'contents' }}>
+                confirmación se tiene que ver siempre.
+
+                Con VER PEDIDO abierto se esconden los mismos dos bloques, y por
+                el mismo motivo de alto: el iframe pide el 100% del panel y todo
+                lo que quede debajo obliga a bajar DOS veces, una dentro del
+                pedido y otra dentro del panel. Lo que NO se esconde con esta
+                vista es la cabecera del contacto (el bloque de más arriba): con
+                el formulario se esconde para ganar alto y para sacar de la vista
+                el ✏️ del alias, que era lo único capaz de recargar el iframe;
+                mirando un pedido no hay nada que recargar —la url se arma con el
+                número, no con el nombre— y saber de quién es el chat que tienes
+                abierto mientras lees su pedido vale más que esos 90 px. */}
+            <div style={{ display: (manualAbierto || verPedidoId != null) ? 'none' : 'contents' }}>
 
             {/* NOTAS DEL VENDEDOR — varias por chat, cada una con su fecha */}
             <div style={{ padding:'10px 12px', borderTop:'1px solid #111c2a', marginTop:8, background:'#0a1019' }}>
@@ -880,7 +948,7 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                       {historial.totalPedidos} pedido{historial.totalPedidos === 1 ? '' : 's'} · <strong style={{ color:'#10b981' }}>${historial.totalGastado.toFixed(2)}</strong> total
                     </div>
                     <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-                      {historial.pedidos.map(p => <PedidoCard key={p.id} p={p} />)}
+                      {historial.pedidos.map(p => <PedidoCard key={p.id} p={p} onVer={setVerPedidoId} />)}
                     </div>
                   </>
                 )}

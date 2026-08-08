@@ -2,7 +2,7 @@
 // Si la conversión falla, la precarga traba el formulario en vez de ayudar.
 import test from 'node:test'
 import assert from 'node:assert'
-import { celularEcuador, urlPedidoManual, leerAvisoPedido, textoNotaPedido, hayQueConfirmarDescarte, AVISO_DESCARTAR_PEDIDO,
+import { celularEcuador, urlPedidoManual, urlVerPedido, leerAvisoPedido, textoNotaPedido, hayQueConfirmarDescarte, AVISO_DESCARTAR_PEDIDO,
   ESCALA_PEDIDO, CORTE_ESCRITORIO_CRM, ANCHO_CONTENIDO_CRM,
   anchoInternoDelFormulario, anchoPanelMinimo, anchoPanelPedido } from '../lib/pedido-manual.js'
 
@@ -39,6 +39,52 @@ test('si el celular no convierte, no se manda el parámetro', () => {
   const url = new URL(urlPedidoManual('12025550143', 'Bob'))
   assert.strictEqual(url.searchParams.get('celular'), null)
   assert.strictEqual(url.searchParams.get('nombre'), 'Bob')
+})
+
+// ── VER PEDIDO: mirar un pedido dentro del panel ─────────────────────────────
+// El "Ver →" del historial abría una pestaña nueva y te sacaba del chat. Ahora
+// se ve en el panel, con el mismo armazón que el PEDIDO MANUAL.
+
+test('la url del pedido lleva embed y va al dominio del CRM', () => {
+  const url = new URL(urlVerPedido('MAN-2026-0412'))
+  assert.strictEqual(url.origin, 'https://crm.apps.mandarinaec.com')
+  assert.strictEqual(url.pathname, '/dashboard/pedido/MAN-2026-0412')
+  assert.strictEqual(url.searchParams.get('embed'), '1')
+})
+
+test('la url se arma en el MISMO dominio que el formulario', () => {
+  // Es lo que hace que el iframe entre autenticado: la cookie `mp_sesion` es de
+  // `.apps.mandarinaec.com`. La `url` que devuelve /api/cliente-pedidos se arma
+  // con `MANDARINACRM_URL`, que puede apuntar al dominio de Vercel — ahí la
+  // cookie NO viaja y el panel mostraría un login en vez del pedido. Por eso no
+  // se usa esa url y se arma de cero con el número.
+  assert.strictEqual(
+    new URL(urlVerPedido('MAN-2026-0412')).origin,
+    new URL(urlPedidoManual('593999989663', 'Ana')).origin
+  )
+})
+
+test('el número de pedido va escapado', () => {
+  // Los ids son limpios hoy, pero el id sale de la base y termina en un `src`:
+  // que no pueda escribir la url es gratis.
+  const url = new URL(urlVerPedido('MAN 2026/0412?x=1'))
+  assert.strictEqual(url.pathname, '/dashboard/pedido/MAN%202026%2F0412%3Fx%3D1')
+  assert.strictEqual(url.searchParams.get('embed'), '1')
+  assert.strictEqual(url.searchParams.get('x'), null, 'el id no puede meter parámetros')
+})
+
+test('sin número de pedido no hay a dónde ir', () => {
+  // Quien llama usa el vacío para no pintar el botón: un "Ver" que abre un
+  // iframe en blanco es peor que no mostrarlo.
+  assert.strictEqual(urlVerPedido(''), '')
+  assert.strictEqual(urlVerPedido('   '), '')
+  assert.strictEqual(urlVerPedido(null), '')
+  assert.strictEqual(urlVerPedido(undefined), '')
+})
+
+test('un id numérico también sirve', () => {
+  // El historial trae `pedido_id` de la base y no siempre es texto.
+  assert.strictEqual(new URL(urlVerPedido(9981)).pathname, '/dashboard/pedido/9981')
 })
 
 test('acepta el aviso del CRM', () => {
