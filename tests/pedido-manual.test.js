@@ -2,7 +2,7 @@
 // Si la conversión falla, la precarga traba el formulario en vez de ayudar.
 import test from 'node:test'
 import assert from 'node:assert'
-import { celularEcuador, urlPedidoManual, leerAvisoPedido } from '../lib/pedido-manual.js'
+import { celularEcuador, urlPedidoManual, leerAvisoPedido, textoNotaPedido } from '../lib/pedido-manual.js'
 
 test('convierte el formato de WhatsApp al del CRM', () => {
   assert.strictEqual(celularEcuador('593999989663'), '0999989663')
@@ -70,6 +70,54 @@ test('RECHAZA un aviso sin número de pedido', () => {
     origin: 'https://crm.apps.mandarinaec.com',
     data: { tipo: 'pedido-creado', montoTotal: 5 },
   }), null)
+})
+
+// ── La nota que queda escrita ────────────────────────────────────────────────
+// La nota es registro PERMANENTE y no se puede editar desde el inbox. Como
+// `leerAvisoPedido` solo exige `pedidoId`, un aviso al que le falte el monto o
+// el link NO puede dejar la palabra `undefined` escrita para siempre.
+
+// Atajo: arma el aviso como lo haría el navegador de verdad, pasando por el
+// mismo `leerAvisoPedido` que usa el componente. Así la prueba demuestra el
+// camino completo y no una forma inventada a mano.
+const avisoDelCrm = (data) => leerAvisoPedido({
+  origin: 'https://crm.apps.mandarinaec.com',
+  data: { tipo: 'pedido-creado', ...data },
+})
+
+test('la nota completa lleva el monto y el link', () => {
+  assert.strictEqual(
+    textoNotaPedido(avisoDelCrm({ pedidoId: 'MAN-AND-1', montoTotal: 42.5, url: 'https://crm/p/1' })),
+    '📦 Pedido MAN-AND-1 · $42.5\nhttps://crm/p/1'
+  )
+})
+
+test('sin montoTotal NO escribe $undefined', () => {
+  const nota = textoNotaPedido(avisoDelCrm({ pedidoId: 'MAN-AND-2', url: 'https://crm/p/2' }))
+  assert.ok(!nota.includes('undefined'), `la nota trae undefined: ${nota}`)
+  assert.strictEqual(nota, '📦 Pedido MAN-AND-2 · sin monto\nhttps://crm/p/2')
+})
+
+test('sin url NO agrega una línea con undefined', () => {
+  const nota = textoNotaPedido(avisoDelCrm({ pedidoId: 'MAN-AND-3', montoTotal: 18 }))
+  assert.ok(!nota.includes('undefined'), `la nota trae undefined: ${nota}`)
+  assert.strictEqual(nota, '📦 Pedido MAN-AND-3 · $18')
+  assert.strictEqual(nota.split('\n').length, 1, 'no debe quedar una segunda línea vacía')
+})
+
+test('sin monto NI url la nota igual sirve', () => {
+  const nota = textoNotaPedido(avisoDelCrm({ pedidoId: 'MAN-AND-4' }))
+  assert.ok(!nota.includes('undefined'), `la nota trae undefined: ${nota}`)
+  assert.strictEqual(nota, '📦 Pedido MAN-AND-4 · sin monto')
+})
+
+test('un monto de 0 es un monto, no un vacío', () => {
+  // Ojo con `||`: un pedido de $0 (cortesía, cambio) tiene monto y hay que
+  // escribirlo, no reemplazarlo por "sin monto".
+  assert.strictEqual(
+    textoNotaPedido(avisoDelCrm({ pedidoId: 'MAN-AND-5', montoTotal: 0 })),
+    '📦 Pedido MAN-AND-5 · $0'
+  )
 })
 
 test('no lanza con basura', () => {

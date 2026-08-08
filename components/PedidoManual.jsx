@@ -14,8 +14,17 @@ export default function PedidoManual({ telefono, nombre, onCreado, onCerrar }) {
   const alCrear = useRef(onCreado)
   useEffect(() => { alCrear.current = onCreado }, [onCreado])
 
+  const iframeRef = useRef(null)
+
   useEffect(() => {
     function alMensaje(e) {
+      // Solo el iframe de ESTE componente. En el celular el panel de escritorio
+      // sigue MONTADO (solo lo esconde el CSS), así que puede haber dos paneles
+      // con el formulario abierto a la vez: sin esta comprobación, un solo aviso
+      // del CRM lo escucharían los dos y la nota y la marca de venta se harían
+      // por duplicado. De paso endurece la validación de `leerAvisoPedido`: ya no
+      // alcanza con venir del CRM, tiene que venir de NUESTRO iframe.
+      if (!iframeRef.current || e.source !== iframeRef.current.contentWindow) return
       const aviso = leerAvisoPedido(e)
       if (aviso) alCrear.current?.(aviso)
     }
@@ -40,6 +49,7 @@ export default function PedidoManual({ telefono, nombre, onCreado, onCerrar }) {
         }}>✕ Cerrar</button>
       </div>
       <iframe
+        ref={iframeRef}
         src={urlPedidoManual(telefono, nombre)}
         title="Nuevo pedido"
         style={{ flex:1, width:'100%', border:'none', background:'#0a0f1a', minHeight:0 }}

@@ -4,6 +4,7 @@ import { Avatar } from '@/components/Components'
 import { fetchRepliesFromSheet, writeReply, reorderReplies, addNota, setIdVenta, fetchProductos } from '@/lib/api-client'
 import Notas from './Notas'
 import PedidoManual from './PedidoManual'
+import { textoNotaPedido } from '@/lib/pedido-manual'
 import { parseDate } from '@/lib/utils'
 import { moverItem } from '@/lib/orden-lista'
 
@@ -728,12 +729,18 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                   onCerrar={() => setManualAbierto(false)}
                   onCreado={(aviso) => {
                     // Exactamente lo mismo que hace el botón con IA: la nota
-                    // fechada con el link, y la marca de venta.
-                    addNota(activeConv.telefono, `📦 Pedido ${aviso.pedidoId} · $${aviso.montoTotal}\n${aviso.url}`)
+                    // fechada con el link, y la marca de venta. El texto lo arma
+                    // `textoNotaPedido` porque el monto y el link son opcionales
+                    // y la nota no se puede editar después (ver lib/pedido-manual).
+                    addNota(activeConv.telefono, textoNotaPedido(aviso))
                       .then(() => setNotasRefrescar(n => n + 1))
                       .catch(() => {})
                     setIdVenta(activeConv.telefono, aviso.pedidoId).catch(() => {})
                     setPedidoRes({ ok: true, pedidoId: aviso.pedidoId, montoTotal: aviso.montoTotal, url: aviso.url })
+                    // Cerrar el formulario: el aviso "✅ Pedido creado" se pinta
+                    // DEBAJO del iframe de 70vh y, si no, hay que bajar para
+                    // verlo — parecería que apretaste y no pasó nada.
+                    setManualAbierto(false)
                   }}
                 />
               </div>
@@ -760,8 +767,14 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                   <div style={{ fontSize:12, fontWeight:800, color:'#10b981' }}>✅ Pedido creado: {pedidoRes.pedidoId}</div>
                   {/* Los días de confección solo los calcula la IA; por el camino
                       manual ese dato no viene y no se pinta " ·  días" vacío. */}
-                  <div style={{ fontSize:11, color:'#94a3b8', marginTop:2 }}>Total ${pedidoRes.montoTotal}{pedidoRes.diasCalculado ? ` · ${pedidoRes.diasCalculado} días` : ''}</div>
-                  <a href={pedidoRes.url} target="_blank" rel="noreferrer" style={{ display:'inline-block', marginTop:6, padding:'5px 10px', background:'rgba(16,185,129,.15)', border:'1px solid rgba(16,185,129,.35)', color:'#10b981', borderRadius:6, fontSize:11, fontWeight:700, textDecoration:'none' }}>📄 Ver pedido</a>
+                  <div style={{ fontSize:11, color:'#94a3b8', marginTop:2 }}>Total ${pedidoRes.montoTotal ?? '—'}{pedidoRes.diasCalculado ? ` · ${pedidoRes.diasCalculado} días` : ''}</div>
+                  {/* El enlace solo si hay a dónde ir: por el camino manual la url
+                      es opcional, y un "Ver pedido" que no lleva a ningún lado es
+                      peor que no mostrarlo. Con IA siempre viene, así que ahí no
+                      cambia nada. */}
+                  {pedidoRes.url && (
+                    <a href={pedidoRes.url} target="_blank" rel="noreferrer" style={{ display:'inline-block', marginTop:6, padding:'5px 10px', background:'rgba(16,185,129,.15)', border:'1px solid rgba(16,185,129,.35)', color:'#10b981', borderRadius:6, fontSize:11, fontWeight:700, textDecoration:'none' }}>📄 Ver pedido</a>
+                  )}
                 </div>
               )}
 
