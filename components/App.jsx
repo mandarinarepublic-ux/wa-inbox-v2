@@ -339,6 +339,30 @@ export default function App() {
 
   // ── Panel derecho redimensionable ─────────────────────────────
   useEffect(() => { rightWidthRef.current = rightWidth }, [rightWidth])
+
+  // El asistente del CRM son 4 pasos pensados para pantalla completa; en 340px
+  // no se puede llenar. Se ensancha al abrirlo y se devuelve el ancho guardado
+  // al cerrar. Es el punto más flojo del diseño y está aceptado a sabiendas.
+  //
+  // El ancho anterior va en una REF, no en estado, a propósito: hay que leerlo y
+  // escribirlo dentro del mismo callback, y meter un `setRightWidth` dentro del
+  // actualizador de un `useState` es un efecto secundario en un updater — React
+  // los ejecuta dos veces en modo estricto y el ancho quedaría mal guardado.
+  const anchoPrevioRef = useRef(null)
+
+  const alAbrirPedidoManual = useCallback((abierto) => {
+    if (abierto) {
+      if (anchoPrevioRef.current === null) anchoPrevioRef.current = rightWidthRef.current
+      const ancho = Math.min(720, Math.round(window.innerWidth * 0.55))
+      setRightWidth(Math.max(rightWidthRef.current, ancho))
+      return
+    }
+    if (anchoPrevioRef.current !== null) {
+      setRightWidth(anchoPrevioRef.current)
+      anchoPrevioRef.current = null
+    }
+  }, [])
+
   useEffect(() => {
     try {
       const v = parseInt(localStorage.getItem('mandi_right_width') || '', 10)
@@ -1676,6 +1700,7 @@ export default function App() {
                 onSendImage={handleSendAIImage} onSendProducto={handleSendProducto}
                 onUpdateContact={handleUpdateContact}
                 windowOpen={windowOpen}
+                onPedidoManual={alAbrirPedidoManual}
               />
             </div>
           </div>
@@ -1693,6 +1718,7 @@ export default function App() {
               onSendImage={handleSendAIImage} onSendProducto={handleSendProducto}
               onUpdateContact={handleUpdateContact}
               windowOpen={windowOpen}
+              onPedidoManual={alAbrirPedidoManual}
             />
           </div>
         )}

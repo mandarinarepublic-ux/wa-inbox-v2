@@ -3,6 +3,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Avatar } from '@/components/Components'
 import { fetchRepliesFromSheet, writeReply, reorderReplies, addNota, setIdVenta, fetchProductos } from '@/lib/api-client'
 import Notas from './Notas'
+import PedidoManual from './PedidoManual'
 import { parseDate } from '@/lib/utils'
 import { moverItem } from '@/lib/orden-lista'
 
@@ -224,7 +225,7 @@ const CATALOGO_LABEL = 'Mandarina'
 // (WhatsApp), así App.jsx sigue igual sin tocar una línea. SOCIAL pasa un subconjunto:
 // nunca 'ventas' (escribiría contactos basura con el sender_id como si fuera teléfono),
 // y en un hilo de COMENTARIO tampoco 'tienda' (es público).
-export default function RightPanel({ activeConv, onQuickReply, onSendText, onSendImage, onSendProducto, contactInfo, onUpdateContact, windowOpen, pestanas = ['respuestas', 'ventas', 'tienda'] }) {
+export default function RightPanel({ activeConv, onQuickReply, onSendText, onSendImage, onSendProducto, contactInfo, onUpdateContact, windowOpen, onPedidoManual, pestanas = ['respuestas', 'ventas', 'tienda'] }) {
   const [tab, setTab]           = useState(pestanas[0] || 'respuestas')
   // El panel NO se desmonta al cambiar de conversación (SOCIAL reutiliza la misma
   // instancia entre chats): si `tab` quedó en una pestaña que la conversación nueva
@@ -289,6 +290,9 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
   const [pedidoLoading, setPedidoLoading] = useState(false)
   const [pedidoRes,     setPedidoRes]     = useState(null)
 
+  // ── PEDIDO MANUAL: el formulario del CRM dentro de este panel ──
+  const [manualAbierto, setManualAbierto] = useState(false)
+
   // ── Historial de pedidos del cliente (desde MANDARINACRM) ────
   const [historial,   setHistorial]   = useState(null)  // null = cargando
   const [histError,   setHistError]   = useState(false)
@@ -342,6 +346,14 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
   useEffect(() => {
     if (activeConv) setPedidoRes(null)
   }, [activeConv?.telefono])
+
+  // Avisarle al padre cuando se abre o se cierra el PEDIDO MANUAL, para que
+  // ensanche el panel: el asistente del CRM no entra en 340px.
+  useEffect(() => { onPedidoManual?.(manualAbierto) }, [manualAbierto, onPedidoManual])
+
+  // Al cambiar de conversación se cierra: dejarlo abierto mostraría el formulario
+  // precargado con el cliente ANTERIOR, que es la peor forma de equivocarse.
+  useEffect(() => { setManualAbierto(false) }, [activeConv?.telefono])
 
   // Cargar historial de pedidos al cambiar de contacto (una sola vez por teléfono).
   // Solo tiene sentido si la pestaña Ventas está habilitada: en SOCIAL no lo está
@@ -707,17 +719,48 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
         {/* ═══════════ VENTAS: CREAR PEDIDO + NOTAS + HISTORIAL ═══════════ */}
         {tabActiva === 'ventas' && (
           <>
-            {/* CREAR PEDIDO */}
-            <div style={{ padding:'12px 12px 4px' }}>
-              <button onClick={crearPedido} disabled={pedidoLoading}
-                style={{ width:'100%', padding:'9px', background: pedidoLoading?'#111c2a':'linear-gradient(135deg,#10b981,#059669)', border:'1px solid rgba(16,185,129,.4)', color:'#fff', borderRadius:8, fontSize:12, fontWeight:800, cursor: pedidoLoading?'default':'pointer', fontFamily:'inherit', letterSpacing:'.03em' }}>
-                {pedidoLoading ? '⏳ Leyendo conversación y creando…' : '🧾 CREAR PEDIDO'}
-              </button>
+            {/* PEDIDO MANUAL (principal) + CON IA (el de siempre) */}
+            {manualAbierto ? (
+              <div style={{ height:'70vh', minHeight:380 }}>
+                <PedidoManual
+                  telefono={activeConv.telefono}
+                  nombre={contactName}
+                  onCerrar={() => setManualAbierto(false)}
+                  onCreado={(aviso) => {
+                    // Exactamente lo mismo que hace el botón con IA: la nota
+                    // fechada con el link, y la marca de venta.
+                    addNota(activeConv.telefono, `📦 Pedido ${aviso.pedidoId} · $${aviso.montoTotal}\n${aviso.url}`)
+                      .then(() => setNotasRefrescar(n => n + 1))
+                      .catch(() => {})
+                    setIdVenta(activeConv.telefono, aviso.pedidoId).catch(() => {})
+                    setPedidoRes({ ok: true, pedidoId: aviso.pedidoId, montoTotal: aviso.montoTotal, url: aviso.url })
+                  }}
+                />
+              </div>
+            ) : (
+              <div style={{ padding:'12px 12px 4px' }}>
+                <button onClick={() => setManualAbierto(true)}
+                  style={{ width:'100%', padding:'9px', background:'linear-gradient(135deg,#10b981,#059669)', border:'1px solid rgba(16,185,129,.4)', color:'#fff', borderRadius:8, fontSize:12, fontWeight:800, cursor:'pointer', fontFamily:'inherit', letterSpacing:'.03em' }}>
+                  🧾 PEDIDO MANUAL
+                </button>
+                <button onClick={crearPedido} disabled={pedidoLoading}
+                  style={{ width:'100%', marginTop:6, padding:'7px', background:'#111c2a', border:'1px solid #1e2d3d', color:'#94a3b8', borderRadius:8, fontSize:11, fontWeight:700, cursor: pedidoLoading?'default':'pointer', fontFamily:'inherit' }}>
+                  {pedidoLoading ? '⏳ Leyendo conversación…' : '🤖 Crear con IA'}
+                </button>
+              </div>
+            )}
 
+            {/* El resultado del pedido va FUERA del ternario a propósito: el
+                aviso "✅ Pedido creado" tiene que verse por los dos caminos,
+                el de la IA y el manual. */}
+            {pedidoRes && (
+            <div style={{ padding:'0 12px 4px' }}>
               {pedidoRes?.ok && (
                 <div style={{ marginTop:8, padding:'9px 10px', background:'rgba(16,185,129,.1)', border:'1px solid rgba(16,185,129,.3)', borderRadius:8 }}>
                   <div style={{ fontSize:12, fontWeight:800, color:'#10b981' }}>✅ Pedido creado: {pedidoRes.pedidoId}</div>
-                  <div style={{ fontSize:11, color:'#94a3b8', marginTop:2 }}>Total ${pedidoRes.montoTotal} · {pedidoRes.diasCalculado} días</div>
+                  {/* Los días de confección solo los calcula la IA; por el camino
+                      manual ese dato no viene y no se pinta " ·  días" vacío. */}
+                  <div style={{ fontSize:11, color:'#94a3b8', marginTop:2 }}>Total ${pedidoRes.montoTotal}{pedidoRes.diasCalculado ? ` · ${pedidoRes.diasCalculado} días` : ''}</div>
                   <a href={pedidoRes.url} target="_blank" rel="noreferrer" style={{ display:'inline-block', marginTop:6, padding:'5px 10px', background:'rgba(16,185,129,.15)', border:'1px solid rgba(16,185,129,.35)', color:'#10b981', borderRadius:6, fontSize:11, fontWeight:700, textDecoration:'none' }}>📄 Ver pedido</a>
                 </div>
               )}
@@ -742,6 +785,7 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                 </div>
               )}
             </div>
+            )}
 
             {/* NOTAS DEL VENDEDOR — varias por chat, cada una con su fecha */}
             <div style={{ padding:'10px 12px', borderTop:'1px solid #111c2a', marginTop:8, background:'#0a1019' }}>
