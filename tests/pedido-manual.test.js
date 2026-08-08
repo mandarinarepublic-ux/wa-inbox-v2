@@ -2,7 +2,9 @@
 // Si la conversión falla, la precarga traba el formulario en vez de ayudar.
 import test from 'node:test'
 import assert from 'node:assert'
-import { celularEcuador, urlPedidoManual, leerAvisoPedido, textoNotaPedido, hayQueConfirmarDescarte, AVISO_DESCARTAR_PEDIDO } from '../lib/pedido-manual.js'
+import { celularEcuador, urlPedidoManual, leerAvisoPedido, textoNotaPedido, hayQueConfirmarDescarte, AVISO_DESCARTAR_PEDIDO,
+  ESCALA_PEDIDO, CORTE_ESCRITORIO_CRM, ANCHO_CONTENIDO_CRM,
+  anchoInternoDelFormulario, anchoPanelMinimo, anchoPanelPedido } from '../lib/pedido-manual.js'
 
 test('convierte el formato de WhatsApp al del CRM', () => {
   assert.strictEqual(celularEcuador('593999989663'), '0999989663')
@@ -207,4 +209,50 @@ test('el 👋 y la ✕ del cajón también preguntan', () => {
   assert.strictEqual(hayQueConfirmarDescarte({ escritorio: false, cajon: true }, '593999989663', null), true)
   // Y sin el formulario abierto, ninguno de los dos molesta.
   assert.strictEqual(hayQueConfirmarDescarte(NADA, '593999989663', null), false)
+})
+
+// ── El ancho del panel con el formulario abierto ─────────────────────────────
+// El CRM no ve el ancho del panel: ve `ancho ÷ ESCALA`. Y por debajo de 768 px
+// internos se pasa SOLO a su diseño de celular (`md:` de Tailwind), sin avisar y
+// sin que se caiga nada. Estas pruebas son el único aviso que hay.
+
+test('el panel se abre justo al ancho del formulario', () => {
+  assert.strictEqual(anchoPanelPedido(), 560)
+  assert.strictEqual(anchoInternoDelFormulario(560), 800)
+})
+
+test('el ancho interno queda POR ENCIMA del corte de 768', () => {
+  const interno = anchoInternoDelFormulario(anchoPanelPedido())
+  assert.ok(interno > CORTE_ESCRITORIO_CRM, `interno ${interno} <= corte ${CORTE_ESCRITORIO_CRM}`)
+})
+
+test('ni angostando al mínimo con el asa se cruza el corte', () => {
+  // El piso del asa con el manual abierto. Si esto se cruzara, el vendedor
+  // arrastraría un poco y el formulario cambiaría de diseño a mitad del pedido.
+  const interno = anchoInternoDelFormulario(anchoPanelMinimo())
+  assert.ok(interno >= CORTE_ESCRITORIO_CRM, `interno ${interno} < corte ${CORTE_ESCRITORIO_CRM}`)
+  assert.strictEqual(anchoPanelMinimo(), 538)
+})
+
+test('la relación aguanta si alguien cambia la ESCALA', () => {
+  // Este es el punto de derivar el ancho en vez de escribirlo a mano: la perilla
+  // se puede mover y el diseño no se rompe en silencio.
+  for (const escala of [0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 1]) {
+    const minimo = anchoPanelMinimo(escala)
+    const abierto = anchoPanelPedido(escala)
+    assert.ok(anchoInternoDelFormulario(minimo, escala) >= CORTE_ESCRITORIO_CRM,
+      `con escala ${escala} el mínimo ${minimo} deja el interno bajo el corte`)
+    assert.ok(anchoInternoDelFormulario(abierto, escala) >= CORTE_ESCRITORIO_CRM,
+      `con escala ${escala} el ancho de apertura ${abierto} deja el interno bajo el corte`)
+    assert.ok(abierto >= minimo, `con escala ${escala} el ancho de apertura quedó bajo el mínimo`)
+  }
+})
+
+test('casi no queda vacío a los lados', () => {
+  // La queja de Rodrigo: ~2,5 cm de vacío por lado. El formulario ocupa
+  // ANCHO_CONTENIDO_CRM internos, que en pantalla son esos por la escala.
+  const enPantalla = ANCHO_CONTENIDO_CRM * ESCALA_PEDIDO
+  const vacioPorLado = (anchoPanelPedido() - enPantalla) / 2
+  assert.ok(vacioPorLado < 40, `quedan ${vacioPorLado}px de vacío por lado`)
+  assert.ok(vacioPorLado > 0, 'el formulario no puede quedar más ancho que el panel')
 })

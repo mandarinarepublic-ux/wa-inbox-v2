@@ -1,6 +1,6 @@
 'use client'
 import React, { useEffect, useRef, useState } from 'react'
-import { urlPedidoManual, leerAvisoPedido } from '@/lib/pedido-manual'
+import { urlPedidoManual, leerAvisoPedido, ESCALA_PEDIDO } from '@/lib/pedido-manual'
 
 // Cuánto se encoge el formulario del CRM para que entre entero en el panel.
 // Es la única perilla del zoom: subirlo agranda la letra y baja lo que entra,
@@ -9,7 +9,11 @@ import { urlPedidoManual, leerAvisoPedido } from '@/lib/pedido-manual'
 //
 // 0.70 lo pidió Rodrigo el 8-ago tras probarlo: con 0.80 la barra de SIGUIENTE
 // —la que hace avanzar los 4 pasos del asistente— no le quedaba a la vista.
-const ESCALA = 0.70
+//
+// ⚠️ Vive en `lib/pedido-manual.js` y no acá porque el ANCHO del panel se deriva
+// de él: el CRM cambia a diseño de celular por debajo de 768 px internos, y esos
+// internos son `ancho del panel ÷ ESCALA`. Cambiar la escala mueve el ancho solo.
+const ESCALA = ESCALA_PEDIDO
 
 // El formulario de pedidos del CRM, dentro del panel derecho.
 //

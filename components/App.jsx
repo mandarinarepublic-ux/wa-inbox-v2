@@ -13,7 +13,7 @@ import Automatizaciones from '@/components/Automatizaciones'
 import PushToggle from '@/components/PushToggle'
 import AvisoSesion from '@/components/AvisoSesion'
 import { actualizarNoLeidos, notificar } from '@/lib/notif'
-import { hayQueConfirmarDescarte, AVISO_DESCARTAR_PEDIDO } from '@/lib/pedido-manual'
+import { hayQueConfirmarDescarte, AVISO_DESCARTAR_PEDIDO, anchoPanelPedido, anchoPanelMinimo } from '@/lib/pedido-manual'
 
 // ── Ancho del panel derecho: UNA sola fuente ──────────────────────
 // Lo usan el asa de arrastre, la restauración de localStorage y el ensanchado
@@ -21,11 +21,17 @@ import { hayQueConfirmarDescarte, AVISO_DESCARTAR_PEDIDO } from '@/lib/pedido-ma
 // máximo del asa (antes 680, a mano) era MENOR que el ancho al que se abría el
 // formulario (antes 720, a mano), el primer arrastre devolvía el panel de un
 // salto hacia atrás. Eso es lo que se sentía como que el asa "se queda
-// aplastada". Con el formulario abierto el techo sube, porque el asistente del
-// CRM necesita sitio, y el asa respeta EXACTAMENTE ese mismo número.
+// aplastada".
 const ANCHO_MIN = 280
 const ANCHO_MAX = 680
-const ANCHO_MAX_PEDIDO = 900
+
+// Con el formulario abierto el panel mide lo que mide el formulario, ni más ni
+// menos: si sobra, el vacío se reparte a los lados y el panel le roba pantalla
+// al chat para nada. Y el PISO sube, porque por debajo de cierto ancho el CRM se
+// pasa solo a su diseño de celular. Los dos números se DERIVAN de `ESCALA_PEDIDO`
+// (ver lib/pedido-manual.js): si alguien toca la escala, se mueven con ella.
+const ANCHO_PEDIDO     = anchoPanelPedido()   // hoy 560 → 800 px internos
+const ANCHO_MIN_PEDIDO = anchoPanelMinimo()   // hoy 538 → 769 px internos, justo sobre el corte
 
 // ── Dos ejes de estado ────────────────────────────────────────────
 // Eje 1 (bandeja): pendiente / atendido / soporte / archivado — casi todo automático.
@@ -384,8 +390,9 @@ export default function App() {
     anotarManuales({ ...manualesRef.current, [donde]: abierto })
     if (abierto) {
       if (anchoPrevioRef.current === null) anchoPrevioRef.current = rightWidthRef.current
-      const ancho = Math.min(ANCHO_MAX_PEDIDO, Math.round(window.innerWidth * 0.55))
-      setRightWidth(Math.max(rightWidthRef.current, ancho))
+      // El ancho EXACTO del formulario, no "el que había si era mayor": si el
+      // panel venía ancho, quedaba vacío a los lados y era justo la queja.
+      setRightWidth(ANCHO_PEDIDO)
       return
     }
     // Si el otro panel todavía lo tiene abierto, el ancho se queda como está.
@@ -446,12 +453,19 @@ export default function App() {
     return () => window.removeEventListener('beforeunload', alSalir)
   }, [hayManualAbierto])
 
-  // El techo del asa, en una ref: el efecto de abajo se suscribe UNA vez (si se
-  // volviera a montar, repetiría la restauración de localStorage y pisaría el
-  // ancho), así que no puede leer el estado — lo lee de acá en cada movimiento.
-  const anchoMaxRef = useRef(ANCHO_MAX)
+  // Los límites del asa, en una ref: el efecto de abajo se suscribe UNA vez (si
+  // se volviera a montar, repetiría la restauración de localStorage y pisaría el
+  // ancho), así que no puede leer el estado — los lee de acá en cada movimiento.
+  //
+  // Con el formulario abierto sube el PISO, no el techo: angostar de más metería
+  // el ancho interno por debajo de 768 y el CRM se pasaría a su diseño de
+  // celular a mitad de un pedido. Ensanchar no rompe nada (solo agrega vacío a
+  // los lados), así que el techo sigue siendo el de siempre.
+  const limitesRef = useRef({ min: ANCHO_MIN, max: ANCHO_MAX })
   useEffect(() => {
-    anchoMaxRef.current = hayManualAbierto ? ANCHO_MAX_PEDIDO : ANCHO_MAX
+    limitesRef.current = hayManualAbierto
+      ? { min: ANCHO_MIN_PEDIDO, max: ANCHO_MAX }
+      : { min: ANCHO_MIN,        max: ANCHO_MAX }
   }, [hayManualAbierto])
 
   useEffect(() => {
@@ -459,7 +473,7 @@ export default function App() {
       const v = parseInt(localStorage.getItem('mandi_right_width') || '', 10)
       if (v >= ANCHO_MIN && v <= ANCHO_MAX) setRightWidth(v)
     } catch {}
-    const clamp = (w) => Math.min(anchoMaxRef.current, Math.max(ANCHO_MIN, w))
+    const clamp = (w) => Math.min(limitesRef.current.max, Math.max(limitesRef.current.min, w))
     const onMove = (e) => {
       if (!resizingRef.current) return
       const x = e.touches ? e.touches[0].clientX : e.clientX
