@@ -222,11 +222,27 @@ async function procesar(nuevos, origin) {
     await avisarSiCorresponde(m)
       .catch(e => console.error('[/api/webhook] aviso push:', e.message))
 
-    // REABRIR: un cliente que ya estaba ATENDIDO y vuelve a escribir debe regresar
-    // a PENDIENTES (necesita atención). Esto lo hacía Make en la recepción; al pasar
-    // al webhook directo se perdió y los chats se quedaban "atascados" en Atendidos.
-    // No tocamos ventaproceso/venta/soporte/archivado: son estados deliberados.
-    if (estadoDe(m.telefono) === 'atendido') {
+    // REABRIR: si un cliente escribe, su chat vuelve a PENDIENTES. SIEMPRE, venga
+    // del estado que venga.
+    //
+    // Antes esto solo reabría los que estaban en 'atendido', respetando
+    // venta/soporte/archivado por considerarlos "estados deliberados". Rodrigo lo
+    // reportó el 8-ago: marcaba un chat, el cliente volvía a escribir y el chat NO
+    // aparecía en Pendientes. Eso rompe la garantía con la que él trabaja:
+    //
+    //   "si tengo esa bandeja vacía, he contestado a todas las personas"
+    //
+    // Y esa garantía vale más que conservar la etiqueta: una bandeja de Pendientes
+    // en la que un mensaje sin contestar puede NO aparecer no sirve para nada.
+    // Ojo que a Soporte se llega solo —la IA escala ahí cuando el cliente manda una
+    // foto—, así que había chats atascados sin que nadie los hubiera puesto ahí.
+    //
+    // La temperatura (🔥 caliente / 🌤️ tibio / ❄️ frío) es el OTRO eje y no se toca:
+    // un chat puede estar en Pendientes y caliente a la vez, que es justo la idea.
+    //
+    // Se comprueba antes de escribir para no gastar una escritura por cada mensaje
+    // de un chat que ya estaba en Pendientes, que es el caso más común.
+    if (estadoDe(m.telefono) !== 'pendiente') {
       await updateEstado(m.telefono, 'PENDIENTE')
         .catch(e => console.error('[/api/webhook] reabrir a PENDIENTE:', e.message))
     }
