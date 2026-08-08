@@ -13,7 +13,7 @@ import Automatizaciones from '@/components/Automatizaciones'
 import PushToggle from '@/components/PushToggle'
 import AvisoSesion from '@/components/AvisoSesion'
 import { actualizarNoLeidos, notificar } from '@/lib/notif'
-import { hayQueConfirmarDescarte, AVISO_DESCARTAR_PEDIDO, anchoPanelPedido, anchoPanelMinimo } from '@/lib/pedido-manual'
+import { hayQueConfirmarDescarte, AVISO_DESCARTAR_PEDIDO, anchoPanelPedido, anchoPanelMinimo, bytesDeDataUrl, MAX_HOJA_BYTES } from '@/lib/pedido-manual'
 import { decidirArrastre } from '@/lib/arrastre'
 
 // ── Ancho del panel derecho: UNA sola fuente ──────────────────────
@@ -77,6 +77,24 @@ async function toJpeg(file) {
     }
     img.src = url
   })
+}
+
+/**
+ * Un `data:image/jpeg;base64,…` convertido en el mismo tipo de archivo que
+ * entrega el 📎 de adjuntar, para que pueda seguir el camino de fotos de
+ * siempre sin ningún trato especial.
+ *
+ * Nada de `fetch(dataUrl)`, que sería lo corto: acá el dato viene de otro
+ * dominio por `postMessage` y pasarlo por la red —aunque sea "la red" de un
+ * data URL— es darle a un string ajeno un camino que no necesita. `atob` no
+ * sale del proceso, y si el base64 viene roto tira acá, antes de tocar nada.
+ */
+function archivoDesdeDataUrl(dataUrl, nombre) {
+  const s = String(dataUrl)
+  const crudo = atob(s.slice(s.indexOf(',') + 1))
+  const bytes = new Uint8Array(crudo.length)
+  for (let i = 0; i < crudo.length; i++) bytes[i] = crudo.charCodeAt(i)
+  return new File([bytes], nombre, { type: 'image/jpeg' })
 }
 
 // ── EMOJI PICKER ──────────────────────────────────────────────────
@@ -1071,6 +1089,26 @@ export default function App() {
     return res.ok
   }
 
+  // Mandar UN archivo de imagen al chat. Es el camino de fotos del inbox, tal
+  // cual estaba escrito dentro del bucle de handleSendImage: primero la url
+  // permanente en NUESTRO Supabase Storage (para que la burbuja del hilo tenga
+  // qué pintar) y después el envío por media id. Si la subida falla NO se
+  // cancela: el envío real va por media id igual.
+  //
+  // Se sacó a una función para poder REUSARLO desde la hoja del pedido que llega
+  // del CRM (ver `handleEnviarHojaPedido`). Es el mismo código de siempre, ni
+  // una línea distinta: no hay dos formas de mandar una foto en este inbox.
+  const subirYEnviarFoto = async (telefono, nombre, file) => {
+    let url = ''
+    try {
+      const fd = new FormData(); fd.append('file', file)
+      const res  = await fetch('/api/upload-foto', { method:'POST', body:fd })
+      const data = await res.json()
+      if (res.ok && data.url) url = data.url
+    } catch { /* seguimos por media id */ }
+    return sendImageFile(telefono, nombre, file, url)
+  }
+
   const handleFileSelect = async (e) => {
     const files = Array.from(e.target.files)
     if (!files.length) return
@@ -1107,19 +1145,10 @@ export default function App() {
         if (!result.ok) sendErr = result.error || ''
       } else {
         for (let i = 0; i < archivos.length; i++) {
-          // URL permanente para pintar el hilo. La guardamos en NUESTRO Supabase
-          // Storage (vía /api/upload-foto), no en imgbb: imgbb respondía lento/5xx a
-          // los fetch server-side y las fotos que se enviaban por link terminaban en
-          // `failed`. Si falla, NO cancelamos: el envío real va por media id igual.
-          let url = ''
-          try {
-            const fd = new FormData(); fd.append('file', archivos[i].file)
-            const res  = await fetch('/api/upload-foto', { method:'POST', body:fd })
-            const data = await res.json()
-            if (res.ok && data.url) url = data.url
-          } catch { /* seguimos por media id */ }
-
-          const { ok } = await sendImageFile(telefono, nombre, archivos[i].file, url)
+          // La url permanente en NUESTRO Storage + el envío por media id: los dos
+          // pasos viven en `subirYEnviarFoto` (arriba), que es de donde salieron
+          // y donde está explicado el porqué de cada uno.
+          const { ok } = await subirYEnviarFoto(telefono, nombre, archivos[i].file)
           if (!ok) allOk = false
           setImgProgress(i + 1)
           if (i < archivos.length - 1) await new Promise(r => setTimeout(r, 800))
@@ -1246,6 +1275,57 @@ export default function App() {
       const ok = await sendImageUrl(telefono, nombre, p.image)
       if (ok) changeStatus(telefono, estadoDestino)
       setTimeout(load, 4000)
+    })
+  }
+
+  /**
+   * La hoja del pedido, al chat del cliente, como foto.
+   *
+   * ⚠️ DE DÓNDE SALE LA IMAGEN: la dibuja el CRM. La pantalla del pedido abierta
+   * en el panel (un iframe de `crm.apps.mandarinaec.com`) tiene un botón
+   * «📤 Enviar al cliente» que arma la hoja como JPG y la manda por
+   * `postMessage`. El inbox no la genera: la recibe ya hecha. Quién valida ese
+   * mensaje —y por qué hay que validarlo tan en serio, siendo de otro dominio—
+   * está en `leerHojaPedido` (lib/pedido-manual) y en `VerPedido`.
+   *
+   * De acá para abajo NO hay nada nuevo: la hoja se vuelve un archivo igual al
+   * que da el 📎 y sale por `subirYEnviarFoto`, el mismo camino de todas las
+   * fotos del inbox. Va por la fila del chat, así que si hay una respuesta
+   * rápida saliendo, espera su turno en vez de meterse en el medio.
+   *
+   * Devuelve `{ ok, error }` y el panel lo pinta. Nunca `undefined` en silencio:
+   * un fallo mudo deja al vendedor creyendo que el cliente ya tiene la hoja.
+   */
+  const handleEnviarHojaPedido = async (hoja) => {
+    if (!activeConv) return { ok: false, error: 'No hay un chat abierto' }
+    if (!hoja?.imagen)  return { ok: false, error: 'No llegó la imagen de la hoja' }
+    // Fuera de las 24 h WhatsApp no deja mandar una foto y Meta la rechaza sin
+    // decir mucho. Mejor decirlo acá, con el nombre de la causa.
+    if (!windowOpen) return { ok: false, error: 'la ventana de 24 h está cerrada' }
+    const peso = bytesDeDataUrl(hoja.imagen)
+    if (peso > MAX_HOJA_BYTES) {
+      return { ok: false, error: `la hoja pesa ${(peso / 1048576).toFixed(1)} MB y WhatsApp acepta hasta 5 MB` }
+    }
+    // El chat es el que está abierto, que es el mismo del pedido que se está
+    // mirando: `RightPanel` cierra VER PEDIDO al cambiar de teléfono, así que
+    // esta vista no puede sobrevivir a un cambio de cliente.
+    const telefono = activeConv.telefono
+    const nombre   = activeConv.nombre
+    const estadoDestino = estadoAlResponder(currentStatus)
+    return encolar(telefono, async () => {
+      let archivo
+      try {
+        archivo = archivoDesdeDataUrl(hoja.imagen, `pedido-${hoja.pedidoId}.jpg`)
+      } catch {
+        return { ok: false, error: 'la imagen llegó dañada' }
+      }
+      const res = await subirYEnviarFoto(telefono, nombre, archivo)
+      if (res?.ok) {
+        await changeStatus(telefono, estadoDestino)
+        setTimeout(load, 4000)
+        return { ok: true }
+      }
+      return { ok: false, error: res?.error || 'WhatsApp no aceptó la foto' }
     })
   }
 
@@ -1910,6 +1990,7 @@ export default function App() {
                 windowOpen={windowOpen}
                 onPedidoManual={alPedidoManualEscritorio}
                 onVerPedido={alVerPedidoEscritorio}
+                onEnviarHojaPedido={handleEnviarHojaPedido}
               />
             </div>
           </div>
@@ -1929,6 +2010,7 @@ export default function App() {
               windowOpen={windowOpen}
               onPedidoManual={alPedidoManualCajon}
               onVerPedido={alVerPedidoCajon}
+              onEnviarHojaPedido={handleEnviarHojaPedido}
             />
           </div>
         )}

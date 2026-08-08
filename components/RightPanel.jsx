@@ -236,7 +236,7 @@ const CATALOGO_LABEL = 'Mandarina'
 // (WhatsApp), así App.jsx sigue igual sin tocar una línea. SOCIAL pasa un subconjunto:
 // nunca 'ventas' (escribiría contactos basura con el sender_id como si fuera teléfono),
 // y en un hilo de COMENTARIO tampoco 'tienda' (es público).
-export default function RightPanel({ activeConv, onQuickReply, onSendText, onSendImage, onSendProducto, contactInfo, onUpdateContact, windowOpen, onPedidoManual, onVerPedido, pestanas = ['respuestas', 'ventas', 'tienda'] }) {
+export default function RightPanel({ activeConv, onQuickReply, onSendText, onSendImage, onSendProducto, contactInfo, onUpdateContact, windowOpen, onPedidoManual, onVerPedido, onEnviarHojaPedido, pestanas = ['respuestas', 'ventas', 'tienda'] }) {
   const [tab, setTab]           = useState(pestanas[0] || 'respuestas')
   // El panel NO se desmonta al cambiar de conversación (SOCIAL reutiliza la misma
   // instancia entre chats): si `tab` quedó en una pestaña que la conversación nueva
@@ -811,6 +811,10 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                   key={verPedidoId}
                   pedidoId={verPedidoId}
                   onCerrar={() => setVerPedidoId(null)}
+                  /* La hoja del pedido, hecha foto por el CRM, sale al chat
+                     abierto. El envío es el de siempre (el mismo de las fotos
+                     del 📎 y de la Tienda): acá solo se pasa el camino. */
+                  onEnviarHoja={onEnviarHojaPedido}
                 />
               </div>
             ) : (
@@ -906,7 +910,10 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
               <p style={{ fontSize:10, color:'#f59e0b', fontWeight:700, letterSpacing:'.08em', margin:'0 0 6px' }}>
                 📝 NOTAS
               </p>
-              <Notas telefono={activeConv.telefono} refrescar={notasRefrescar} />
+              {/* El "📄 Ver pedido" de una nota abre el pedido acá mismo, por
+                  el MISMO camino que el "Ver →" del historial: antes era un
+                  enlace y te sacaba del inbox a otra pestaña. */}
+              <Notas telefono={activeConv.telefono} refrescar={notasRefrescar} onVerPedido={setVerPedidoId} />
             </div>
 
             {/* HISTORIAL DE PEDIDOS */}

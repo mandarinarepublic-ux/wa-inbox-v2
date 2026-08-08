@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { fetchNotas, addNota, editNota, deleteNota } from '@/lib/api-client'
+import { pedidoIdDeNota } from '@/lib/pedido-manual'
 
 /**
  * Notas internas del chat: varias, cada una con su fecha, en acordeón.
@@ -13,6 +14,10 @@ import { fetchNotas, addNota, editNota, deleteNota } from '@/lib/api-client'
  *
  * `refrescar` es un contador: el botón CREAR PEDIDO guarda el link del pedido
  * como una nota y lo incrementa para que la lista se actualice sin recargar.
+ *
+ * `onVerPedido(numero)` abre ese pedido DENTRO del panel. Lo baja `RightPanel`
+ * (este componente se renderiza adentro suyo) y es el MISMO camino del "Ver →"
+ * del historial: acá no se arma ninguna vista nueva.
  */
 
 const AMBAR = '#f59e0b'
@@ -23,7 +28,7 @@ const sTextarea = {
   fontFamily: 'inherit', whiteSpace: 'pre-wrap', minHeight: 56,
 }
 
-export default function Notas({ telefono, refrescar = 0 }) {
+export default function Notas({ telefono, refrescar = 0, onVerPedido }) {
   const [notas, setNotas] = useState([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState('')
@@ -170,13 +175,25 @@ export default function Notas({ telefono, refrescar = 0 }) {
                       </>
                     ) : (
                       <>
-                        {/* El link al pedido del CRM: el botón CREAR PEDIDO deja
-                            la URL dentro de una nota y así queda clickeable. */}
+                        {/* El pedido del CRM: el botón PEDIDO MANUAL deja la
+                            nota con su número y su link.
+
+                            Era un <a target="_blank"> y ABRÍA UNA PESTAÑA NUEVA:
+                            te sacaba del inbox justo cuando estabas atendiendo.
+                            Ahora abre el pedido DENTRO del panel, exactamente
+                            por donde lo abre el "Ver →" del historial
+                            (`onVerPedido` → `VerPedido`).
+
+                            Se le pasa el NÚMERO, nunca la url que trae escrita
+                            la nota: esa la armó el CRM el día del pedido y puede
+                            apuntar al dominio de Vercel, donde la cookie de
+                            sesión no viaja y se vería un login. Ver el ⚠️ de
+                            `pedidoIdDeNota`. */}
                         {(() => {
-                          const u = (String(nota.texto).match(/https?:\/\/\S+\/dashboard\/pedido\/\S+/) || [])[0]
-                          return u ? (
-                            <a href={u} target="_blank" rel="noreferrer"
-                              style={{ display: 'inline-block', marginBottom: 5, padding: '3px 8px', background: 'rgba(16,185,129,.15)', border: '1px solid rgba(16,185,129,.35)', color: '#10b981', borderRadius: 6, fontSize: 10, fontWeight: 700, textDecoration: 'none' }}>📄 Ver pedido</a>
+                          const id = pedidoIdDeNota(nota.texto)
+                          return id && onVerPedido ? (
+                            <button onClick={() => onVerPedido(id)} title="Ver el pedido acá mismo"
+                              style={{ display: 'inline-block', marginBottom: 5, padding: '3px 8px', background: 'rgba(16,185,129,.15)', border: '1px solid rgba(16,185,129,.35)', color: '#10b981', borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>📄 Ver pedido</button>
                           ) : null
                         })()}
                         <div style={{ fontSize: 11, color: '#e2e8f0', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{nota.texto}</div>

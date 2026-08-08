@@ -4,7 +4,8 @@ import test from 'node:test'
 import assert from 'node:assert'
 import { celularEcuador, urlPedidoManual, urlVerPedido, leerAvisoPedido, textoNotaPedido, hayQueConfirmarDescarte, AVISO_DESCARTAR_PEDIDO,
   ESCALA_PEDIDO, CORTE_ESCRITORIO_CRM, ANCHO_CONTENIDO_CRM,
-  anchoInternoDelFormulario, anchoPanelMinimo, anchoPanelPedido } from '../lib/pedido-manual.js'
+  anchoInternoDelFormulario, anchoPanelMinimo, anchoPanelPedido,
+  pedidoIdDeNota, leerHojaPedido, bytesDeDataUrl, MAX_HOJA_BYTES } from '../lib/pedido-manual.js'
 
 test('convierte el formato de WhatsApp al del CRM', () => {
   assert.strictEqual(celularEcuador('593999989663'), '0999989663')
@@ -173,6 +174,129 @@ test('no lanza con basura', () => {
   assert.strictEqual(leerAvisoPedido({ origin: 'https://crm.apps.mandarinaec.com', data: null }), null)
   assert.strictEqual(leerAvisoPedido({}), null)
   assert.strictEqual(leerAvisoPedido(null), null)
+})
+
+// ── El botón "Ver pedido" de una NOTA ────────────────────────────────────────
+// La nota deja el link del pedido y el inbox lo pintaba como <a target="_blank">:
+// abría una pestaña nueva y te sacaba del inbox. Ahora se abre dentro del panel,
+// igual que el "Ver →" del historial — y para eso hace falta el NÚMERO, no la
+// url que trae la nota.
+
+test('saca el número de pedido de la url de la nota', () => {
+  const nota = textoNotaPedido(avisoDelCrm({
+    pedidoId: 'MAN-2026-0412', montoTotal: 78.9,
+    url: 'https://crm.apps.mandarinaec.com/dashboard/pedido/MAN-2026-0412',
+  }))
+  assert.strictEqual(pedidoIdDeNota(nota), 'MAN-2026-0412')
+})
+
+test('el número gana aunque la nota traiga la url del dominio VIEJO', () => {
+  // Este es el motivo entero de sacar el número: las notas guardadas tienen el
+  // link que armó el CRM con MANDARINACRM_URL, que puede ser el de Vercel. Ahí
+  // la cookie no viaja y el panel mostraría un login. Con el número, la url se
+  // arma de cero contra el dominio bueno.
+  const nota = '📦 Pedido MAN-2026-0500 · $12\nhttps://mandarina-pro-sales.vercel.app/dashboard/pedido/MAN-2026-0500'
+  assert.strictEqual(pedidoIdDeNota(nota), 'MAN-2026-0500')
+  assert.strictEqual(
+    new URL(urlVerPedido(pedidoIdDeNota(nota))).origin,
+    'https://crm.apps.mandarinaec.com'
+  )
+})
+
+test('sin url, el número sale de la cabecera 📦', () => {
+  // `textoNotaPedido` deja la nota en una sola línea si el CRM no mandó link:
+  // ahí antes no había botón, y el número igual está.
+  assert.strictEqual(pedidoIdDeNota(textoNotaPedido(avisoDelCrm({ pedidoId: 'MAN-AND-4' }))), 'MAN-AND-4')
+  assert.strictEqual(pedidoIdDeNota('📦 Pedido 9981 · $0'), '9981')
+})
+
+test('el número escapado en la url vuelve a su forma original', () => {
+  assert.strictEqual(pedidoIdDeNota('mira https://crm.apps.mandarinaec.com/dashboard/pedido/MAN%202026'), 'MAN 2026')
+})
+
+test('una nota común no inventa un pedido', () => {
+  // Sin esto, cualquier nota pintaría un botón que abre un iframe en blanco.
+  assert.strictEqual(pedidoIdDeNota('Falta que envíe la foto del pago'), '')
+  assert.strictEqual(pedidoIdDeNota('https://mandarinaec.com/products/algo'), '')
+  assert.strictEqual(pedidoIdDeNota(''), '')
+  assert.strictEqual(pedidoIdDeNota(null), '')
+  assert.strictEqual(pedidoIdDeNota(undefined), '')
+})
+
+// ── La hoja del pedido que el CRM manda como foto ────────────────────────────
+// El botón «📤 Enviar al cliente» vive DENTRO de la pantalla del pedido (en el
+// iframe del CRM): dibuja la hoja como JPG y la manda por postMessage. Acá se
+// valida ese mensaje, que cruza de un dominio a otro.
+
+const JPG = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ=='
+
+const hojaDelCrm = (data) => leerHojaPedido({
+  origin: 'https://crm.apps.mandarinaec.com',
+  data: { tipo: 'hoja-pedido', ...data },
+})
+
+test('acepta la hoja que manda el CRM', () => {
+  assert.deepStrictEqual(
+    hojaDelCrm({ pedidoId: 'MAN-2026-0412', imagen: JPG }),
+    { pedidoId: 'MAN-2026-0412', imagen: JPG }
+  )
+})
+
+test('RECHAZA una hoja de otro origen', () => {
+  // Lo esencial: `window` recibe `message` de cualquiera. Sin este filtro, una
+  // página abierta en otra pestaña podría hacernos mandarle su foto a un cliente
+  // por nuestro WhatsApp.
+  assert.strictEqual(leerHojaPedido({
+    origin: 'https://evil.com',
+    data: { tipo: 'hoja-pedido', pedidoId: 'MAN-1', imagen: JPG },
+  }), null)
+  // Ni siquiera un subdominio parecido.
+  assert.strictEqual(leerHojaPedido({
+    origin: 'https://crm.apps.mandarinaec.com.evil.com',
+    data: { tipo: 'hoja-pedido', pedidoId: 'MAN-1', imagen: JPG },
+  }), null)
+})
+
+test('RECHAZA lo que no sea un JPG en base64', () => {
+  // Un `https://…` sería el inbox descargando lo que otro le diga y
+  // reenviándoselo a un cliente; un svg es código disfrazado de imagen.
+  assert.strictEqual(hojaDelCrm({ pedidoId: 'M1', imagen: 'https://evil.com/foto.jpg' }), null)
+  assert.strictEqual(hojaDelCrm({ pedidoId: 'M1', imagen: 'data:image/svg+xml;base64,PHN2Zz4=' }), null)
+  assert.strictEqual(hojaDelCrm({ pedidoId: 'M1', imagen: 'data:text/html;base64,PGI+' }), null)
+  assert.strictEqual(hojaDelCrm({ pedidoId: 'M1', imagen: 'data:image/jpeg;base64,no válido!' }), null)
+  assert.strictEqual(hojaDelCrm({ pedidoId: 'M1', imagen: '' }), null)
+  assert.strictEqual(hojaDelCrm({ pedidoId: 'M1' }), null)
+  assert.strictEqual(hojaDelCrm({ pedidoId: 'M1', imagen: { toString: () => JPG } }), null)
+})
+
+test('RECHAZA otro tipo de mensaje y uno sin pedido', () => {
+  assert.strictEqual(hojaDelCrm({ pedidoId: 'M1', imagen: JPG, tipo: 'otra-cosa' }), null)
+  assert.strictEqual(hojaDelCrm({ imagen: JPG }), null)
+  // El aviso de "pedido creado" NO es una hoja, y una hoja NO es un pedido nuevo:
+  // los dos caminos comparten el iframe y no se pueden confundir.
+  assert.strictEqual(hojaDelCrm({ pedidoId: 'M1', imagen: JPG, tipo: 'pedido-creado' }), null)
+  assert.strictEqual(leerAvisoPedido({
+    origin: 'https://crm.apps.mandarinaec.com',
+    data: { tipo: 'hoja-pedido', pedidoId: 'M1', imagen: JPG },
+  }), null)
+})
+
+test('la hoja tampoco lanza con basura', () => {
+  assert.strictEqual(leerHojaPedido({ origin: 'https://crm.apps.mandarinaec.com', data: 'hola' }), null)
+  assert.strictEqual(leerHojaPedido({ origin: 'https://crm.apps.mandarinaec.com', data: null }), null)
+  assert.strictEqual(leerHojaPedido({}), null)
+  assert.strictEqual(leerHojaPedido(null), null)
+})
+
+test('el peso del data URL sale sin decodificarlo', () => {
+  // Es para avisar ANTES de mandar: "pesa 7,2 MB y WhatsApp acepta 5" es mucho
+  // más útil que un "no se pudo enviar" que llega de Meta después.
+  const bytes = (n) => bytesDeDataUrl('data:image/jpeg;base64,' + Buffer.from('x'.repeat(n)).toString('base64'))
+  for (const n of [1, 2, 3, 100, 4096]) assert.strictEqual(bytes(n), n, `falló con ${n} bytes`)
+  assert.strictEqual(bytesDeDataUrl(''), 0)
+  assert.strictEqual(bytesDeDataUrl(null), 0)
+  assert.strictEqual(bytesDeDataUrl('sin coma'), 0)
+  assert.strictEqual(MAX_HOJA_BYTES, 5 * 1024 * 1024)
 })
 
 // ── ¿Preguntar antes de cambiar de chat? ─────────────────────────────────────
