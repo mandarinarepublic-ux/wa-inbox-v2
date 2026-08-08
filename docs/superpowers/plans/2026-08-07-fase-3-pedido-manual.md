@@ -166,14 +166,18 @@ export function esOrigenInbox(origen) {
 En `lib/volver.js`, reemplazar el bloque de las líneas 12-18 por:
 
 ```js
-import { HOSTS_PERMITIDOS } from '@/lib/origenes'
+// ⚠️ Import RELATIVO, no `@/lib/origenes`. El alias `@/` lo define jsconfig.json
+// y **solo lo entiende el bundler de Next**: `node --test` carga este archivo
+// directo y con el alias falla con ERR_MODULE_NOT_FOUND, tumbando la suite. Que
+// nunca haya dado problemas es porque hasta hoy ni volver.js ni sesion.js
+// importaban nada. Regla: un `lib/` que tenga prueba unitaria se importa entre
+// sí con ruta relativa.
+import { HOSTS_PERMITIDOS } from './origenes.js'
 
 const DESTINO_POR_DEFECTO = '/dashboard'
 ```
 
 El resto del archivo **no se toca**: `HOSTS_PERMITIDOS.has(u.hostname)` en la línea 33 sigue igual.
-
-> Ojo con el import: `tests/volver.test.js` importa el módulo por ruta relativa. Si `@/lib/origenes` no resuelve al correr `node --test`, usar `'./origenes.js'` — es el mismo directorio.
 
 - [ ] **Step 5: Correr TODAS las pruebas**
 
@@ -496,7 +500,9 @@ Crear `lib/aviso-padre.js`:
 // haya enmarcado. Y tampoco puede venir de un parámetro de la URL, porque
 // entonces lo elige quien arma el enlace. Se saca del `document.referrer`, que
 // lo pone el navegador, y se valida contra la lista blanca de lib/origenes.js.
-import { esOrigenInbox } from '@/lib/origenes'
+// ⚠️ Import RELATIVO, no `@/lib/origenes`: el alias solo lo entiende el bundler
+// de Next y `node --test` carga este archivo directo. Ver la nota en volver.js.
+import { esOrigenInbox } from './origenes.js'
 
 /** El origen (protocolo + host) de una URL, o '' si no se puede leer. */
 export function origenDelPadre(referrer) {
@@ -521,7 +527,9 @@ export function avisarPedidoCreado({ pedidoId, montoTotal, url }, ventana = type
 }
 ```
 
-> Igual que en la Tarea 1: si `@/lib/origenes` no resuelve al correr `node --test`, usar `'./origenes.js'`.
+> El archivo se importa **desde la página** con `@/lib/aviso-padre` (eso lo
+> resuelve Next sin problema); lo que tiene que ser relativo es el import de
+> `origenes.js` **dentro** de este archivo, porque `node --test` lo carga directo.
 
 - [ ] **Step 4: Correr y ver que pasa**
 

@@ -5,3 +5,7 @@ node_modules/
 *.log
 
 .vercel
+
+# Espacio de trabajo de los planes (SDD): borradores, informes y revisiones.
+# No es codigo ni documentacion: no tiene por que viajar al repo.
+.superpowers/
