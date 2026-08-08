@@ -728,8 +728,22 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
         )}
 
         {/* ═══════════ VENTAS: CREAR PEDIDO + NOTAS + HISTORIAL ═══════════ */}
-        {tabActiva === 'ventas' && (
-          <>
+        {/* Con el PEDIDO MANUAL abierto este bloque se ESCONDE en vez de
+            desmontarse. Desmontarlo mataba el iframe, y eso encadenaba tres
+            desgracias: (1) tocar "Tienda" para mirar el catálogo —el clic más
+            natural del mundo mientras armas un pedido— tiraba lo escrito sin
+            aviso; (2) `manualAbierto` seguía en true y el padre creía que estaba
+            abierto, así que preguntaba de gusto; y (3) al aceptar esa pregunta se
+            limpiaba `manualesRef` mientras `manualAbierto` seguía true, y al
+            volver a Ventas el formulario se remontaba CON EL GUARD APAGADO: a
+            partir de ahí un pedido lleno se descartaba en silencio.
+            Escondiéndolo, el formulario sobrevive el paseo por las otras
+            pestañas y el estado nunca miente. `display:'contents'` para que el
+            envoltorio no genere caja y el layout quede exactamente igual que
+            antes; cuando no hay manual abierto, el bloque se desmonta como
+            siempre y no cambia nada. */}
+        {(tabActiva === 'ventas' || manualAbierto) && (
+          <div style={{ display: tabActiva === 'ventas' ? 'contents' : 'none' }}>
             {/* PEDIDO MANUAL (principal) + CON IA (el de siempre) */}
             {manualAbierto ? (
               <div style={{ height:'70vh', minHeight:380 }}>
@@ -863,7 +877,7 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                 )}
               </div>
             </div>
-          </>
+          </div>
         )}
 
         {/* ═══════════ TIENDA: CATÁLOGO SHOPIFY ═══════════ */}

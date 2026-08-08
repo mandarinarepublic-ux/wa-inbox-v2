@@ -358,9 +358,18 @@ export default function App() {
   // "false" mientras el cajón sigue con el formulario abierto. Con un booleano,
   // ese "false" apagaba el guard y volvíamos a descartar pedidos sin preguntar.
   const manualesRef = useRef({ escritorio: false, cajon: false })
+  // Espejo en estado del mapa de arriba. El ref es el que manda en el guard
+  // (hay que leerlo dentro del click, sin esperar a un render), pero un efecto no
+  // puede reaccionar a un ref: esto es solo para enganchar y soltar el aviso de
+  // `beforeunload` de las navegaciones duras.
+  const [hayManualAbierto, setHayManualAbierto] = useState(false)
+  const anotarManuales = useCallback((mapa) => {
+    manualesRef.current = mapa
+    setHayManualAbierto(Object.values(mapa).some(Boolean))
+  }, [])
 
   const alPedidoManual = useCallback((donde, abierto) => {
-    manualesRef.current = { ...manualesRef.current, [donde]: abierto }
+    anotarManuales({ ...manualesRef.current, [donde]: abierto })
     if (abierto) {
       if (anchoPrevioRef.current === null) anchoPrevioRef.current = rightWidthRef.current
       const ancho = Math.min(720, Math.round(window.innerWidth * 0.55))
@@ -373,7 +382,7 @@ export default function App() {
       setRightWidth(anchoPrevioRef.current)
       anchoPrevioRef.current = null
     }
-  }, [])
+  }, [anotarManuales])
 
   // Una por instancia, y ESTABLES: `RightPanel` las tiene como dependencia de un
   // efecto, así que una función nueva en cada render lo dispararía a cada rato y
@@ -394,9 +403,9 @@ export default function App() {
     if (!window.confirm(AVISO_DESCARTAR_PEDIDO)) return false
     // Descartado: se limpia acá porque si el panel se DESMONTA (cerrar el chat,
     // cambiar de bandeja o de canal) no queda nadie que avise que se cerró.
-    manualesRef.current = { escritorio: false, cajon: false }
+    anotarManuales({ escritorio: false, cajon: false })
     return true
-  }, [])
+  }, [anotarManuales])
 
   // La ✕ del cajón móvil (y tocar fuera, que hace lo mismo) cierra el panel
   // derecho entero y con él el formulario. No es "cambiar de conversación", pero
@@ -407,6 +416,19 @@ export default function App() {
     if (!puedoDejarLaConversacion(null)) return
     setShowRight(false)
   }, [puedoDejarLaConversacion])
+
+  // Las navegaciones DURAS —el 📊 que es un `<a href="/dashboard">` y el ↻ que
+  // hace `location.reload()`, justo al pie de la lista de chats— se llevan la
+  // página entera, y un `confirm` nuestro no las puede atrapar. El único que
+  // llega a tiempo ahí es el aviso propio del navegador. Se engancha SOLO
+  // mientras haya un formulario abierto: el resto del tiempo no molesta y no le
+  // quita el bfcache a la app.
+  useEffect(() => {
+    if (!hayManualAbierto) return
+    const alSalir = (e) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', alSalir)
+    return () => window.removeEventListener('beforeunload', alSalir)
+  }, [hayManualAbierto])
 
   useEffect(() => {
     try {

@@ -1,5 +1,5 @@
 'use client'
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { urlPedidoManual, leerAvisoPedido } from '@/lib/pedido-manual'
 
 // El formulario de pedidos del CRM, dentro del panel derecho.
@@ -13,6 +13,16 @@ export default function PedidoManual({ telefono, nombre, onCreado, onCerrar }) {
   // volvería a suscribir todo el tiempo y podríamos perder el aviso.
   const alCrear = useRef(onCreado)
   useEffect(() => { alCrear.current = onCreado }, [onCreado])
+
+  // ⚠️ La URL se congela AL ABRIR y no se vuelve a calcular. Si se derivara en
+  // cada render, cualquier cambio de `nombre` reescribiría el `src` y el iframe
+  // navegaría de cero, perdiendo todo lo escrito. Y `nombre` cambia solo: sale
+  // de `contactInfo.alias`, y el lápiz ✏️ que edita el alias está en la cabecera
+  // del panel, a la vista con el formulario abierto — además de que un sondeo
+  // puede traer un alias nuevo. El inicializador perezoso de useState corre una
+  // sola vez; al cerrar y volver a abrir, el componente se monta de nuevo y la
+  // URL se arma otra vez con los datos frescos.
+  const [src] = useState(() => urlPedidoManual(telefono, nombre))
 
   const iframeRef = useRef(null)
 
@@ -48,9 +58,21 @@ export default function PedidoManual({ telefono, nombre, onCreado, onCerrar }) {
           cursor:'pointer', fontFamily:'inherit',
         }}>✕ Cerrar</button>
       </div>
+      {/* Cuál es la señal de que salió bien. Si el CRM guarda el pedido pero su
+          aviso no llega hasta acá, el inbox no deja la nota ni marca la venta y
+          NO hay forma de enterarse desde este lado: lo único que lo delata es
+          que el panel siga abierto. Decirlo de frente es lo más barato que
+          podemos hacer para que no pase de largo. */}
+      <div style={{
+        flexShrink:0, padding:'5px 10px', background:'#0a0f1a',
+        borderBottom:'1px solid #111c2a', fontSize:10, color:'#64748b', lineHeight:1.35,
+      }}>
+        Al guardar, este panel se cierra solo y queda la nota en el chat. Si no se cierra,
+        revisa el pedido en el CRM y avisa.
+      </div>
       <iframe
         ref={iframeRef}
-        src={urlPedidoManual(telefono, nombre)}
+        src={src}
         title="Nuevo pedido"
         style={{ flex:1, width:'100%', border:'none', background:'#0a0f1a', minHeight:0 }}
       />
