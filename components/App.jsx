@@ -812,10 +812,20 @@ export default function App() {
                  alias.includes(q) ||
                  phoneMatch(c.telefono, search)
         })
-  // Pestaña "Ventas" = tiene un PEDIDO CREADO (idVenta) y NO está archivado. La venta
-  // ya NO es un estado de bandeja: se maneja aparte con el pedido. Un contacto con venta
-  // puede a la vez estar en 🔴 Pendiente (si te escribió) y en 💰 Ventas.
-  const esVentaActiva = (tel) => hasVenta(tel) && getStatus(tel) !== 'archivado'
+  // Pestaña "Ventas": entra por DOS caminos, y los dos hacen falta.
+  //
+  //   1. Tiene un PEDIDO CREADO (`idVenta`) — automático, lo pone el pedido.
+  //   2. Está marcado a mano en 💰 Venta en proceso — la etapa del embudo.
+  //
+  // El segundo se había perdido: el rediseño de estados en 2 ejes (18-jul, 6c7fb5a)
+  // lo quitó dando por hecho que "venta = tiene pedido". Pero así se trabaja de
+  // verdad acá: 🔥 Caliente → 💰 Venta en proceso → 🟢 Atendido o ⚫ Archivado
+  // cuando el pedido ya se entregó. Sin el paso del medio no hay dónde poner al
+  // cliente que ya dijo que sí pero cuyo pedido todavía no existe en el CRM.
+  //
+  // Se conservan los dos porque miden cosas distintas: uno es "hay plata
+  // comprometida en el sistema", el otro es "estoy cerrando esto ahora".
+  const esVentaActiva = (tel) => (hasVenta(tel) || getStatus(tel) === 'venta') && getStatus(tel) !== 'archivado'
   // Filtros: bandeja (estado), temperatura (Eje 2), o venta (idVenta). Un solo filtro
   // activo a la vez. Al BUSCAR mostramos TODOS los resultados sin importar el filtro.
   const esTemp = (key) => TEMP_META[key] !== undefined
@@ -1545,6 +1555,7 @@ export default function App() {
                 {[
                   { s:'pendiente', icon:'🔴', label:'Pendiente', shortLabel:'🔴', activeColor:'#f87171' },
                   { s:'atendido',  icon:'🟢', label:'Atendido',  shortLabel:'🟢', activeColor:'#4ade80' },
+                  { s:'venta',     icon:'💰', label:'Venta en proceso', shortLabel:'💰', activeColor:'#10b981' },
                   { s:'soporte',   icon:'🎧', label:'Soporte',   shortLabel:'🎧', activeColor:'#a78bfa' },
                   { s:'archivado', icon:'⚫', label:'Archivar',  shortLabel:'⚫', activeColor:'#94a3b8' },
                 ].map(({ s, icon, label, shortLabel, activeColor }) => (
@@ -1737,7 +1748,13 @@ export default function App() {
                 {/* El aire de arriba y abajo lo pone el propio textarea (ver CAJA_AIRE), no
                     este contenedor: así la zona táctil de 44px es el textarea entero y no
                     queda un borde muerto que al tocarlo no enfoca nada. */}
-                <div style={{ flex:1, background:'#111c2a', border:'1px solid #1e2d3d', borderRadius:13, padding:'0 13px', position:'relative' }}>
+                {/* ⚠️ `minWidth:0` NO es decorativo. Esta caja y el botón de enviar son
+                    hermanos en una fila flex, y un hijo flex trae `min-width:auto`: no se
+                    puede encoger por debajo de su contenido. Con el textarea vacío no se
+                    nota, pero al CITAR un mensaje largo la barra de la cita estiraba esta
+                    caja y empujaba el botón de enviar fuera de la fila, escondiéndolo a la
+                    derecha bajo el panel — o sea que no se podía responder. */}
+                <div style={{ flex:1, minWidth:0, background:'#111c2a', border:'1px solid #1e2d3d', borderRadius:13, padding:'0 13px', position:'relative' }}>
                   {/* Barra de cita: qué mensaje se está respondiendo. Con ✕ para soltarlo. */}
                   {citando && (
                     <div style={{
