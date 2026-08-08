@@ -2,6 +2,12 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { urlPedidoManual, leerAvisoPedido } from '@/lib/pedido-manual'
 
+// Cuánto se encoge el formulario del CRM para que entre entero en el panel.
+// Es la única perilla del zoom: subirlo agranda la letra y baja lo que entra,
+// bajarlo al revés. En 0.80 la barra de SIGUIENTE —la que hace avanzar los 4
+// pasos del asistente— tiene que quedar a la vista sin bajar nada.
+const ESCALA = 0.80
+
 // El formulario de pedidos del CRM, dentro del panel derecho.
 //
 // La sesión viaja sola: la cookie `mp_sesion` es de `.apps.mandarinaec.com` y el
@@ -70,12 +76,30 @@ export default function PedidoManual({ telefono, nombre, onCreado, onCerrar }) {
         Al guardar, este panel se cierra solo y queda la nota en el chat. Si no se cierra,
         revisa el pedido en el CRM y avisa.
       </div>
-      <iframe
-        ref={iframeRef}
-        src={src}
-        title="Nuevo pedido"
-        style={{ flex:1, width:'100%', border:'none', background:'#0a0f1a', minHeight:0 }}
-      />
+      {/* El asistente del CRM está pensado para pantalla completa y en el panel
+          va justo. Se dibuja al ESCALA (80%) para que entre entero.
+
+          Por qué `transform: scale()` y no `zoom`: con `zoom` habría que
+          adivinar cómo resuelve cada motor los porcentajes de un hijo zoomeado
+          —cambió al estandarizarse y no es igual en todos—, y una franja blanca
+          o una barra de más aparecería recién en producción. Acá la cuenta la
+          controlo yo: el iframe se hace 1/ESCALA de grande (125%) y se encoge a
+          ESCALA, así que ocupa exactamente el 100% del hueco, sin franjas ni
+          barras de sobra, y por dentro el CRM cree tener un 25% más de sitio.
+          El `overflow:hidden` del envoltorio se come el redondeo de subpíxel. */}
+      <div style={{ flex:1, minHeight:0, position:'relative', overflow:'hidden', background:'#0a0f1a' }}>
+        <iframe
+          ref={iframeRef}
+          src={src}
+          title="Nuevo pedido"
+          style={{
+            position:'absolute', top:0, left:0,
+            width:`${100 / ESCALA}%`, height:`${100 / ESCALA}%`,
+            transform:`scale(${ESCALA})`, transformOrigin:'top left',
+            border:'none', background:'#0a0f1a',
+          }}
+        />
+      </div>
     </div>
   )
 }

@@ -563,6 +563,15 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
     <div style={{ display:'flex', flexDirection:'column', height:'100%', background:'#07111d', overflow:'hidden' }}>
 
       {/* ── HEADER FIJO: INFO CONTACTO + VENTANA ── */}
+      {/* Se esconde mientras el PEDIDO MANUAL está abierto: con el formulario a
+          la vista, el nombre del cliente y el contador de la ventana no aportan
+          nada y le roban alto al asistente del CRM, que ya va justo. Vuelve solo
+          al cerrarlo.
+          Ojo: es solo el pintado. `contactName` se sigue calculando arriba y es
+          lo que arma la URL del formulario, así que no se rompe nada.
+          De regalo saca de la vista el ✏️ del alias, que era lo único que podía
+          recargar el iframe estando abierto. */}
+      {!manualAbierto && (
       <div style={{ flexShrink:0, padding:'14px 14px 10px', borderBottom:'1px solid #111c2a' }}>
         <div style={{ display:'flex', alignItems:'center', gap:9, marginBottom:8 }}>
           <Avatar name={contactName} phone={activeConv.telefono} size={38} />
@@ -595,6 +604,7 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
           )}
         </div>
       </div>
+      )}
 
       {/* ── BARRA DE PESTAÑAS ── */}
       <div style={{ flexShrink:0, display:'flex', background:'#0a1019', borderBottom:'1px solid #111c2a' }}>
@@ -746,7 +756,12 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
           <div style={{ display: tabActiva === 'ventas' ? 'contents' : 'none' }}>
             {/* PEDIDO MANUAL (principal) + CON IA (el de siempre) */}
             {manualAbierto ? (
-              <div style={{ height:'70vh', minHeight:380 }}>
+              // Todo el alto disponible del panel, no una fracción fija. Con
+              // `70vh` había que bajar DOS veces —dentro del iframe y dentro del
+              // panel— y la barra de SIGUIENTE del CRM, que es la que hace
+              // avanzar los 4 pasos, se quedaba fuera de vista. El `minHeight`
+              // queda de red por si el 100% no resolviera: nunca invisible.
+              <div style={{ height:'100%', minHeight:380 }}>
                 <PedidoManual
                   telefono={activeConv.telefono}
                   nombre={contactName}
@@ -824,6 +839,19 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
             </div>
             )}
 
+            {/* Con el manual abierto, la pestaña Ventas es EL FORMULARIO Y NADA
+                MÁS: notas e historial se esconden. Le robaban alto al iframe y
+                el síntoma concreto era que la barra de SIGUIENTE del CRM —la que
+                hace avanzar los 4 pasos— quedaba fuera de vista.
+                ESCONDER y no desmontar, igual que con las pestañas, y acá con un
+                motivo extra: <Notas/> tiene su propio estado y su contador de
+                refresco, y `onCreado` dispara `addNota` + `setNotasRefrescar`
+                justo cuando el pedido se crea. Desmontado en ese momento, la
+                nota 📦 recién hecha podía no aparecer al cerrar el formulario.
+                El aviso "✅ Pedido creado" queda FUERA de este envoltorio: esa
+                confirmación se tiene que ver siempre. */}
+            <div style={{ display: manualAbierto ? 'none' : 'contents' }}>
+
             {/* NOTAS DEL VENDEDOR — varias por chat, cada una con su fecha */}
             <div style={{ padding:'10px 12px', borderTop:'1px solid #111c2a', marginTop:8, background:'#0a1019' }}>
               <p style={{ fontSize:10, color:'#f59e0b', fontWeight:700, letterSpacing:'.08em', margin:'0 0 6px' }}>
@@ -877,6 +905,8 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                 )}
               </div>
             </div>
+
+            </div>{/* fin del envoltorio que se esconde con el manual abierto */}
           </div>
         )}
 

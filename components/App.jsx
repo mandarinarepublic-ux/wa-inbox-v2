@@ -15,6 +15,18 @@ import AvisoSesion from '@/components/AvisoSesion'
 import { actualizarNoLeidos, notificar } from '@/lib/notif'
 import { hayQueConfirmarDescarte, AVISO_DESCARTAR_PEDIDO } from '@/lib/pedido-manual'
 
+// ── Ancho del panel derecho: UNA sola fuente ──────────────────────
+// Lo usan el asa de arrastre, la restauración de localStorage y el ensanchado
+// automático del PEDIDO MANUAL. Tienen que salir del mismo lado: cuando el
+// máximo del asa (antes 680, a mano) era MENOR que el ancho al que se abría el
+// formulario (antes 720, a mano), el primer arrastre devolvía el panel de un
+// salto hacia atrás. Eso es lo que se sentía como que el asa "se queda
+// aplastada". Con el formulario abierto el techo sube, porque el asistente del
+// CRM necesita sitio, y el asa respeta EXACTAMENTE ese mismo número.
+const ANCHO_MIN = 280
+const ANCHO_MAX = 680
+const ANCHO_MAX_PEDIDO = 900
+
 // ── Dos ejes de estado ────────────────────────────────────────────
 // Eje 1 (bandeja): pendiente / atendido / soporte / archivado — casi todo automático.
 // Eje 2 (temperatura del lead): caliente / tibio / frio — 100% MANUAL, nada la cambia sola.
@@ -372,7 +384,7 @@ export default function App() {
     anotarManuales({ ...manualesRef.current, [donde]: abierto })
     if (abierto) {
       if (anchoPrevioRef.current === null) anchoPrevioRef.current = rightWidthRef.current
-      const ancho = Math.min(720, Math.round(window.innerWidth * 0.55))
+      const ancho = Math.min(ANCHO_MAX_PEDIDO, Math.round(window.innerWidth * 0.55))
       setRightWidth(Math.max(rightWidthRef.current, ancho))
       return
     }
@@ -381,7 +393,11 @@ export default function App() {
     if (anchoPrevioRef.current !== null) {
       setRightWidth(anchoPrevioRef.current)
       anchoPrevioRef.current = null
+      return
     }
+    // Sin ancho guardado (lo abrió el otro panel): al menos volver al techo
+    // normal, que si no el panel se queda más ancho de lo que el asa permite.
+    setRightWidth(w => Math.min(ANCHO_MAX, w))
   }, [anotarManuales])
 
   // Una por instancia, y ESTABLES: `RightPanel` las tiene como dependencia de un
@@ -430,12 +446,20 @@ export default function App() {
     return () => window.removeEventListener('beforeunload', alSalir)
   }, [hayManualAbierto])
 
+  // El techo del asa, en una ref: el efecto de abajo se suscribe UNA vez (si se
+  // volviera a montar, repetiría la restauración de localStorage y pisaría el
+  // ancho), así que no puede leer el estado — lo lee de acá en cada movimiento.
+  const anchoMaxRef = useRef(ANCHO_MAX)
+  useEffect(() => {
+    anchoMaxRef.current = hayManualAbierto ? ANCHO_MAX_PEDIDO : ANCHO_MAX
+  }, [hayManualAbierto])
+
   useEffect(() => {
     try {
       const v = parseInt(localStorage.getItem('mandi_right_width') || '', 10)
-      if (v >= 280 && v <= 680) setRightWidth(v)
+      if (v >= ANCHO_MIN && v <= ANCHO_MAX) setRightWidth(v)
     } catch {}
-    const clamp = (w) => Math.min(680, Math.max(280, w))
+    const clamp = (w) => Math.min(anchoMaxRef.current, Math.max(ANCHO_MIN, w))
     const onMove = (e) => {
       if (!resizingRef.current) return
       const x = e.touches ? e.touches[0].clientX : e.clientX
