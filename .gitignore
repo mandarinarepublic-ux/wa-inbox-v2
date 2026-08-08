@@ -9,3 +9,11 @@ node_modules/
 # Espacio de trabajo de los planes (SDD): borradores, informes y revisiones.
 # No es codigo ni documentacion: no tiene por que viajar al repo.
 .superpowers/
+
+# Capturas de pantalla: suelen traer nombres, telefonos y datos de clientes,
+# y este repo es PUBLICO. Una vez subidas, borrarlas del arbol no las borra del
+# historial. Se ignoran para que un `git add -A` distraido no las publique.
+Captura de pantalla*.png
+Captura de pantalla*.jpg
+Screenshot*.png
+*.screenshot.png
