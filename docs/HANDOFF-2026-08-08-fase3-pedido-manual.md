@@ -146,6 +146,22 @@ ventana de observación solo ~40 minutos porque Rodrigo confirmó que **él es e
 | `/api/hilo` · `/api/media` | 151 · 120 | — |
 | `/manifest.webmanifest` | 13 (alguien lo tiene instalado) | — |
 
+### ☠️ Instrucción directa de Rodrigo, 8-ago
+
+> *"Me tienes que avisar cuando apliquemos el control al inbox de IND para cerrar
+> sesión y loguearme y así no perder conversaciones."*
+
+**No se pone `AUTH_MODO=bloquear` en `ind-inbox-v2` sin avisarle antes y esperar
+su confirmación de que ya cerró sesión y volvió a entrar.**
+
+Viene de lo que pasó en MANDI: se encendió con su navegador todavía sin la sesión
+puesta y se perdieron 3 mensajes salientes con 401 silenciosos. La secuencia
+correcta es: avisar → que entren por `crm.apps.mandarinaec.com` (cerrar sesión y
+volver a entrar, para que la cookie se emita desde ese host) → que confirmen que
+abren el inbox → **recién ahí** bloquear y redesplegar.
+
+En IND pesa más que en MANDI, porque ahí atiende alguien más.
+
 Ahí hay gente trabajando. Antes de encender nada en IND:
 
 1. **Averiguar quién atiende ese inbox** y repartirle `INBOX_INDSTORE`, o el día
