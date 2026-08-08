@@ -287,8 +287,9 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
   // del pedido como nota y lo sube para que la lista se repinte.
   const [notasRefrescar, setNotasRefrescar] = useState(0)
 
-  // ── Crear pedido (botón que lee la conversación y crea el pedido en el CRM) ──
-  const [pedidoLoading, setPedidoLoading] = useState(false)
+  // ── Resultado del último pedido creado ───────────────────────
+  // Lo llena el PEDIDO MANUAL desde su `onCreado` y es lo que pinta el aviso
+  // "✅ Pedido creado" más abajo. Se limpia al cambiar de contacto.
   const [pedidoRes,     setPedidoRes]     = useState(null)
 
   // ── PEDIDO MANUAL: el formulario del CRM dentro de este panel ──
@@ -521,45 +522,11 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
   const sendProductoFoto = (p) => sendProducto(p, 'foto')
   const sendProductoInfo = (p) => sendProducto(p, 'info')
 
-  // Guardar nota del vendedor (col I vía webhook)
-  const crearPedido = async () => {
-    if (pedidoLoading || !activeConv) return
-    // Armamos el transcript desde la conversación que el inbox ya tiene en memoria
-    const transcript = (activeConv.msgs || [])
-      .map(m => String(m.mensaje || '').trim())
-      .filter(Boolean).length
-      ? (activeConv.msgs || [])
-          .filter(m => String(m.mensaje || '').trim())
-          .map(m => `${m.direccion === 'SALIENTE' ? 'VENDEDOR' : 'CLIENTE'}: ${m.mensaje}`)
-          .join('\n')
-      : ''
-    if (!transcript) { setPedidoRes({ ok: false, error: 'La conversación está vacía' }); return }
-    setPedidoLoading(true); setPedidoRes(null)
-    try {
-      const r = await fetch('https://mandi-agent.vercel.app/api/crear-pedido', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: activeConv.telefono, transcript }),
-      })
-      const res = await r.json()
-      setPedidoRes(res)
-      if (res?.ok && res.pedidoId) {
-        // Persiste el pedido como NOTA y marca idVenta → queda en 💰 Ventas y no
-        // se pierde el link. Antes se anexaba al final de la nota única; ahora es
-        // su propia nota, así queda fechada y no se mezcla con lo que escribió
-        // el vendedor.
-        //
-        // Mismo armador que el camino manual: si al agente le faltara el monto o
-        // el link, la nota decía `$undefined`. Con los tres campos —lo normal—
-        // el texto sale IDÉNTICO al de antes; hay una prueba que lo vigila.
-        addNota(activeConv.telefono, textoNotaPedido(res))
-          .then(() => setNotasRefrescar(n => n + 1))
-          .catch(() => {})
-        setIdVenta(activeConv.telefono, res.pedidoId).catch(() => {})
-      }
-    } catch {
-      setPedidoRes({ ok: false, error: 'No se pudo conectar con MANDI' })
-    } finally { setPedidoLoading(false) }
-  }
+  // Acá vivía `crearPedido`, el botón "🤖 Crear con IA": mandaba la conversación
+  // a mandi-agent y el pedido quedaba firmado por el vendedor quemado
+  // `MANDI-WA`, o sea a nombre de nadie. Lo reemplaza el PEDIDO MANUAL, que abre
+  // la pantalla real del CRM y firma con la persona que la usa. Está en el
+  // historial de git si algún día se lo quiere de vuelta.
 
   const contactName = contactInfo?.alias || contactInfo?.nombre || activeConv.nombre
 
@@ -763,7 +730,7 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
             siempre y no cambia nada. */}
         {(tabActiva === 'ventas' || manualAbierto) && (
           <div style={{ display: tabActiva === 'ventas' ? 'contents' : 'none' }}>
-            {/* PEDIDO MANUAL (principal) + CON IA (el de siempre) */}
+            {/* PEDIDO MANUAL: el único camino para crear un pedido */}
             {manualAbierto ? (
               // Todo el alto disponible del panel, no una fracción fija. Con
               // `70vh` había que bajar DOS veces —dentro del iframe y dentro del
@@ -776,10 +743,10 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                   nombre={contactName}
                   onCerrar={() => setManualAbierto(false)}
                   onCreado={(aviso) => {
-                    // Exactamente lo mismo que hace el botón con IA: la nota
-                    // fechada con el link, y la marca de venta. El texto lo arma
-                    // `textoNotaPedido` porque el monto y el link son opcionales
-                    // y la nota no se puede editar después (ver lib/pedido-manual).
+                    // Deja la nota fechada con el link y marca la venta. El texto
+                    // lo arma `textoNotaPedido` porque el monto y el link son
+                    // opcionales y la nota no se puede editar después
+                    // (ver lib/pedido-manual).
                     addNota(activeConv.telefono, textoNotaPedido(aviso))
                       .then(() => setNotasRefrescar(n => n + 1))
                       .catch(() => {})
@@ -798,34 +765,39 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                   style={{ width:'100%', padding:'9px', background:'linear-gradient(135deg,#10b981,#059669)', border:'1px solid rgba(16,185,129,.4)', color:'#fff', borderRadius:8, fontSize:12, fontWeight:800, cursor:'pointer', fontFamily:'inherit', letterSpacing:'.03em' }}>
                   🧾 PEDIDO MANUAL
                 </button>
-                <button onClick={crearPedido} disabled={pedidoLoading}
-                  style={{ width:'100%', marginTop:6, padding:'7px', background:'#111c2a', border:'1px solid #1e2d3d', color:'#94a3b8', borderRadius:8, fontSize:11, fontWeight:700, cursor: pedidoLoading?'default':'pointer', fontFamily:'inherit' }}>
-                  {pedidoLoading ? '⏳ Leyendo conversación…' : '🤖 Crear con IA'}
-                </button>
               </div>
             )}
 
             {/* El resultado del pedido va FUERA del ternario a propósito: el
-                aviso "✅ Pedido creado" tiene que verse por los dos caminos,
-                el de la IA y el manual. */}
+                formulario se cierra solo al crear el pedido (`setManualAbierto(false)`
+                dentro de `onCreado`), así que el aviso "✅ Pedido creado" se
+                pinta acá, en la rama de los botones. Metido adentro del ternario
+                no se vería NUNCA. */}
             {pedidoRes && (
             <div style={{ padding:'0 12px 4px' }}>
               {pedidoRes?.ok && (
                 <div style={{ marginTop:8, padding:'9px 10px', background:'rgba(16,185,129,.1)', border:'1px solid rgba(16,185,129,.3)', borderRadius:8 }}>
                   <div style={{ fontSize:12, fontWeight:800, color:'#10b981' }}>✅ Pedido creado: {pedidoRes.pedidoId}</div>
-                  {/* Los días de confección solo los calcula la IA; por el camino
-                      manual ese dato no viene y no se pinta " ·  días" vacío. */}
+                  {/* `diasCalculado` lo calculaba solo el camino con IA, que ya
+                      no existe: hoy nunca viene y no se pinta " ·  días" vacío.
+                      La guarda se queda por si el CRM algún día lo manda. */}
                   <div style={{ fontSize:11, color:'#94a3b8', marginTop:2 }}>Total ${pedidoRes.montoTotal ?? '—'}{pedidoRes.diasCalculado ? ` · ${pedidoRes.diasCalculado} días` : ''}</div>
                   {/* El enlace solo si hay a dónde ir: por el camino manual la url
                       es opcional, y un "Ver pedido" que no lleva a ningún lado es
-                      peor que no mostrarlo. Con IA siempre viene, así que ahí no
-                      cambia nada. */}
+                      peor que no mostrarlo. */}
                   {pedidoRes.url && (
                     <a href={pedidoRes.url} target="_blank" rel="noreferrer" style={{ display:'inline-block', marginTop:6, padding:'5px 10px', background:'rgba(16,185,129,.15)', border:'1px solid rgba(16,185,129,.35)', color:'#10b981', borderRadius:6, fontSize:11, fontWeight:700, textDecoration:'none' }}>📄 Ver pedido</a>
                   )}
                 </div>
               )}
 
+              {/* Los dos avisos de error de acá abajo eran del camino con IA:
+                  `faltan`/`sugerencia` y el `error` los devolvía el agente. Hoy
+                  nadie pone `pedidoRes` en `ok:false`, así que no se pintan.
+                  Se dejan a propósito: viven DENTRO del mismo envoltorio que el
+                  aviso "✅ Pedido creado" y no vale la pena tocar ese bloque por
+                  un ahorro cosmético. Si el manual algún día reporta un fallo,
+                  la pantalla ya está hecha. */}
               {pedidoRes && !pedidoRes.ok && pedidoRes.faltan && (
                 <div style={{ marginTop:8, padding:'9px 10px', background:'rgba(245,158,11,.08)', border:'1px solid rgba(245,158,11,.3)', borderRadius:8 }}>
                   <div style={{ fontSize:11, fontWeight:800, color:'#f59e0b' }}>⚠️ Faltan datos: {pedidoRes.faltan.join(', ')}</div>

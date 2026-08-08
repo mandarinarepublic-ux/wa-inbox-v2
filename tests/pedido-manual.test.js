@@ -184,11 +184,11 @@ test('el aviso no afirma que haya algo escrito', () => {
   assert.ok(/Cancelar =/.test(AVISO_DESCARTAR_PEDIDO))
 })
 
-test('el camino con IA sale IDÉNTICO al texto de antes', () => {
-  // ⚠️ El botón "🤖 Crear con IA" es el que funciona hoy y no se puede alterar.
-  // `textoNotaPedido` también arma SU nota; mientras el agente mande los tres
-  // campos —que es lo normal— el texto tiene que salir igual carácter por
-  // carácter que la plantilla cruda que había antes. Esta prueba es el candado.
+test('la nota del pedido sale IDÉNTICA al texto de antes', () => {
+  // El botón "🤖 Crear con IA" ya no existe, pero sus notas SÍ están en la base
+  // y el formato tiene que seguir siendo uno solo. Con los tres campos —lo
+  // normal— `textoNotaPedido` tiene que salir igual carácter por carácter que la
+  // plantilla cruda que armaba aquel camino. Esta prueba es el candado.
   const plantillaVieja = (res) => `📦 Pedido ${res.pedidoId} · $${res.montoTotal}\n${res.url}`
   const respuestasDelAgente = [
     { pedidoId: 'MAN-2026-0412', montoTotal: 78.9,    url: 'https://crm.apps.mandarinaec.com/dashboard/pedido/MAN-2026-0412' },

@@ -457,12 +457,11 @@ export default function SocialInbox({ active: isVisible }) {
   const convParaPanel = selectedConv ? {
     telefono: `${selectedConv.canal}:${selectedConv.sender_id}`,
     nombre: selectedConv.nombre,
-    // msgs:[] en un COMENTARIO es inofensivo por DOS razones distintas, no una: el
-    // contador de 24h vive en el header FIJO de RightPanel (fuera de toda pestaña) y
-    // con una lista vacía no encuentra ENTRANTE, así que no pinta el reloj; el
-    // transcript de `crearPedido` (botón CREAR PEDIDO) sí está detrás de la pestaña
-    // 'ventas', que SOCIAL nunca monta (ver `pestanas` más abajo). Si algún día se
-    // habilita 'ventas' en SOCIAL, revisar ese transcript.
+    // msgs:[] en un COMENTARIO es inofensivo: el contador de 24h vive en el header
+    // FIJO de RightPanel (fuera de toda pestaña) y con una lista vacía no encuentra
+    // ENTRANTE, así que no pinta el reloj. Nada más en el panel lee `msgs` para
+    // armar un pedido — el botón "🤖 Crear con IA", que sí leía la conversación
+    // entera, ya no existe; el PEDIDO MANUAL abre el CRM y no depende de `msgs`.
     msgs: selectedConv.tipo === 'COMENTARIO' ? [] : selectedConv.messages.map(m => ({
       direccion: m.from === 'user' ? 'ENTRANTE' : 'SALIENTE',
       timestamp: m.time,
