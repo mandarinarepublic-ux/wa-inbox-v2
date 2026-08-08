@@ -13,6 +13,7 @@ import Automatizaciones from '@/components/Automatizaciones'
 import PushToggle from '@/components/PushToggle'
 import AvisoSesion from '@/components/AvisoSesion'
 import { actualizarNoLeidos, notificar } from '@/lib/notif'
+import { hayQueConfirmarDescarte, AVISO_DESCARTAR_PEDIDO } from '@/lib/pedido-manual'
 
 // ── Dos ejes de estado ────────────────────────────────────────────
 // Eje 1 (bandeja): pendiente / atendido / soporte / archivado — casi todo automático.
@@ -350,17 +351,49 @@ export default function App() {
   // los ejecuta dos veces en modo estricto y el ancho quedaría mal guardado.
   const anchoPrevioRef = useRef(null)
 
-  const alAbrirPedidoManual = useCallback((abierto) => {
+  // Qué panel tiene el formulario abierto. Son DOS y no uno solo porque en el
+  // celular el panel de escritorio sigue MONTADO (lo esconde el CSS): si esto
+  // fuera un booleano suelto, el aviso de "false" que manda un panel al montarse
+  // borraría el "true" del otro y dejaríamos de preguntar.
+  const manualesRef = useRef({ escritorio: false, cajon: false })
+
+  const alPedidoManual = useCallback((donde, abierto) => {
+    manualesRef.current = { ...manualesRef.current, [donde]: abierto }
     if (abierto) {
       if (anchoPrevioRef.current === null) anchoPrevioRef.current = rightWidthRef.current
       const ancho = Math.min(720, Math.round(window.innerWidth * 0.55))
       setRightWidth(Math.max(rightWidthRef.current, ancho))
       return
     }
+    // Si el otro panel todavía lo tiene abierto, el ancho se queda como está.
+    if (Object.values(manualesRef.current).some(Boolean)) return
     if (anchoPrevioRef.current !== null) {
       setRightWidth(anchoPrevioRef.current)
       anchoPrevioRef.current = null
     }
+  }, [])
+
+  // Una por instancia, y ESTABLES: `RightPanel` las tiene como dependencia de un
+  // efecto, así que una función nueva en cada render lo dispararía a cada rato y
+  // le pelearía el ancho al que esté arrastrando el asa.
+  const alPedidoManualEscritorio = useCallback((abierto) => alPedidoManual('escritorio', abierto), [alPedidoManual])
+  const alPedidoManualCajon      = useCallback((abierto) => alPedidoManual('cajon', abierto), [alPedidoManual])
+
+  /**
+   * ¿Se puede soltar la conversación abierta? Decisión de Rodrigo: el asistente
+   * del CRM son 4 pasos y un clic distraído en el chat de al lado no puede
+   * tirarlos sin aviso. Devuelve false = quedarse donde estaba.
+   *
+   * Cuando el pedido se crea bien, `RightPanel` ya cerró el formulario antes de
+   * esto, así que ahí no pregunta nada.
+   */
+  const puedoDejarLaConversacion = useCallback((destino) => {
+    if (!hayQueConfirmarDescarte(manualesRef.current, activeRef.current, destino)) return true
+    if (!window.confirm(AVISO_DESCARTAR_PEDIDO)) return false
+    // Descartado: se limpia acá porque si el panel se DESMONTA (cerrar el chat,
+    // cambiar de bandeja o de canal) no queda nadie que avise que se cerró.
+    manualesRef.current = { escritorio: false, cajon: false }
+    return true
   }, [])
 
   useEffect(() => {
@@ -471,6 +504,9 @@ export default function App() {
   // cliente y pasar a "Pendientes" quedaba en pantalla la conversación anterior, que
   // ya no pertenece a esa bandeja. Se deja el panel del medio en blanco para elegir.
   const cambiarFiltro = (key) => {
+    // Cierra el chat abierto → el PEDIDO MANUAL se perdería igual que al saltar
+    // a otro cliente. Sin el formulario abierto esto no pregunta nada.
+    if (!puedoDejarLaConversacion(null)) return
     setFilter(key)
     setActive(null)
     activeRef.current = null
@@ -484,6 +520,9 @@ export default function App() {
    * por el canal equivocado.
    */
   const cambiarLinea = (id) => {
+    // Salir de la pestaña de chats desmonta el panel derecho entero (`esChat`),
+    // así que el formulario también se pierde acá.
+    if (id !== linea && !puedoDejarLaConversacion(null)) return
     const eraChat = linea === 'MANDI' || linea === 'REPUBLIC'
     const vaAChat = id === 'MANDI' || id === 'REPUBLIC'
     if (vaAChat && eraChat && id !== linea) {
@@ -501,6 +540,9 @@ export default function App() {
   }
 
   const openConv = (telefono) => {
+    // Único paso obligado para cambiar de chat: lo usan la lista, CONTACTOS y el
+    // salto desde un aviso push. Con esto acá, los tres quedan cubiertos.
+    if (!puedoDejarLaConversacion(telefono)) return
     setActive(telefono)
     activeRef.current = telefono
     setShowSidebar(false)
@@ -1700,7 +1742,7 @@ export default function App() {
                 onSendImage={handleSendAIImage} onSendProducto={handleSendProducto}
                 onUpdateContact={handleUpdateContact}
                 windowOpen={windowOpen}
-                onPedidoManual={alAbrirPedidoManual}
+                onPedidoManual={alPedidoManualEscritorio}
               />
             </div>
           </div>
@@ -1718,7 +1760,7 @@ export default function App() {
               onSendImage={handleSendAIImage} onSendProducto={handleSendProducto}
               onUpdateContact={handleUpdateContact}
               windowOpen={windowOpen}
-              onPedidoManual={alAbrirPedidoManual}
+              onPedidoManual={alPedidoManualCajon}
             />
           </div>
         )}

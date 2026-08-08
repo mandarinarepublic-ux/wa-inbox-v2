@@ -348,9 +348,15 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
     if (activeConv) setPedidoRes(null)
   }, [activeConv?.telefono])
 
-  // Avisarle al padre cuando se abre o se cierra el PEDIDO MANUAL, para que
-  // ensanche el panel: el asistente del CRM no entra en 340px.
+  // Avisarle al padre cuando se abre o se cierra el PEDIDO MANUAL: con eso
+  // ensancha el panel y sabe que tiene que preguntar antes de cambiar de chat.
   useEffect(() => { onPedidoManual?.(manualAbierto) }, [manualAbierto, onPedidoManual])
+
+  // Al desmontarse el panel, el formulario se va con él. Hay que avisarlo o el
+  // padre seguiría creyendo que está abierto y preguntaría de gusto para siempre.
+  const avisarRef = useRef(onPedidoManual)
+  useEffect(() => { avisarRef.current = onPedidoManual }, [onPedidoManual])
+  useEffect(() => () => { avisarRef.current?.(false) }, [])
 
   // Al cambiar de conversación se cierra: dejarlo abierto mostraría el formulario
   // precargado con el cliente ANTERIOR, que es la peor forma de equivocarse.

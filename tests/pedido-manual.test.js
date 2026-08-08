@@ -2,7 +2,7 @@
 // Si la conversión falla, la precarga traba el formulario en vez de ayudar.
 import test from 'node:test'
 import assert from 'node:assert'
-import { celularEcuador, urlPedidoManual, leerAvisoPedido, textoNotaPedido } from '../lib/pedido-manual.js'
+import { celularEcuador, urlPedidoManual, leerAvisoPedido, textoNotaPedido, hayQueConfirmarDescarte, AVISO_DESCARTAR_PEDIDO } from '../lib/pedido-manual.js'
 
 test('convierte el formato de WhatsApp al del CRM', () => {
   assert.strictEqual(celularEcuador('593999989663'), '0999989663')
@@ -125,4 +125,59 @@ test('no lanza con basura', () => {
   assert.strictEqual(leerAvisoPedido({ origin: 'https://crm.apps.mandarinaec.com', data: null }), null)
   assert.strictEqual(leerAvisoPedido({}), null)
   assert.strictEqual(leerAvisoPedido(null), null)
+})
+
+// ── ¿Preguntar antes de cambiar de chat? ─────────────────────────────────────
+// Decisión de Rodrigo: el asistente del CRM son 4 pasos y un clic distraído en
+// el chat de al lado no puede tirar todo sin aviso. Como el formulario está en
+// un iframe de otro origen, NO se puede saber si hay algo escrito: se pregunta
+// siempre que esté abierto, y el texto se redacta para no mentir si está vacío.
+
+const NADA = { escritorio: false, cajon: false }
+
+test('sin el manual abierto NO se pregunta nada', () => {
+  // Es el 99,9% de los clics: cambiar de chat tiene que seguir siendo instantáneo.
+  assert.strictEqual(hayQueConfirmarDescarte(NADA, '593999989663', '593987654321'), false)
+  assert.strictEqual(hayQueConfirmarDescarte({}, '593999989663', null), false)
+  assert.strictEqual(hayQueConfirmarDescarte(null, '593999989663', null), false)
+})
+
+test('con el manual abierto en escritorio se pregunta', () => {
+  assert.strictEqual(
+    hayQueConfirmarDescarte({ escritorio: true, cajon: false }, '593999989663', '593987654321'),
+    true
+  )
+})
+
+test('con el manual abierto en el cajón del celular TAMBIÉN se pregunta', () => {
+  // Los dos paneles cambian de conversación; olvidar el del celular es el bug
+  // de siempre en este archivo.
+  assert.strictEqual(
+    hayQueConfirmarDescarte({ escritorio: false, cajon: true }, '593999989663', '593987654321'),
+    true
+  )
+})
+
+test('cerrar el chat (destino null) también pregunta', () => {
+  // Cambiar de bandeja y cambiar de canal cierran el chat abierto: el formulario
+  // se pierde igual que al saltar a otro cliente.
+  assert.strictEqual(hayQueConfirmarDescarte({ escritorio: true }, '593999989663', null), true)
+})
+
+test('volver a tocar el MISMO chat no pregunta', () => {
+  // No se pierde nada, así que preguntar sería puro ruido.
+  assert.strictEqual(hayQueConfirmarDescarte({ escritorio: true }, '593999989663', '593999989663'), false)
+  // Y da igual el formato con el que venga el teléfono.
+  assert.strictEqual(hayQueConfirmarDescarte({ escritorio: true }, 593999989663, '593999989663'), false)
+})
+
+test('el aviso no afirma que haya algo escrito', () => {
+  // No podemos leer dentro del iframe del CRM: si el aviso diera por hecho que
+  // hay un pedido a medio llenar, mentiría cada vez que esté vacío.
+  assert.ok(!/a medio llenar/i.test(AVISO_DESCARTAR_PEDIDO))
+  assert.ok(/no podemos ver/i.test(AVISO_DESCARTAR_PEDIDO), 'debe admitir que no vemos adentro')
+  assert.ok(/lo que hayas escrito/i.test(AVISO_DESCARTAR_PEDIDO), 'la pérdida va en condicional')
+  // Los dos caminos, porque el navegador solo pone "Aceptar/Cancelar".
+  assert.ok(/Aceptar =/.test(AVISO_DESCARTAR_PEDIDO))
+  assert.ok(/Cancelar =/.test(AVISO_DESCARTAR_PEDIDO))
 })
