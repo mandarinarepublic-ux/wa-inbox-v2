@@ -14,6 +14,7 @@ import PushToggle from '@/components/PushToggle'
 import AvisoSesion from '@/components/AvisoSesion'
 import { actualizarNoLeidos, notificar } from '@/lib/notif'
 import { hayQueConfirmarDescarte, AVISO_DESCARTAR_PEDIDO, anchoPanelPedido, anchoPanelMinimo } from '@/lib/pedido-manual'
+import { decidirArrastre } from '@/lib/arrastre'
 
 // ── Ancho del panel derecho: UNA sola fuente ──────────────────────
 // Lo usan el asa de arrastre, la restauración de localStorage y el ensanchado
@@ -170,6 +171,9 @@ export default function App() {
   const [rightWidth,   setRightWidth]   = useState(340)
   const rightWidthRef  = useRef(340)
   const resizingRef    = useRef(false)
+  // Solo para pintar la capa que tapa el iframe mientras se arrastra. El ref
+  // sigue siendo el que manda dentro de los escuchadores.
+  const [arrastrando,  setArrastrando]  = useState(false)
 
   // ── Estado botones interactivos ───────────────────────────────
   const [showBtnPanel, setShowBtnPanel] = useState(false)
@@ -475,13 +479,16 @@ export default function App() {
     } catch {}
     const clamp = (w) => Math.min(limitesRef.current.max, Math.max(limitesRef.current.min, w))
     const onMove = (e) => {
-      if (!resizingRef.current) return
+      const que = decidirArrastre({ arrastrando: resizingRef.current, botones: e.buttons })
+      if (que === 'nada') return
+      if (que === 'soltar') { onUp(); return }   // el mouseup se perdió: cortar acá
       const x = e.touches ? e.touches[0].clientX : e.clientX
       setRightWidth(clamp(window.innerWidth - x)) // panel pegado al borde derecho
     }
     const onUp = () => {
       if (!resizingRef.current) return
       resizingRef.current = false
+      setArrastrando(false)
       document.body.style.userSelect = ''
       document.body.style.cursor = ''
       try { localStorage.setItem('mandi_right_width', String(rightWidthRef.current)) } catch {}
@@ -490,16 +497,26 @@ export default function App() {
     window.addEventListener('mouseup', onUp)
     window.addEventListener('touchmove', onMove, { passive: false })
     window.addEventListener('touchend', onUp)
+    // Cinturones: el puntero se va de la página, la ventana pierde el foco
+    // (alt+tab a mitad de arrastre) o el sistema cancela el toque. En los tres
+    // casos el `mouseup`/`touchend` puede no llegar nunca.
+    document.addEventListener('mouseleave', onUp)
+    window.addEventListener('blur', onUp)
+    window.addEventListener('touchcancel', onUp)
     return () => {
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp)
       window.removeEventListener('touchmove', onMove)
       window.removeEventListener('touchend', onUp)
+      document.removeEventListener('mouseleave', onUp)
+      window.removeEventListener('blur', onUp)
+      window.removeEventListener('touchcancel', onUp)
     }
   }, [])
 
   const startResize = (e) => {
     resizingRef.current = true
+    setArrastrando(true)
     document.body.style.userSelect = 'none'
     document.body.style.cursor = 'col-resize'
   }
@@ -1306,6 +1323,18 @@ export default function App() {
       {showGuide && <GuideModal onClose={() => setShowGuide(false)} />}
       {(showSidebar && active) && <div className="overlay" onClick={() => setShowSidebar(false)} />}
       {showRight            && <div className="overlay" onClick={cerrarCajonDerecho} />}
+
+      {/* ⚠️ Capa transparente que TAPA EL IFRAME mientras se arrastra el asa.
+          Sin esto, al pasar el puntero sobre el formulario del CRM —que es un
+          iframe de otro origen— los eventos del mouse se los queda el documento
+          del CRM: el panel deja de seguir al asa y, peor, si se suelta el botón
+          ahí el `mouseup` no llega nunca. El arrastre se quedaba pegado y
+          después mover el mouse sin apretar nada redimensionaba el panel.
+          Con la capa puesta, el puntero nunca entra al iframe y el `mouseup`
+          siempre cae en nuestro documento. */}
+      {arrastrando && (
+        <div style={{ position:'fixed', top:0, left:0, right:0, bottom:0, zIndex:9999, cursor:'col-resize' }} />
+      )}
 
       <div style={{ display:'flex', flexDirection:'column', height:'100dvh', overflow:'hidden' }}>
 
