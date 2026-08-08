@@ -358,8 +358,17 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
   useEffect(() => { avisarRef.current = onPedidoManual }, [onPedidoManual])
   useEffect(() => () => { avisarRef.current?.(false) }, [])
 
-  // Al cambiar de conversación se cierra: dejarlo abierto mostraría el formulario
-  // precargado con el cliente ANTERIOR, que es la peor forma de equivocarse.
+  // ☠️ Al cambiar de conversación se cierra: dejarlo abierto mostraría el
+  // formulario precargado con el cliente ANTERIOR, que es la peor forma de
+  // equivocarse.
+  //
+  // NO BORRES ESTA LÍNEA aunque parezca que sobra. Desde que el formulario
+  // sobrevive al cambio de pestaña, es tentador pensar que también debería
+  // sobrevivir al cambio de chat. NO: `PedidoManual` congela su URL con un
+  // `useState` de inicializador perezoso, que solo se vuelve a ejecutar si el
+  // componente se MONTA de nuevo. Esta línea es lo único que fuerza ese
+  // desmontaje. Sin ella, la URL conserva el teléfono del cliente anterior y el
+  // siguiente pedido sale a nombre equivocado, sin ningún error a la vista.
   useEffect(() => { setManualAbierto(false) }, [activeConv?.telefono])
 
   // Cargar historial de pedidos al cambiar de contacto (una sola vez por teléfono).

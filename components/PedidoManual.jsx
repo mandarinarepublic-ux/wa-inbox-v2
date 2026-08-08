@@ -35,6 +35,18 @@ export default function PedidoManual({ telefono, nombre, onCreado, onCerrar }) {
   // puede traer un alias nuevo. El inicializador perezoso de useState corre una
   // sola vez; al cerrar y volver a abrir, el componente se monta de nuevo y la
   // URL se arma otra vez con los datos frescos.
+  //
+  // ☠️ NO BORRES el efecto de RightPanel.jsx que hace `setManualAbierto(false)`
+  // cuando cambia `activeConv?.telefono`. Parece redundante ahora que el iframe
+  // sobrevive al cambio de pestaña — NO LO ES: ese efecto es lo ÚNICO que fuerza
+  // el desmontaje al cambiar de cliente, y sin desmontaje este `useState` no se
+  // vuelve a inicializar. O sea que la URL se quedaría con el teléfono del
+  // cliente ANTERIOR y el siguiente pedido saldría a nombre equivocado, con los
+  // datos de otra persona y sin ningún error a la vista.
+  //
+  // Si algún día hace falta quitarlo, hay que reemplazarlo por otra cosa que
+  // garantice el remontaje —por ejemplo un `key={telefono}` en este componente—
+  // antes de tocarlo, no después.
   const [src] = useState(() => urlPedidoManual(telefono, nombre))
 
   const iframeRef = useRef(null)
