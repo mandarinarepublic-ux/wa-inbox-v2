@@ -10,6 +10,7 @@ import { enviarPush, cuerpoDeMensaje, debeNotificar } from '@/lib/push'
 import { decidirIA } from '@/lib/ia-canal'
 import { extraer } from '@/lib/wa-mensaje'
 import { extraerEchoes } from '@/lib/echoes'
+import { observarFirmaMeta } from '@/lib/firma-meta'
 import { enviarSaliente, responderConIA } from '@/lib/responder-ia'
 import { capturarCtwaClid, revisarLeadAutomatico, revisarVentaEnProceso } from '@/lib/capi'
 
@@ -305,7 +306,22 @@ async function procesarEchoes(echoes) {
 // ── Recepción de mensajes (POST) — responde 200 YA, procesa en background ──────
 export async function POST(req) {
   try {
-    const body = await req.json().catch(() => ({}))
+    // ⚠️ El cuerpo se lee UNA SOLA VEZ, como texto. No se puede hacer `req.text()`
+    // y después `req.json()`: el cuerpo se consume y el segundo se queda sin nada,
+    // o sea que el webhook dejaría de procesar mensajes. Se lee crudo porque la
+    // firma de Meta se calcula sobre esos bytes exactos —re-serializar el JSON
+    // cambia espacios y orden de claves y el sello ya no cuadraría— y de ahí se
+    // parsea el objeto que usa todo lo de abajo.
+    const crudo = await req.text().catch(() => '')
+    let body = {}
+    try { body = crudo ? JSON.parse(crudo) : {} } catch { body = {} }
+
+    // Solo ANOTA si la firma habría coincidido. NO rechaza nada, a propósito:
+    // ver el encabezado de lib/firma-meta.js. Envuelto por si acaso, aunque la
+    // función ya se traga sus propios errores: nada acá puede tumbar la
+    // recepción de un mensaje de un cliente.
+    try { observarFirmaMeta(req.headers.get('x-hub-signature-256'), crudo) } catch {}
+
     const entries = body?.entry || []
     const origin = new URL(req.url).origin
 
