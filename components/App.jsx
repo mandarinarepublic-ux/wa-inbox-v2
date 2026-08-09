@@ -732,18 +732,23 @@ export default function App() {
       // filtro del número anterior: entrabas a "Los dos" y por un rato veías
       // solo uno. Mismo `setTimeout(load, 0)` que ya usa la rama de arriba.
       setTimeout(load, 0)
-    } else if (eraChat && !vaAChat) {
-      // Salir de una pestaña de CHAT (MANDI, REPUBLIC o GENERAL) hacia una que
-      // no lo es (SOCIAL/CONTACTOS/AUTO) no tenía rama: el canal armado se
-      // quedaba con el último valor, invisible para esas pestañas.
-      // `Contactos.jsx` (envío por ventana 24h/plantillas) manda por
-      // `CANAL_ACTIVO` sin mostrar ni preguntar por cuál canal — antes de
-      // GENERAL, ese valor heredado era al menos "la pestaña de la que
-      // vinías", visible en la pantalla un segundo antes. Con GENERAL de por
-      // medio podía ser el canal del último chat que abriste dentro de la
-      // cola mezclada, sin ninguna pista en CONTACTOS de cuál es. Se deja en
-      // el valor MÁS predecible posible: el canal por defecto, el mismo con
-      // el que arranca el módulo (`lib/api-client.js`).
+    } else if (linea === CANAL_GENERAL && !vaAChat) {
+      // Salir de GENERAL —y SOLO de GENERAL— hacia una pestaña que no es de chat
+      // (SOCIAL/CONTACTOS/AUTO). `Contactos.jsx` manda por `CANAL_ACTIVO` sin
+      // mostrar ni preguntar por cuál canal, así que hereda a ciegas lo que haya
+      // quedado armado. Viniendo de MANDI o de REPUBLIC eso es correcto: el canal
+      // heredado ES la pestaña que estabas mirando hace un segundo, visible en la
+      // pantalla. Viniendo de GENERAL no: sería el canal del último chat que
+      // abriste dentro de la cola mezclada, sin ninguna pista en CONTACTOS de
+      // cuál es. Solo ESE caso se aplana al canal por defecto, el mismo con el
+      // que arranca el módulo (`lib/api-client.js`).
+      //
+      // ⚠️ La condición es `linea === CANAL_GENERAL`, NO `eraChat`. Con `eraChat`
+      // esta rama también agarraba a REPUBLIC → CONTACTOS y le fijaba MANDI:
+      // escribirle ahí a un cliente de REPUBLIC salía por el número de MANDI en
+      // silencio, y la lista de plantillas (`?canal=${CANAL_ACTIVO}`) mostraba las
+      // de MANDI. Es el mismo error que el aviso rojo de más abajo existe para
+      // evitar: por defecto es determinista, pero igual de equivocado.
       setCanalActivo(CANAL_POR_DEFECTO)
       setCanalArmado(CANAL_POR_DEFECTO)
     }
