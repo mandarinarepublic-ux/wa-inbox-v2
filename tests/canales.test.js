@@ -8,7 +8,7 @@
 // inbox.webhook_eventos, cruzado contra el phone_number_id de cada evento.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { CANALES, wabaIdDePhoneId } from '../lib/canales.js'
+import { CANALES, CANAL_GENERAL, phoneIdDeCanal, canalDePhoneId, wabaIdDePhoneId } from '../lib/canales.js'
 
 test('cada canal declara su WABA', () => {
   for (const c of CANALES) {
@@ -36,4 +36,15 @@ test('wabaIdDePhoneId devuelve null si el número no es nuestro', () => {
   assert.equal(wabaIdDePhoneId('999999999999999'), null)
   assert.equal(wabaIdDePhoneId(''), null)
   assert.equal(wabaIdDePhoneId(undefined), null)
+})
+
+test('el canal GENERAL no tiene phone_id: significa TODOS los numeros', () => {
+  assert.equal(phoneIdDeCanal(CANAL_GENERAL), null)
+})
+
+test('un id desconocido sigue cayendo en el canal principal, no en GENERAL', () => {
+  // Protege el comportamiento viejo: una pestaña en cache con un id que ya no
+  // existe debe ver MANDI, nunca la lista acumulada de los dos numeros.
+  assert.equal(phoneIdDeCanal('NO_EXISTE'), CANALES[0].phoneId)
+  assert.notEqual(phoneIdDeCanal('NO_EXISTE'), null)
 })

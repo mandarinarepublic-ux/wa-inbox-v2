@@ -12,7 +12,9 @@ export async function GET(req) {
   try {
     // ?canal=<phone_id>. Cada bandeja pide la suya; sin parámetro, el número
     // principal (así una pestaña vieja en caché sigue viendo lo de siempre).
-    const canal = new URL(req.url).searchParams.get('canal') || undefined
+    // ?canal=todos es la pestaña GENERAL: null = sin filtro de número.
+    const pedido = new URL(req.url).searchParams.get('canal') || undefined
+    const canal = pedido === 'todos' ? null : pedido
     const [lista, rows, contactos, pendientes] = await Promise.all([
       getLista(canal),
       getMensajes(canal),
