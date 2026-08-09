@@ -161,8 +161,10 @@ export default function App() {
   // por el número equivocado.
   const [canalArmado, setCanalArmado] = useState(CANAL_POR_DEFECTO)
   const [pendientes, setPendientes] = useState({})   // { phoneId: nº pendientes }
-  // Las dos pestañas de número comparten la vista de chat de abajo.
-  const esChat = linea === 'MANDI' || linea === 'REPUBLIC'
+  // Las dos pestañas de número Y la de GENERAL comparten la vista de chat de
+  // abajo: sin CANAL_GENERAL acá, la pestaña 📥 GENERAL se ve en blanco porque
+  // ninguna de las otras vistas (SOCIAL/CONTACTOS/AUTO) se enciende para ella.
+  const esChat = linea === 'MANDI' || linea === 'REPUBLIC' || linea === CANAL_GENERAL
 
   const [convs,        setConvs]        = useState([])
   const [contacts,     setContacts]     = useState({}) // telefono → {alias, estado}
@@ -686,9 +688,17 @@ export default function App() {
     // Salir de la pestaña de chats desmonta el panel derecho entero (`esChat`),
     // así que el formulario también se pierde acá.
     if (id !== linea && !puedoDejarLaConversacion(null)) return
-    const eraChat = linea === 'MANDI' || linea === 'REPUBLIC'
-    const vaAChat = id === 'MANDI' || id === 'REPUBLIC'
-    if (vaAChat && eraChat && id !== linea) {
+    // GENERAL cuenta como pestaña de chat (comparte la vista de abajo con
+    // MANDI/REPUBLIC), pero NO es un canal con número propio — por eso las dos
+    // ramas de abajo excluyen `id === CANAL_GENERAL` explícitamente: entrar a
+    // GENERAL tiene su propia rama (la de más abajo) que conserva el canal
+    // armado en vez de pisarlo con `setCanalActivo('GENERAL')`, que dejaría el
+    // módulo de envíos sin canal (null) por CUALQUIER camino que llegue a GENERAL,
+    // no solo desde MANDI/REPUBLIC.
+    const esChat = (x) => x === CANAL_GENERAL || CANALES.some(c => c.id === x)
+    const eraChat = esChat(linea)
+    const vaAChat = esChat(id)
+    if (vaAChat && eraChat && id !== linea && id !== CANAL_GENERAL) {
       setCanalActivo(id)        // manda a api-client: lecturas y envíos van por acá
       setCanalArmado(id)        // el estado de React no puede quedar atrás del módulo
       setActive(null); activeRef.current = null
@@ -697,7 +707,7 @@ export default function App() {
       hilosRef.current = {}     // hilos cargados del canal anterior
       pendingRef.current = {}   // burbujas optimistas del canal anterior
       setTimeout(load, 0)       // recarga ya, sin esperar al siguiente poll
-    } else if (vaAChat && !eraChat) {
+    } else if (vaAChat && !eraChat && id !== CANAL_GENERAL) {
       setCanalActivo(id)
       setCanalArmado(id)        // idem: MANDI/REPUBLIC mandan sobre lo armado, no al revés
     } else if (id === CANAL_GENERAL) {
@@ -788,7 +798,11 @@ export default function App() {
   const abrirChatDesdeContactos = (telefono) => {
     const t9 = String(telefono).replace(/\D/g, '').slice(-9)
     const conv = convs.find(c => String(c.telefono).replace(/\D/g, '').slice(-9) === t9)
-    setLinea('MANDI')
+    // Por `cambiarLinea` y no por `setLinea` a pelo: con GENERAL en el medio,
+    // un `setLinea` suelto movía la pestaña sin avisarle a `canalArmado` ni al
+    // canal activo del módulo — la pestaña mostraba MANDI mientras el envío
+    // seguía armado sobre el canal de la pestaña anterior.
+    cambiarLinea(CANAL_POR_DEFECTO)
     openConv(conv ? conv.telefono : telefono)
   }
 
@@ -817,7 +831,9 @@ export default function App() {
     const conv = convs.find(c => String(c.telefono).replace(/\D/g, '').slice(-9) === t9)
     if (!conv) return          // aún no llegó en este ciclo: reintenta al siguiente
     pedidoRef.current = null
-    setLinea('MANDI')
+    // Mismo motivo que en abrirChatDesdeContactos: `cambiarLinea` mantiene
+    // canalArmado y CANAL_ACTIVO sincronizados con la pestaña.
+    cambiarLinea(CANAL_POR_DEFECTO)
     openConv(conv.telefono)
   }, [convs])
 
@@ -845,6 +861,32 @@ export default function App() {
   // ── Derived state ─────────────────────────────────────────────
   const activeConv  = convs.find(c => c.telefono === active) || null
   const totalUnread = convs.reduce((s, c) => s + c.unread, 0)
+
+  /**
+   * Step 3c (Tarea 4): en GENERAL, si el chat abierto no tiene un canal que se
+   * pueda resolver, NINGÚN camino de envío puede completarse.
+   *
+   * `phoneIdDe` devuelve '' cuando la ficha no tiene `phone_id` y no hay
+   * mensaje en `convs` (pasa de verdad con los chats que nacen de un envío
+   * saliente sin phone_id, p. ej. una plantilla desde CONTACTOS). En ese caso
+   * `openConv` NO llama `setCanalActivo` (ver el `if (canal)` de más arriba) y
+   * el módulo de envíos (lib/api-client) se queda con el canal ARMADO del chat
+   * ANTERIOR — enviar ahí sería responderle a este cliente por el número de
+   * otro, en silencio.
+   *
+   * Se usa como guardia en CADA función que manda algo (no solo en la caja de
+   * escribir): las respuestas rápidas y los productos del panel derecho llaman
+   * a estas mismas funciones sin pasar por la caja, así que ocultar solo el
+   * textarea no alcanza.
+   */
+  const canalSinResolver = () =>
+    linea === CANAL_GENERAL && !!activeConv && !canalDePhoneId(phoneIdDe(activeConv.telefono))
+
+  // Mismo aviso en cualquier función de envío que tope con `canalSinResolver`.
+  const avisarCanalSinResolver = () => {
+    setToast({ ok: false, msg: '⚠️ No sé por cuál número enviarle a este chat. Ábrelo desde MANDI o REPUBLIC.' })
+    setTimeout(() => setToast(null), 4500)
+  }
   // Botón "atrás" del celular: si abrimos un chat empujamos una entrada de historial
   // (en openConv), y acá la consumimos para VOLVER A LA LISTA en vez de salir de la app.
   // Solo actúa si nosotros empujamos la entrada (backGuardRef), así en desktop el back
@@ -1067,6 +1109,7 @@ export default function App() {
   const handleSend = async (text) => {
     const t = (text || input).trim()
     if (!t || !activeConv) return
+    if (canalSinResolver()) { avisarCanalSinResolver(); return }
     const telefono = activeConv.telefono
     const nombre   = activeConv.nombre
     const estadoDestino = estadoAlResponder(currentStatus)
@@ -1112,6 +1155,7 @@ export default function App() {
     if (copyToInput !== undefined) { setInput(copyToInput); return }
     const t = String(text || '').trim()
     if (!t || !activeConv) return
+    if (canalSinResolver()) { avisarCanalSinResolver(); return }
     const telefono = activeConv.telefono
     const nombre   = activeConv.nombre
     const estadoDestino = estadoAlResponder(currentStatus)
@@ -1199,6 +1243,10 @@ export default function App() {
 
   const handleSendImage = async () => {
     if (!imgFiles.length || !activeConv) return
+    if (canalSinResolver()) {
+      setImgResult({ ok: false, error: 'no sé por cuál número mandar esto — abre el chat desde MANDI o REPUBLIC' })
+      return
+    }
     const telefono = activeConv.telefono
     const nombre   = activeConv.nombre
     const estadoDestino = estadoAlResponder(currentStatus)
@@ -1258,6 +1306,7 @@ export default function App() {
   // tenga que esperar a que termine todo.
   const handleQuickReply = async (reply, onProgress) => {
     if (!activeConv) return
+    if (canalSinResolver()) { avisarCanalSinResolver(); return }
     // Se congelan acá: el vendedor puede cambiar de chat mientras esto sale.
     const telefono = activeConv.telefono
     const nombre   = activeConv.nombre
@@ -1320,6 +1369,7 @@ export default function App() {
   // termine en vez de meterse en el medio.
   const handleSendAIImage = async (imageUrl) => {
     if (!activeConv || !imageUrl) return
+    if (canalSinResolver()) { avisarCanalSinResolver(); return }
     const telefono = activeConv.telefono
     const nombre   = activeConv.nombre
     const estadoDestino = estadoAlResponder(currentStatus)
@@ -1336,6 +1386,7 @@ export default function App() {
    */
   const handleSendProducto = async (p, modo = 'foto') => {
     if (!activeConv || !p) return
+    if (canalSinResolver()) { avisarCanalSinResolver(); return }
     const telefono = activeConv.telefono
     const nombre   = activeConv.nombre
     const estadoDestino = estadoAlResponder(currentStatus)
@@ -1369,6 +1420,7 @@ export default function App() {
    */
   const handleEnviarHojaPedido = async (hoja) => {
     if (!activeConv) return { ok: false, error: 'No hay un chat abierto' }
+    if (canalSinResolver()) return { ok: false, error: 'no sé por cuál número mandarle esto — abre el chat desde MANDI o REPUBLIC' }
     if (!hoja?.imagen)  return { ok: false, error: 'No llegó la imagen de la hoja' }
     // Fuera de las 24 h WhatsApp no deja mandar una foto y Meta la rechaza sin
     // decir mucho. Mejor decirlo acá, con el nombre de la causa.
@@ -1423,6 +1475,7 @@ export default function App() {
   // ── Enviar botones interactivos ───────────────────────────────
   const handleSendButtons = async () => {
     if (!activeConv || !input.trim()) return
+    if (canalSinResolver()) { avisarCanalSinResolver(); return }
     const validBtns = btnTexts.map((t,i) => ({ id:`btn_${i+1}`, title:t.trim() })).filter(b=>b.title)
     if (validBtns.length === 0) return
     const telefono = activeConv.telefono
@@ -1554,26 +1607,42 @@ export default function App() {
           zIndex:200, overflowX:'auto',
         }}>
           {[
-            // Los dos primeros son NÚMEROS (canales), no aplicaciones distintas:
+            // GENERAL va primero: es la cola de trabajo, la que se mira todo el
+            // día. Su contador suma los pendientes de todos los números.
+            {
+              id: CANAL_GENERAL, label:'GENERAL', icon:'📥', color:'#a78bfa', sub:'Los dos',
+              badge: Object.values(pendientes).reduce((a, b) => a + (b || 0), 0),
+              title:'Todos los números en una sola cola',
+            },
+            // Los dos siguientes son NÚMEROS (canales), no aplicaciones distintas:
             // comparten la vista de chat. El contador de pendientes es lo que
             // impide que la bandeja que no estás mirando se vuelva invisible.
             ...CANALES.map(c => ({
               id: c.id, label: c.etiqueta, icon:'💬', color: c.color, sub: c.sub,
               badge: pendientes[c.phoneId] || 0, title: c.titulo,
+              // Encendido cuando estás en GENERAL y el chat abierto es de este
+              // número: la pestaña deja de ser "dónde estoy" y pasa a ser
+              // "por acá sale lo que escribas".
+              armado: linea === CANAL_GENERAL && canalArmado === c.id,
             })),
             { id:'SOCIAL',   label:'SOCIAL',   icon:'🌐', color:'#1877F2', sub:'FB · IG' },
             { id:'CONTACTOS',label:'CONTACTOS',icon:'👥', color:'#38bdf8', sub:'Directorio' },
             { id:'AUTO',     label:'AUTOS',    icon:'⚙️', color:'#f59e0b', sub:'Reglas' },
-          ].map(({ id, label, icon, color, sub, badge = 0, title }) => (
+          ].map(({ id, label, icon, color, sub, badge = 0, title, armado = false }) => (
             <button key={id} onClick={() => cambiarLinea(id)} title={title || label} style={{
               padding:'4px 16px', border:'none', cursor:'pointer', flexShrink:0, whiteSpace:'nowrap',
               background: linea===id ? `${color}15` : 'transparent',
-              borderBottom: linea===id ? `2px solid ${color}` : '2px solid transparent',
+              // Pestaña activa = línea sólida (dónde estás parado). Canal armado
+              // = línea punteada (por dónde sale la respuesta). Tienen que verse
+              // distintas: si se confunden, el aviso deja de servir.
+              borderBottom: linea===id ? `2px solid ${color}`
+                          : armado     ? `2px dashed ${color}`
+                          :              '2px solid transparent',
               borderTop: '2px solid transparent',
               fontFamily:'Outfit,sans-serif', transition:'all .2s', height:'100%',
             }}>
               <div style={{ fontSize:10, fontWeight:800, color: linea===id ? color : '#334155', letterSpacing:'1.5px', display:'flex', alignItems:'center', justifyContent:'center', gap:5 }}>
-                <span>{icon} {label}</span>
+                <span>{icon} {label}{armado ? ' ◉' : ''}</span>
                 {badge > 0 && (
                   <span style={{
                     background:'#f87171', color:'#fff', borderRadius:9, minWidth:16, height:16,
@@ -1859,6 +1928,25 @@ export default function App() {
             </div>
 
             <div className="input-bar" style={{ position:'relative' }}>
+              {/* Step 3c (Tarea 4): en GENERAL, con el chat abierto sin canal
+                  resuelto, NO se muestra la caja de escribir — se muestra el
+                  aviso en su lugar. Es un bloqueo, no un aviso que se pueda
+                  ignorar: mandar por el canal por defecto sería determinista
+                  pero igual de equivocado (le escribirías a un cliente de
+                  REPUBLIC por el número de MANDI). Las funciones de envío
+                  (handleSend, handleQuickReply, etc.) tienen la misma guardia
+                  por separado, para los caminos que no pasan por esta caja
+                  (respuestas rápidas y productos del panel derecho). */}
+              {canalSinResolver() ? (
+                <div style={{
+                  padding: '12px 16px', borderRadius: 10,
+                  background: 'rgba(248,113,113,.12)', border: '1px solid rgba(248,113,113,.45)',
+                  color: '#f87171', fontSize: 12, lineHeight: 1.5,
+                }}>
+                  ⚠️ <b>No sé por cuál número responderle a este chat.</b><br />
+                  Ábrelo desde la pestaña de MANDI o de REPUBLIC, la que corresponda, y contéstale desde ahí.
+                </div>
+              ) : (<>
               {!windowOpen && lastMsg && (
                 <div style={{ marginBottom:8, padding:'7px 12px', background:'rgba(245,158,11,.08)', border:'1px solid rgba(245,158,11,.2)', borderRadius:8, fontSize:11, color:'#fbbf24', display:'flex', alignItems:'center', justifyContent:'center', gap:10, flexWrap:'wrap' }}>
                   <span>⚠️ Ventana de 24h cerrada — solo plantilla</span>
@@ -2029,6 +2117,7 @@ export default function App() {
                 <button onClick={() => { setShowEmoji(p=>!p); setShowBtnPanel(false) }} title="Emojis" style={{ width:42, height:42, flexShrink:0, background:showEmoji?'rgba(245,158,11,.15)':'#111c2a', border:`1px solid ${showEmoji?'rgba(245,158,11,.4)':'#1e2d3d'}`, borderRadius:11, cursor:'pointer', fontSize:20, display:'flex', alignItems:'center', justifyContent:'center', transition:'all .15s' }}>😊</button>
                 <input ref={fileRef} type="file" accept="image/*,video/*" multiple style={{ display:'none' }} onChange={handleFileSelect} />
               </div>
+              </>)}
             </div>
           </div>
         ) : (
