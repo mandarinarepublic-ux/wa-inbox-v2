@@ -115,88 +115,96 @@ function IABadge({ modoIA }) {
 
 // ── CONTACT ROW ──────────────────────────────────────────────────
 const TEMP_ICON = { caliente: '🔥', tibio: '🌤️', frio: '❄️' }
-export function ContactRow({ conv, isActive, onClick, search = '', estado, modoIA, temp = '', alerta = false, msgSnippet = null }) {
+export function ContactRow({ conv, isActive, onClick, search = '', estado, modoIA, temp = '', alerta = false, msgSnippet = null, colorCanal = '' }) {
   const [hovered, setHovered] = useState(false)
   const searching = String(search || '').trim().length > 0
   const info = ESTADO_INFO[estado] || null
   return (
-    <div
-      onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 12,
-        padding: '13px 16px', cursor: 'pointer', transition: 'all .12s',
-        background: isActive
-          ? 'rgba(37,211,102,.08)'
-          : hovered ? 'rgba(255,255,255,.02)' : 'transparent',
-        borderLeft: isActive ? '3px solid #25d366' : '3px solid transparent',
-      }}
-    >
-      <Avatar name={conv.nombre} phone={conv.telefono} size={46} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontWeight: 700, fontSize: 14, color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
-            {highlight(conv.nombre, search)}
-          </span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-            {alerta && <span title="🔥 Caliente — cerca de cerrar la ventana de 24h" style={{ fontSize: 12, animation: 'pulse 2s infinite' }}>⏰</span>}
-            {temp && TEMP_ICON[temp] && <span title={`Lead ${temp}`} style={{ fontSize: 12 }}>{TEMP_ICON[temp]}</span>}
-            <IABadge modoIA={modoIA} />
-            <span style={{ fontSize: 11, color: '#94a3b8' }}>
-              {fmtTime(conv.last?.timestamp)}
+    <div>
+      <div
+        onClick={onClick}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 12,
+          padding: '13px 16px', cursor: 'pointer', transition: 'all .12s',
+          background: isActive
+            ? 'rgba(37,211,102,.08)'
+            : hovered ? 'rgba(255,255,255,.02)' : 'transparent',
+          borderLeft: isActive ? '3px solid #25d366' : '3px solid transparent',
+        }}
+      >
+        <Avatar name={conv.nombre} phone={conv.telefono} size={46} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontWeight: 700, fontSize: 14, color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+              {highlight(conv.nombre, search)}
             </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+              {alerta && <span title="🔥 Caliente — cerca de cerrar la ventana de 24h" style={{ fontSize: 12, animation: 'pulse 2s infinite' }}>⏰</span>}
+              {temp && TEMP_ICON[temp] && <span title={`Lead ${temp}`} style={{ fontSize: 12 }}>{TEMP_ICON[temp]}</span>}
+              <IABadge modoIA={modoIA} />
+              <span style={{ fontSize: 11, color: '#94a3b8' }}>
+                {fmtTime(conv.last?.timestamp)}
+              </span>
+            </div>
           </div>
-        </div>
-        {msgSnippet != null ? (
-          // Búsqueda por MENSAJE: mostrar el fragmento que coincide + bandeja
-          <div style={{ marginTop: 4 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ fontSize: 11, color: '#8899aa', fontFamily: 'monospace' }}>+{conv.telefono}</span>
+          {msgSnippet != null ? (
+            // Búsqueda por MENSAJE: mostrar el fragmento que coincide + bandeja
+            <div style={{ marginTop: 4 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 11, color: '#8899aa', fontFamily: 'monospace' }}>+{conv.telefono}</span>
+                {info && (
+                  <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.04em', color: info.color, background: `${info.color}1e`, border: `1px solid ${info.color}44`, borderRadius: 6, padding: '1px 6px', flexShrink: 0 }}>
+                    {info.label}
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize: 12, color: '#cbd5e1', marginTop: 3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.4 }}>
+                💬 {highlight(msgSnippet, search)}
+              </div>
+            </div>
+          ) : searching ? (
+            // Al BUSCAR contacto: mostrar el número (grande, resaltado) + en qué bandeja está
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+              <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'monospace', color: '#cbd5e1', whiteSpace: 'nowrap' }}>
+                📱 {highlight('+' + conv.telefono, search)}
+              </span>
               {info && (
                 <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.04em', color: info.color, background: `${info.color}1e`, border: `1px solid ${info.color}44`, borderRadius: 6, padding: '1px 6px', flexShrink: 0 }}>
                   {info.label}
                 </span>
               )}
             </div>
-            <div style={{ fontSize: 12, color: '#cbd5e1', marginTop: 3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.4 }}>
-              💬 {highlight(msgSnippet, search)}
-            </div>
-          </div>
-        ) : searching ? (
-          // Al BUSCAR contacto: mostrar el número (grande, resaltado) + en qué bandeja está
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-            <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'monospace', color: '#cbd5e1', whiteSpace: 'nowrap' }}>
-              📱 {highlight('+' + conv.telefono, search)}
-            </span>
-            {info && (
-              <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.04em', color: info.color, background: `${info.color}1e`, border: `1px solid ${info.color}44`, borderRadius: 6, padding: '1px 6px', flexShrink: 0 }}>
-                {info.label}
-              </span>
-            )}
-          </div>
-        ) : (
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 3 }}>
-            <span style={{
-              fontSize: 12,
-              color: conv.unread > 0 ? '#94a3b8' : '#8899aa',
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              maxWidth: 175,
-              fontWeight: conv.unread > 0 ? 600 : 400,
-            }}>
-              {conv.last?.direccion === 'SALIENTE' ? 'Tú: ' : ''}
-              {conv.last?.mensaje}
-            </span>
-            {conv.unread > 0 && (
+          ) : (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 3 }}>
               <span style={{
-                background: '#25d366', color: '#040807',
-                borderRadius: 10, fontSize: 11, fontWeight: 800,
-                padding: '1px 7px', marginLeft: 6, flexShrink: 0,
-              }}>{conv.unread}</span>
-            )}
-          </div>
-        )}
+                fontSize: 12,
+                color: conv.unread > 0 ? '#94a3b8' : '#8899aa',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                maxWidth: 175,
+                fontWeight: conv.unread > 0 ? 600 : 400,
+              }}>
+                {conv.last?.direccion === 'SALIENTE' ? 'Tú: ' : ''}
+                {conv.last?.mensaje}
+              </span>
+              {conv.unread > 0 && (
+                <span style={{
+                  background: '#25d366', color: '#040807',
+                  borderRadius: 10, fontSize: 11, fontWeight: 800,
+                  padding: '1px 7px', marginLeft: 6, flexShrink: 0,
+                }}>{conv.unread}</span>
+              )}
+            </div>
+          )}
+        </div>
       </div>
+      {colorCanal && (
+        // Separador de canal: dice por cuál número va a salir la respuesta si
+        // abres este chat. Va DEBAJO de la fila, a lo ancho, para que se lea de
+        // reojo bajando la columna sin tener que enfocar cada contacto.
+        <div style={{ height: 2, background: colorCanal, opacity: .55, margin: '0 16px' }} />
+      )}
     </div>
   )
 }

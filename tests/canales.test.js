@@ -8,7 +8,7 @@
 // inbox.webhook_eventos, cruzado contra el phone_number_id de cada evento.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { CANALES, CANAL_GENERAL, phoneIdDeCanal, canalDePhoneId, wabaIdDePhoneId } from '../lib/canales.js'
+import { CANALES, CANAL_GENERAL, phoneIdDeCanal, canalDePhoneId, wabaIdDePhoneId, colorDeCanal } from '../lib/canales.js'
 
 test('cada canal declara su WABA', () => {
   for (const c of CANALES) {
@@ -47,4 +47,22 @@ test('un id desconocido sigue cayendo en el canal principal, no en GENERAL', () 
   // existe debe ver MANDI, nunca la lista acumulada de los dos numeros.
   assert.equal(phoneIdDeCanal('NO_EXISTE'), CANALES[0].phoneId)
   assert.notEqual(phoneIdDeCanal('NO_EXISTE'), null)
+})
+
+test('colorDeCanal devuelve el color de cada numero', () => {
+  assert.equal(colorDeCanal(CANALES[0].phoneId), CANALES[0].color)
+  assert.equal(colorDeCanal(CANALES[1].phoneId), CANALES[1].color)
+})
+
+test('colorDeCanal tolera basura sin lanzar y sin inventar color', () => {
+  // Un phone_id que no es nuestro no puede pintarse del color de MANDI: eso
+  // seria la pantalla mintiendo sobre por donde sale la respuesta.
+  assert.equal(colorDeCanal('999999999'), '')
+  assert.equal(colorDeCanal(''), '')
+  assert.equal(colorDeCanal(null), '')
+  assert.equal(colorDeCanal(undefined), '')
+})
+
+test('colorDeCanal compara como texto: el phone_id puede llegar numerico', () => {
+  assert.equal(colorDeCanal(Number(CANALES[0].phoneId)), CANALES[0].color)
 })

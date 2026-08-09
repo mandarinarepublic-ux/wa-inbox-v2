@@ -6,7 +6,7 @@ import { Spinner, Avatar, ContactRow, MessageBubble, Toast } from '@/components/
 import RightPanel from '@/components/RightPanel'
 import SetupModal from '@/components/SetupModal'
 import GuideModal from '@/components/GuideModal'
-import { CANALES } from '@/lib/canales'
+import { CANALES, CANAL_GENERAL, colorDeCanal, canalDePhoneId } from '@/lib/canales'
 import SocialInbox from '@/components/SocialInbox'
 import Contactos, { PlantillaModal } from '@/components/Contactos'
 import Automatizaciones from '@/components/Automatizaciones'
@@ -690,6 +690,22 @@ export default function App() {
     }
     setLinea(id)
   }
+
+  /**
+   * Número por el que habla este contacto.
+   *
+   * ⚠️ ESTE ES EL ÚNICO LUGAR donde se decide el canal de una conversación. Lo
+   * usan la línea de color de la fila Y el canal que se arma al abrir el chat
+   * (openConv). Tienen que salir de acá los dos: si cada uno lo calculara por su
+   * lado podrían discrepar, y entonces la línea diría un número mientras la
+   * respuesta sale por el otro.
+   *
+   * La ficha del contacto es la fuente buena —es el mismo campo `phone_id` que
+   * usa el cron para responder—. El último mensaje de la fila es el respaldo
+   * para una conversación tan nueva que su ficha no llegó en el último sync.
+   */
+  const phoneIdDe = (tel) =>
+    contacts[tel]?.phoneId || convs.find(c => c.telefono === tel)?.last?.phoneId || ''
 
   const openConv = (telefono) => {
     // Único paso obligado para cambiar de chat: lo usan la lista, CONTACTOS y el
@@ -1638,6 +1654,7 @@ export default function App() {
                   temp={getTemp(conv.telefono)}
                   alerta={alertaVentana(conv.telefono)}
                   msgSnippet={searchingMsgs ? matchSnippet(conv) : null}
+                  colorCanal={colorDeCanal(phoneIdDe(conv.telefono))}
                 />
               ))}
             </>)}
