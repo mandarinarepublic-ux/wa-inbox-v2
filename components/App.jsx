@@ -690,6 +690,7 @@ export default function App() {
     const vaAChat = id === 'MANDI' || id === 'REPUBLIC'
     if (vaAChat && eraChat && id !== linea) {
       setCanalActivo(id)        // manda a api-client: lecturas y envíos van por acá
+      setCanalArmado(id)        // el estado de React no puede quedar atrás del módulo
       setActive(null); activeRef.current = null
       setCitando(null)
       setConvs([]); setContacts({})
@@ -698,6 +699,7 @@ export default function App() {
       setTimeout(load, 0)       // recarga ya, sin esperar al siguiente poll
     } else if (vaAChat && !eraChat) {
       setCanalActivo(id)
+      setCanalArmado(id)        // idem: MANDI/REPUBLIC mandan sobre lo armado, no al revés
     } else if (id === CANAL_GENERAL) {
       // GENERAL no tiene número propio: la columna se pide sin filtro, pero el
       // canal armado se conserva para que el chat abierto siga respondiendo por
@@ -737,13 +739,31 @@ export default function App() {
     // (Tarea 2): tiene que ser el mismo, porque si el color y el canal armado se
     // calcularan por separado podrían discrepar y la fila diría un número
     // mientras la respuesta sale por otro.
-    const canal = canalDePhoneId(phoneIdDe(telefono))
-    if (canal && canal !== canalArmado) {
-      setCanalActivo(canal)
-      setCanalArmado(canal)
-      // Los hilos cacheados NO se botan: `hilosRef` está indexado por teléfono, y
-      // cada conversación pertenece a un solo canal. Botarlos acá haría que
-      // GENERAL recargue todo a cada clic.
+    //
+    // Solo pisa el canal en GENERAL. En MANDI/REPUBLIC manda la pestaña, no el
+    // contacto: la agenda se pide SIN filtro de canal (getContactos(null) en
+    // /api/inbox-sync) y una fila es UNA sola por teléfono con el phone_id del
+    // ÚLTIMO mensaje — un cliente que escribió a los dos números puede aparecer
+    // en la columna de REPUBLIC con `phoneIdDe` devolviendo MANDI. Si esto
+    // corriera también en pestañas de un solo número, abrir esa fila mixta
+    // podría dejar CANAL_ACTIVO apuntando al número que NO es el de la pestaña
+    // encendida.
+    //
+    // Asignación idempotente y sin condición contra `canalArmado`: lo que
+    // importa es la verdad del envío (CANAL_ACTIVO, en el módulo), no si el
+    // estado de React ya "cree" que está en ese canal — `cambiarLinea` puede
+    // haber movido CANAL_ACTIVO sin que canalArmado se enterara.
+    if (linea === CANAL_GENERAL) {
+      const canal = canalDePhoneId(phoneIdDe(telefono))
+      if (canal) {
+        setCanalActivo(canal)
+        setCanalArmado(canal)
+        // El cache de hilos NO se bota acá: `hilosRef` está indexado por
+        // teléfono, y cada TELÉFONO tiene una sola entrada de cache (no una por
+        // canal). Para el cliente que escribió a los dos números, en GENERAL
+        // ese cache puede mezclar mensajes de ambos phone_id bajo la misma
+        // clave — es una limitación conocida, no una garantía de pureza de canal.
+      }
     }
 
     setActive(telefono)
