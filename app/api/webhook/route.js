@@ -50,13 +50,20 @@ function marcarNuevo(wamid) {
 const MSG_ESPERA = 'Permíteme un momento por favor 🧡'
 
 // Handoff invisible: el cliente mandó una imagen → MANDI no vende ni identifica.
-// Marcamos el contacto SOPORTE + HUMANO (la IA se apaga y un ejecutivo lo toma)
-// y respondemos SOLO con el mensaje de espera, en la voz de MANDI.
+// Se apaga la IA de ese chat (lo toma una persona) y se responde SOLO con el
+// mensaje de espera, en la voz de MANDI.
+//
+// ⚠️ YA NO se cambia la bandeja a SOPORTE. Antes sí, y por eso esos chats
+// desaparecían de Pendientes: el cliente mandaba una foto —o sea, casi siempre
+// un pedido— y el chat se iba a una bandeja que quizá nadie miraba. Decisión de
+// Rodrigo el 8-ago: **todas las conversaciones caen SIEMPRE en Pendientes**, para
+// que su regla siga valiendo — "si esa bandeja está vacía, contesté a todos".
+//
+// Soporte sigue existiendo como bandeja, pero ahora se marca a mano. Ningún
+// automatismo puede sacar un chat de Pendientes sin que una persona lo decida.
 async function escalarASoporte(origin, phone, name, canal) {
-  await Promise.all([
-    updateEstado(phone, 'SOPORTE').catch(e => console.error('[webhook IA] estado SOPORTE:', e.message)),
-    updateModoIA(phone, 'HUMANO').catch(e => console.error('[webhook IA] modoIA HUMANO:', e.message)),
-  ])
+  await updateModoIA(phone, 'HUMANO')
+    .catch(e => console.error('[webhook IA] modoIA HUMANO:', e.message))
   await enviarSaliente(origin, { Telefono: phone, Nombre: name || '', Mensaje: MSG_ESPERA, Canal: canal })
 }
 
