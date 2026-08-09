@@ -6,7 +6,7 @@ import { Spinner, Avatar, ContactRow, MessageBubble, Toast } from '@/components/
 import RightPanel from '@/components/RightPanel'
 import SetupModal from '@/components/SetupModal'
 import GuideModal from '@/components/GuideModal'
-import { CANALES, CANAL_GENERAL, colorDeCanal, canalDePhoneId } from '@/lib/canales'
+import { CANALES, CANAL_GENERAL, CANAL_POR_DEFECTO, colorDeCanal, canalDePhoneId } from '@/lib/canales'
 import SocialInbox from '@/components/SocialInbox'
 import Contactos, { PlantillaModal } from '@/components/Contactos'
 import Automatizaciones from '@/components/Automatizaciones'
@@ -155,6 +155,11 @@ export default function App() {
   // Web con una extensión de Chrome y un launcher en localhost:3098; ahora es
   // Cloud API como MANDI. Ver lib/canales.js.
   const [linea, setLinea] = useState('MANDI') // 'MANDI' | 'REPUBLIC' | 'SOCIAL' | 'CONTACTOS' | 'AUTO'
+  // Canal por el que se va a responder AHORA MISMO. En las pestañas MANDI y
+  // REPUBLIC es la pestaña misma; en GENERAL lo fija el contacto que abres.
+  // Arranca en CANAL_POR_DEFECTO (nunca vacío): un envío con Canal vacío sale
+  // por el número equivocado.
+  const [canalArmado, setCanalArmado] = useState(CANAL_POR_DEFECTO)
   const [pendientes, setPendientes] = useState({})   // { phoneId: nº pendientes }
   // Las dos pestañas de número comparten la vista de chat de abajo.
   const esChat = linea === 'MANDI' || linea === 'REPUBLIC'
@@ -228,6 +233,12 @@ export default function App() {
   const colaRef = useRef({})
   const hilosRef   = useRef({})   // telefono → historial completo ya descargado (carga por chat)
   const activeRef  = useRef(null) // teléfono del chat abierto (para no borrar su hilo del cache)
+  // `load` es un useCallback con dependencias vacías: no puede leer `linea`
+  // directo (quedaría congelado en el primer render) y meterlo en las
+  // dependencias recrearía la función en cada cambio de pestaña, reiniciando el
+  // polling. La ref le da el valor de ahora sin recrear nada.
+  const lineaRef = useRef(linea)
+  useEffect(() => { lineaRef.current = linea }, [linea])
   const backGuardRef = useRef(false) // móvil: entrada de historial empujada al abrir un chat (el "atrás" del celu vuelve a la lista en vez de salir de la app)
 
   // La caja de texto crece con lo que se escribe. Antes tenía altura fija y
@@ -270,7 +281,7 @@ export default function App() {
   const load = useCallback(async () => {
     // UN request por ciclo (antes 3: lista+mensajes+contactos → /api/inbox-sync).
     // null (error) → se conservan los datos previos, no parpadea a blanco.
-    const sync   = await fetchInboxSync()
+    const sync   = await fetchInboxSync(lineaRef.current === CANAL_GENERAL)
     const lista  = sync?.lista ?? null
     const rows   = sync?.rows ?? null
     const ctList = sync?.contactos ?? null
@@ -687,6 +698,12 @@ export default function App() {
       setTimeout(load, 0)       // recarga ya, sin esperar al siguiente poll
     } else if (vaAChat && !eraChat) {
       setCanalActivo(id)
+    } else if (id === CANAL_GENERAL) {
+      // GENERAL no tiene número propio: la columna se pide sin filtro, pero el
+      // canal armado se conserva para que el chat abierto siga respondiendo por
+      // donde corresponde. Si no había ninguno, queda el principal — nunca null,
+      // porque un envío con Canal vacío sale por el número equivocado.
+      setCanalActivo(canalArmado || CANAL_POR_DEFECTO)
     }
     setLinea(id)
   }
@@ -711,6 +728,24 @@ export default function App() {
     // Único paso obligado para cambiar de chat: lo usan la lista, CONTACTOS y el
     // salto desde un aviso push. Con esto acá, los tres quedan cubiertos.
     if (!puedoDejarLaConversacion(telefono)) return
+
+    // ⚠️ ORDEN CRÍTICO: armar el canal ANTES de tocar `active`. El hilo se pide
+    // con CANAL_ACTIVO (fetchHilo) y el envío inyecta Canal: getCanalActivo()
+    // (postSaliente). Si esto corriera después, el primer hilo se pediría por
+    // el canal anterior y una respuesta rápida saldría por el número equivocado.
+    // `phoneIdDe` es el MISMO helper que pinta la línea de color de la fila
+    // (Tarea 2): tiene que ser el mismo, porque si el color y el canal armado se
+    // calcularan por separado podrían discrepar y la fila diría un número
+    // mientras la respuesta sale por otro.
+    const canal = canalDePhoneId(phoneIdDe(telefono))
+    if (canal && canal !== canalArmado) {
+      setCanalActivo(canal)
+      setCanalArmado(canal)
+      // Los hilos cacheados NO se botan: `hilosRef` está indexado por teléfono, y
+      // cada conversación pertenece a un solo canal. Botarlos acá haría que
+      // GENERAL recargue todo a cada clic.
+    }
+
     setActive(telefono)
     activeRef.current = telefono
     setShowSidebar(false)
