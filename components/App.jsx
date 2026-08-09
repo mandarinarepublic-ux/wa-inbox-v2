@@ -6,7 +6,7 @@ import { Spinner, Avatar, ContactRow, MessageBubble, Toast } from '@/components/
 import RightPanel from '@/components/RightPanel'
 import SetupModal from '@/components/SetupModal'
 import GuideModal from '@/components/GuideModal'
-import { CANALES, CANAL_GENERAL, CANAL_POR_DEFECTO, colorDeCanal, canalDePhoneId } from '@/lib/canales'
+import { CANALES, CANAL_GENERAL, CANAL_POR_DEFECTO, colorDeCanal, canalDePhoneId, phoneIdDeCanal } from '@/lib/canales'
 import SocialInbox from '@/components/SocialInbox'
 import Contactos, { PlantillaModal } from '@/components/Contactos'
 import Automatizaciones from '@/components/Automatizaciones'
@@ -752,6 +752,19 @@ export default function App() {
       // evitar: por defecto es determinista, pero igual de equivocado.
       setCanalActivo(CANAL_POR_DEFECTO)
       setCanalArmado(CANAL_POR_DEFECTO)
+      // ⚠️ Soltar el canal SIN soltar el chat dejaba armado el número equivocado.
+      // El chat abierto pertenecía al canal que se acaba de aplanar: en GENERAL
+      // lo abriste (por ejemplo) en REPUBLIC, y al volver a GENERAL la rama de
+      // `id === CANAL_GENERAL` restaura `canalArmado` —que ahora es MANDI— sin
+      // que nadie vuelva a llamar `openConv`. El chat de REPUBLIC seguía en
+      // pantalla (el hilo vive en `hilosRef`, que no se bota) con CANAL_ACTIVO
+      // en MANDI, y `canalSinResolver()` daba false porque `phoneIdDe` resuelve
+      // perfecto: ninguna guardia disparaba y la respuesta salía por MANDI.
+      // El chat se cierra acá, y no se re-arma desde `active` al volver a
+      // GENERAL, porque eso dependería de que `convs`/`contacts` ya tengan la
+      // fila cargada — más frágil y con el mismo final malo si no está.
+      setActive(null); activeRef.current = null
+      setCitando(null)
     }
     // La plantilla de "ventana cerrada" pertenece al chat que estabas mirando, y
     // manda con `CANAL_ACTIVO` (`sendTemplate`) sin guard propio. Cambiar de
@@ -1204,6 +1217,7 @@ export default function App() {
     if (canalSinResolver()) { avisarCanalSinResolver(); return }
     const telefono = activeConv.telefono
     const nombre   = activeConv.nombre
+    const canal    = getCanalActivo()   // congelado con el teléfono, ver `encolar`
     const estadoDestino = estadoAlResponder(currentStatus)
     // Se toma la cita ANTES de limpiarla: si el envío espera turno en la fila, la
     // barra ya no está pero el wamid citado tiene que viajar igual.
@@ -1228,7 +1242,7 @@ export default function App() {
       // Dar tiempo a React para renderizar el tmpMsg antes de hacer el fetch
       await new Promise(r => setTimeout(r, 0))
       const [result] = await Promise.all([
-        sendReply(telefono, nombre, t, citaId),
+        sendReply(telefono, nombre, t, citaId, canal),
         changeStatus(telefono, estadoDestino),
       ])
       // El mensaje salió, pero Meta rechazó la cita (mensaje viejo). Se avisa en vez
@@ -1250,9 +1264,10 @@ export default function App() {
     if (canalSinResolver()) { avisarCanalSinResolver(); return }
     const telefono = activeConv.telefono
     const nombre   = activeConv.nombre
+    const canal    = getCanalActivo()
     const estadoDestino = estadoAlResponder(currentStatus)
     return encolar(telefono, async () => {
-      await enviarTextoSuelto(telefono, nombre, t)
+      await enviarTextoSuelto(telefono, nombre, t, canal)
       changeStatus(telefono, estadoDestino)
       setTimeout(load, 4000)
     })
@@ -1273,7 +1288,12 @@ export default function App() {
   // equivocado si esta función mirara la conversación "actual".
   // `mediaId` (opcional) viene pre-resuelto por precacheMedia: con él, el servidor
   // no descarga ni sube nada y la foto sale en milisegundos.
-  const sendImageUrl = async (telefono, nombre, imageUrl, mediaId = '') => {
+  //
+  // `canal` va por parámetro por el mismo motivo que `telefono` y `nombre`:
+  // leerlo con `getCanalActivo()` acá adentro es leerlo cuando la foto SALE, no
+  // cuando se encoló. Una tanda de 5-10 fotos tarda segundos y el clic al
+  // siguiente chat (el gesto normal de trabajo en GENERAL) ya movió el canal.
+  const sendImageUrl = async (telefono, nombre, imageUrl, mediaId = '', canal = '') => {
     // OJO: esta función habla con /api/saliente por su cuenta, sin pasar por
     // postSaliente de lib/api-client — que es donde se inyecta el canal. Por eso
     // el `Canal` va explícito acá: sin él las fotos salían por el número
@@ -1282,7 +1302,7 @@ export default function App() {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         Telefono: telefono, Nombre: nombre, ImagenURL: imageUrl,
-        Canal: getCanalActivo(),
+        Canal: canal || getCanalActivo(),
         ...(mediaId ? { ImagenMediaId: mediaId } : {}),
       }),
     })
@@ -1305,7 +1325,7 @@ export default function App() {
   // Se sacó a una función para poder REUSARLO desde la hoja del pedido que llega
   // del CRM (ver `handleEnviarHojaPedido`). Es el mismo código de siempre, ni
   // una línea distinta: no hay dos formas de mandar una foto en este inbox.
-  const subirYEnviarFoto = async (telefono, nombre, file) => {
+  const subirYEnviarFoto = async (telefono, nombre, file, canal = '') => {
     let url = ''
     try {
       const fd = new FormData(); fd.append('file', file)
@@ -1313,7 +1333,7 @@ export default function App() {
       const data = await res.json()
       if (res.ok && data.url) url = data.url
     } catch { /* seguimos por media id */ }
-    return sendImageFile(telefono, nombre, file, url)
+    return sendImageFile(telefono, nombre, file, url, canal)
   }
 
   const handleFileSelect = async (e) => {
@@ -1341,6 +1361,7 @@ export default function App() {
     }
     const telefono = activeConv.telefono
     const nombre   = activeConv.nombre
+    const canal    = getCanalActivo()   // el bucle puede durar 10 archivos con pausas
     const estadoDestino = estadoAlResponder(currentStatus)
     const archivos = imgFiles
     setImgUploading(true); setImgResult(null); setImgProgress(0)
@@ -1351,7 +1372,7 @@ export default function App() {
       let allOk = true
       let sendErr = ''
       if (isVideo) {
-        const result = await sendVideo(telefono, nombre, archivos[0].file)
+        const result = await sendVideo(telefono, nombre, archivos[0].file, canal)
         allOk = result.ok
         if (!result.ok) sendErr = result.error || ''
       } else {
@@ -1359,7 +1380,7 @@ export default function App() {
           // La url permanente en NUESTRO Storage + el envío por media id: los dos
           // pasos viven en `subirYEnviarFoto` (arriba), que es de donde salieron
           // y donde está explicado el porqué de cada uno.
-          const { ok } = await subirYEnviarFoto(telefono, nombre, archivos[i].file)
+          const { ok } = await subirYEnviarFoto(telefono, nombre, archivos[i].file, canal)
           if (!ok) allOk = false
           setImgProgress(i + 1)
           if (i < archivos.length - 1) await new Promise(r => setTimeout(r, 800))
@@ -1383,14 +1404,17 @@ export default function App() {
   // Burbuja optimista + envío de texto. Se usa DENTRO de una tarea ya encolada
   // (no encola por su cuenta), para que el texto de una respuesta rápida y sus
   // fotos cuenten como un solo bloque indivisible en la fila.
-  const enviarTextoSuelto = async (telefono, nombre, texto) => {
+  // `canal` viaja congelado igual que `telefono`: esta función corre DENTRO de la
+  // tarea encolada, o sea cuando le toca salir, y para entonces el canal activo
+  // del módulo puede ser el del chat que el vendedor abrió mientras tanto.
+  const enviarTextoSuelto = async (telefono, nombre, texto, canal = '') => {
     const tmpMsg = {
       id: 'tmp_' + Date.now(), telefono, nombre, mensaje: texto,
       direccion: 'SALIENTE', timestamp: new Date().toISOString(), estado: 'enviado',
     }
     setConvs(prev => prev.map(c => c.telefono === telefono ? { ...c, msgs: [...c.msgs, tmpMsg], last: tmpMsg } : c))
     pendingRef.current[telefono] = [...(pendingRef.current[telefono] || []), tmpMsg]
-    return sendReply(telefono, nombre, texto)
+    return sendReply(telefono, nombre, texto, '', canal)
   }
 
   // ── Quick reply con imagen ────────────────────────────────────
@@ -1400,8 +1424,13 @@ export default function App() {
     if (!activeConv) return
     if (canalSinResolver()) { avisarCanalSinResolver(); return }
     // Se congelan acá: el vendedor puede cambiar de chat mientras esto sale.
+    // El CANAL también, y es el que más duele: leerlo cuando cada foto sale
+    // significaba que a mitad de tanda las que faltaban se iban por el número
+    // del chat nuevo (a los 24 clientes que escribieron a los dos números les
+    // llega por el equivocado; al resto Meta se lo rechaza y la tanda se corta).
     const telefono = activeConv.telefono
     const nombre   = activeConv.nombre
+    const canal    = getCanalActivo()
     const estadoDestino = estadoAlResponder(currentStatus)
 
     const imgs = Array.from({ length: 10 }, (_, i) =>
@@ -1417,7 +1446,10 @@ export default function App() {
     // sus fotos se van preparando mientras tanto y cuando le toque salir ya están
     // listas. La segunda vez esto responde de la caché y es instantáneo; antes cada
     // foto se descargaba y se subía a Meta recién en su turno.
-    const idsPromesa = imgs.length ? precacheMedia(imgs) : Promise.resolve({})
+    // El `canal` va también acá: un media_id de Meta vale SOLO para el phone_id
+    // que lo subió, así que precachear con el canal de otra pestaña deja ids que
+    // el envío de esta tanda no puede usar.
+    const idsPromesa = imgs.length ? precacheMedia(imgs, canal) : Promise.resolve({})
 
     // Toda la respuesta rápida es UNA tarea: nada puede meterse entre su texto y
     // sus fotos, ni entre una foto y la siguiente.
@@ -1432,10 +1464,10 @@ export default function App() {
       const tmpMsg = { id: 'tmp_' + Date.now(), telefono, nombre, mensaje: reply.text, botones: validBtns, direccion: 'SALIENTE', timestamp: new Date().toISOString(), estado: 'enviado' }
       setConvs(prev => prev.map(c => c.telefono === telefono ? { ...c, msgs: [...c.msgs, tmpMsg], last: tmpMsg } : c))
       pendingRef.current[telefono] = [ ...(pendingRef.current[telefono] || []), tmpMsg ]
-      await sendInteractiveButtons(telefono, nombre, reply.text, validBtns)
+      await sendInteractiveButtons(telefono, nombre, reply.text, validBtns, canal)
       avanzar()
     } else if (reply.text) {
-      await enviarTextoSuelto(telefono, nombre, reply.text)
+      await enviarTextoSuelto(telefono, nombre, reply.text, canal)
       avanzar()
     }
 
@@ -1444,7 +1476,7 @@ export default function App() {
     // alcanza con un respiro corto.
     const ids = await idsPromesa
     for (let i = 0; i < imgs.length; i++) {
-      await sendImageUrl(telefono, nombre, imgs[i], ids[imgs[i]] || '')
+      await sendImageUrl(telefono, nombre, imgs[i], ids[imgs[i]] || '', canal)
       avanzar()
       if (i < imgs.length - 1) await new Promise(r => setTimeout(r, 150))
     }
@@ -1464,9 +1496,10 @@ export default function App() {
     if (canalSinResolver()) { avisarCanalSinResolver(); return }
     const telefono = activeConv.telefono
     const nombre   = activeConv.nombre
+    const canal    = getCanalActivo()
     const estadoDestino = estadoAlResponder(currentStatus)
     return encolar(telefono, async () => {
-      const ok = await sendImageUrl(telefono, nombre, imageUrl)
+      const ok = await sendImageUrl(telefono, nombre, imageUrl, '', canal)
       if (ok) changeStatus(telefono, estadoDestino)
     })
   }
@@ -1481,12 +1514,13 @@ export default function App() {
     if (canalSinResolver()) { avisarCanalSinResolver(); return }
     const telefono = activeConv.telefono
     const nombre   = activeConv.nombre
+    const canal    = getCanalActivo()
     const estadoDestino = estadoAlResponder(currentStatus)
     return encolar(telefono, async () => {
       if (modo === 'info') {
-        await enviarTextoSuelto(telefono, nombre, `${p.title}${p.price ? ` — $${p.price}` : ''}`)
+        await enviarTextoSuelto(telefono, nombre, `${p.title}${p.price ? ` — $${p.price}` : ''}`, canal)
       }
-      const ok = await sendImageUrl(telefono, nombre, p.image)
+      const ok = await sendImageUrl(telefono, nombre, p.image, '', canal)
       if (ok) changeStatus(telefono, estadoDestino)
       setTimeout(load, 4000)
     })
@@ -1526,6 +1560,7 @@ export default function App() {
     // esta vista no puede sobrevivir a un cambio de cliente.
     const telefono = activeConv.telefono
     const nombre   = activeConv.nombre
+    const canal    = getCanalActivo()
     const estadoDestino = estadoAlResponder(currentStatus)
     return encolar(telefono, async () => {
       let archivo
@@ -1534,7 +1569,7 @@ export default function App() {
       } catch {
         return { ok: false, error: 'la imagen llegó dañada' }
       }
-      const res = await subirYEnviarFoto(telefono, nombre, archivo)
+      const res = await subirYEnviarFoto(telefono, nombre, archivo, canal)
       if (res?.ok) {
         await changeStatus(telefono, estadoDestino)
         setTimeout(load, 4000)
@@ -1572,6 +1607,7 @@ export default function App() {
     if (validBtns.length === 0) return
     const telefono = activeConv.telefono
     const nombre   = activeConv.nombre
+    const canal    = getCanalActivo()
     const cuerpo   = input.trim()
     const estadoDestino = estadoAlResponder(currentStatus)
     setSendingBtns(true)
@@ -1587,7 +1623,7 @@ export default function App() {
       }
       setConvs(prev=>prev.map(c=>c.telefono===telefono?{...c,msgs:[...c.msgs,tmpMsg],last:tmpMsg}:c))
       pendingRef.current[telefono] = [...(pendingRef.current[telefono] || []), tmpMsg]
-      const result = await sendInteractiveButtons(telefono, nombre, cuerpo, validBtns)
+      const result = await sendInteractiveButtons(telefono, nombre, cuerpo, validBtns, canal)
       setSendingBtns(false)
       setToast(result)
       setTimeout(()=>setToast(null),4000)
@@ -1880,7 +1916,19 @@ export default function App() {
                   temp={getTemp(conv.telefono)}
                   alerta={alertaVentana(conv.telefono)}
                   msgSnippet={searchingMsgs ? matchSnippet(conv) : null}
-                  colorCanal={colorDeCanal(phoneIdDe(conv.telefono))}
+                  // La línea de color dice POR CUÁL NÚMERO va a salir la
+                  // respuesta, así que tiene que salir de quien decide el envío.
+                  // En GENERAL decide la conversación (`openConv` arma el canal
+                  // con `phoneIdDe`). En MANDI/REPUBLIC decide la PESTAÑA: la
+                  // agenda se pide sin filtro de canal y una fila es UNA sola
+                  // por teléfono, con el phone_id del ÚLTIMO mensaje — para un
+                  // cliente que escribió a los dos números, `phoneIdDe` devuelve
+                  // el otro número y la fila se pintaba del color contrario al
+                  // que iba a usar el envío (medido en producción: 4 filas
+                  // naranjas en MANDI y 7 verdes en REPUBLIC).
+                  colorCanal={linea === CANAL_GENERAL
+                    ? colorDeCanal(phoneIdDe(conv.telefono))
+                    : colorDeCanal(phoneIdDeCanal(linea))}
                 />
               ))}
             </>)}
