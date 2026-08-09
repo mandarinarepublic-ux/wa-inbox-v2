@@ -15,6 +15,7 @@ import AvisoSesion from '@/components/AvisoSesion'
 import { actualizarNoLeidos, notificar } from '@/lib/notif'
 import { hayQueConfirmarDescarte, AVISO_DESCARTAR_PEDIDO, anchoPanelPedido, anchoPanelMinimo, bytesDeDataUrl, MAX_HOJA_BYTES } from '@/lib/pedido-manual'
 import { decidirArrastre } from '@/lib/arrastre'
+import { ordenarBandeja } from '@/lib/orden-bandeja'
 
 // ── Ancho del panel derecho: UNA sola fuente ──────────────────────
 // Lo usan el asa de arrastre, la restauración de localStorage y el ensanchado
@@ -1092,13 +1093,17 @@ export default function App() {
   // Filtros: bandeja (estado), temperatura (Eje 2), o venta (idVenta). Un solo filtro
   // activo a la vez. Al BUSCAR mostramos TODOS los resultados sin importar el filtro.
   const esTemp = (key) => TEMP_META[key] !== undefined
-  const filtered = isSearching
-    ? searched
-    : searched.filter(c =>
-        filter === 'venta' ? esVentaActiva(c.telefono)
-        : esTemp(filter)   ? getTemp(c.telefono) === filter
-        :                    getStatus(c.telefono) === filter
-      )
+  const filtered = ordenarBandeja(
+    isSearching
+      ? searched
+      : searched.filter(c =>
+          filter === 'venta' ? esVentaActiva(c.telefono)
+          : esTemp(filter)   ? getTemp(c.telefono) === filter
+          :                    getStatus(c.telefono) === filter
+        ),
+    isSearching ? '' : filter,
+    (tel) => contacts[tel]?.ultimoEntranteAt || null,
+  )
   const counts = {
     pendiente:  searched.filter(c => getStatus(c.telefono) === 'pendiente').length,
     atendido:   searched.filter(c => getStatus(c.telefono) === 'atendido').length,
