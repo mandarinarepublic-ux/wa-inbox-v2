@@ -683,11 +683,17 @@ export default function App() {
    * pertenece a la bandeja anterior: si quedara el chat abierto o los hilos en
    * memoria, se vería una conversación del otro número y la respuesta saldría
    * por el canal equivocado.
+   *
+   * Devuelve `true` si el salto se hizo de verdad y `false` si se abortó (el
+   * usuario canceló el aviso de descartar el PEDIDO MANUAL). Los llamadores que
+   * encadenan un `openConv(...)` justo después TIENEN que revisar este valor:
+   * si no, `openConv` vuelve a preguntar por su cuenta y, si ahí el usuario
+   * acepta, el chat se abre con la pestaña sin haberse movido (ver Step 3b).
    */
   const cambiarLinea = (id) => {
     // Salir de la pestaña de chats desmonta el panel derecho entero (`esChat`),
     // así que el formulario también se pierde acá.
-    if (id !== linea && !puedoDejarLaConversacion(null)) return
+    if (id !== linea && !puedoDejarLaConversacion(null)) return false
     // GENERAL cuenta como pestaña de chat (comparte la vista de abajo con
     // MANDI/REPUBLIC), pero NO es un canal con número propio — por eso las dos
     // ramas de abajo excluyen `id === CANAL_GENERAL` explícitamente: entrar a
@@ -695,9 +701,15 @@ export default function App() {
     // armado en vez de pisarlo con `setCanalActivo('GENERAL')`, que dejaría el
     // módulo de envíos sin canal (null) por CUALQUIER camino que llegue a GENERAL,
     // no solo desde MANDI/REPUBLIC.
-    const esChat = (x) => x === CANAL_GENERAL || CANALES.some(c => c.id === x)
-    const eraChat = esChat(linea)
-    const vaAChat = esChat(id)
+    //
+    // Nombrada `esPestanaDeChat` y no `esChat` (como en la primera entrega) para
+    // no sombrear el `esChat` de arriba: ese sombreado, aunque inofensivo acá
+    // porque nadie lo usa dentro de esta función, dejaba una trampa para
+    // cualquier uso futuro (TDZ / "siempre truthy" si alguien confundía cuál era
+    // la función y cuál el booleano).
+    const esPestanaDeChat = (x) => x === CANAL_GENERAL || CANALES.some(c => c.id === x)
+    const eraChat = esPestanaDeChat(linea)
+    const vaAChat = esPestanaDeChat(id)
     if (vaAChat && eraChat && id !== linea && id !== CANAL_GENERAL) {
       setCanalActivo(id)        // manda a api-client: lecturas y envíos van por acá
       setCanalArmado(id)        // el estado de React no puede quedar atrás del módulo
@@ -716,8 +728,42 @@ export default function App() {
       // donde corresponde. Si no había ninguno, queda el principal — nunca null,
       // porque un envío con Canal vacío sale por el número equivocado.
       setCanalActivo(canalArmado || CANAL_POR_DEFECTO)
+      // Sin esto la columna tarda hasta el próximo poll (10-25 s) en perder el
+      // filtro del número anterior: entrabas a "Los dos" y por un rato veías
+      // solo uno. Mismo `setTimeout(load, 0)` que ya usa la rama de arriba.
+      setTimeout(load, 0)
+    } else if (eraChat && !vaAChat) {
+      // Salir de una pestaña de CHAT (MANDI, REPUBLIC o GENERAL) hacia una que
+      // no lo es (SOCIAL/CONTACTOS/AUTO) no tenía rama: el canal armado se
+      // quedaba con el último valor, invisible para esas pestañas.
+      // `Contactos.jsx` (envío por ventana 24h/plantillas) manda por
+      // `CANAL_ACTIVO` sin mostrar ni preguntar por cuál canal — antes de
+      // GENERAL, ese valor heredado era al menos "la pestaña de la que
+      // vinías", visible en la pantalla un segundo antes. Con GENERAL de por
+      // medio podía ser el canal del último chat que abriste dentro de la
+      // cola mezclada, sin ninguna pista en CONTACTOS de cuál es. Se deja en
+      // el valor MÁS predecible posible: el canal por defecto, el mismo con
+      // el que arranca el módulo (`lib/api-client.js`).
+      setCanalActivo(CANAL_POR_DEFECTO)
+      setCanalArmado(CANAL_POR_DEFECTO)
     }
+    // La plantilla de "ventana cerrada" pertenece al chat que estabas mirando, y
+    // manda con `CANAL_ACTIVO` (`sendTemplate`) sin guard propio. Cambiar de
+    // pestaña acaba de mover ese canal en casi todas las ramas de arriba, así que
+    // un modal sobreviviente mandaría por el número de la pestaña NUEVA a un
+    // cliente de la vieja. Su fondo oscuro tapa la barra de pestañas, o sea que
+    // con el mouse esto no se alcanza; con el teclado (TAB hasta un botón de
+    // pestaña, que sigue siendo enfocable detrás del fondo) sí. Cerrarlo es
+    // gratis y reabrirlo es un clic — igual que en `openConv`.
+    if (id !== linea) setShowTplModal(false)
+    // `lineaRef` normalmente la sincroniza el `useEffect` de más abajo, pero
+    // ESE corre después del commit — un pelín tarde para `openConv`, que puede
+    // ejecutarse en el mismo tick, justo después de este `cambiarLinea` (Step
+    // 3b). Fijarla acá, ya, es lo que le permite a `openConv` leer la pestaña
+    // DESTINO en vez de la que ya se dejó atrás.
+    lineaRef.current = id
     setLinea(id)
+    return true
   }
 
   /**
@@ -741,6 +787,14 @@ export default function App() {
     // salto desde un aviso push. Con esto acá, los tres quedan cubiertos.
     if (!puedoDejarLaConversacion(telefono)) return
 
+    // Cierra la plantilla de "ventana cerrada" del chat ANTERIOR si había una
+    // abierta: sin esto, un `openConv` que llega de un camino que no pasa por
+    // un clic del vendedor (el salto desde un aviso push) podía cambiar de
+    // conversación con el modal todavía abierto, y el modal manda con
+    // `CANAL_ACTIVO` — el de la conversación VIEJA si el canal de la nueva no
+    // se llegó a resolver. Mejor cerrarlo siempre: reabrirlo es un clic.
+    setShowTplModal(false)
+
     // ⚠️ ORDEN CRÍTICO: armar el canal ANTES de tocar `active`. El hilo se pide
     // con CANAL_ACTIVO (fetchHilo) y el envío inyecta Canal: getCanalActivo()
     // (postSaliente). Si esto corriera después, el primer hilo se pediría por
@@ -759,11 +813,19 @@ export default function App() {
     // podría dejar CANAL_ACTIVO apuntando al número que NO es el de la pestaña
     // encendida.
     //
+    // ⚠️ `lineaRef.current`, NO `linea`. `linea` es el valor de ESTE render; si
+    // `openConv` corre justo después de `cambiarLinea` en el mismo tick (Step
+    // 3b: abrirChatDesdeContactos, el salto desde un aviso push), `linea`
+    // todavía es la pestaña VIEJA — React no vuelve a renderizar hasta que el
+    // tick termina. `cambiarLinea` ya deja `lineaRef.current` al día de forma
+    // síncrona (ver ahí), así que leer la ref acá es lo único que garantiza
+    // "la pestaña a la que se está saltando", no "la que se estaba dejando".
+    //
     // Asignación idempotente y sin condición contra `canalArmado`: lo que
     // importa es la verdad del envío (CANAL_ACTIVO, en el módulo), no si el
     // estado de React ya "cree" que está en ese canal — `cambiarLinea` puede
     // haber movido CANAL_ACTIVO sin que canalArmado se enterara.
-    if (linea === CANAL_GENERAL) {
+    if (lineaRef.current === CANAL_GENERAL) {
       const canal = canalDePhoneId(phoneIdDe(telefono))
       if (canal) {
         setCanalActivo(canal)
@@ -793,17 +855,31 @@ export default function App() {
     cargarHilo(telefono)
   }
 
-  // Desde la pestaña CONTACTOS: salta a la conversación en MANDI. El teléfono del
-  // directorio puede venir en otro formato → matcheamos por últimos 9 dígitos.
+  // Desde la pestaña CONTACTOS: salta a la conversación, en SU pestaña. El
+  // teléfono del directorio puede venir en otro formato → matcheamos por
+  // últimos 9 dígitos.
   const abrirChatDesdeContactos = (telefono) => {
     const t9 = String(telefono).replace(/\D/g, '').slice(-9)
     const conv = convs.find(c => String(c.telefono).replace(/\D/g, '').slice(-9) === t9)
+    const destino = conv ? conv.telefono : telefono
     // Por `cambiarLinea` y no por `setLinea` a pelo: con GENERAL en el medio,
     // un `setLinea` suelto movía la pestaña sin avisarle a `canalArmado` ni al
     // canal activo del módulo — la pestaña mostraba MANDI mientras el envío
     // seguía armado sobre el canal de la pestaña anterior.
-    cambiarLinea(CANAL_POR_DEFECTO)
-    openConv(conv ? conv.telefono : telefono)
+    //
+    // ⚠️ El destino es el canal DE ESTE CONTACTO (`phoneIdDe`/`canalDePhoneId`,
+    // los mismos helpers de siempre), no `CANAL_POR_DEFECTO` a ciegas. La
+    // primera entrega mandaba siempre a MANDI: si estabas viendo REPUBLIC y
+    // saltabas a un contacto de REPUBLIC desde CONTACTOS, la pestaña se movía a
+    // MANDI y CUALQUIER respuesta a ese cliente salía por el número de MANDI.
+    // `CANAL_POR_DEFECTO` queda solo de último recurso, para el contacto nuevo
+    // sin ficha ni mensaje previo que `phoneIdDe` no puede resolver todavía.
+    const canalDestino = canalDePhoneId(phoneIdDe(destino)) || CANAL_POR_DEFECTO
+    // Si `cambiarLinea` abortó (el usuario canceló el aviso de descartar el
+    // PEDIDO MANUAL), NO abrimos el chat: `openConv` volvería a preguntar y,
+    // si ahí se acepta, el chat se abriría con la pestaña sin haberse movido.
+    if (!cambiarLinea(canalDestino)) return
+    openConv(destino)
   }
 
   // ── Abrir un chat puntual desde un aviso push ────────────────────────────────
@@ -830,10 +906,16 @@ export default function App() {
     const t9 = String(pedido).replace(/\D/g, '').slice(-9)
     const conv = convs.find(c => String(c.telefono).replace(/\D/g, '').slice(-9) === t9)
     if (!conv) return          // aún no llegó en este ciclo: reintenta al siguiente
+    // Mismo motivo que en abrirChatDesdeContactos: el destino es el canal DE
+    // ESTE CONTACTO, no `CANAL_POR_DEFECTO` a ciegas.
+    const canalDestino = canalDePhoneId(phoneIdDe(conv.telefono)) || CANAL_POR_DEFECTO
+    // Si `cambiarLinea` abortó (aviso de PEDIDO MANUAL cancelado), NO se
+    // consume el pedido: `pedidoRef.current` se queda como estaba, para que el
+    // próximo `convs` (o cuando el usuario por fin suelte la conversación)
+    // reintente el mismo salto. Si se limpiara igual, el aviso del push se
+    // perdía para siempre con solo cancelar un diálogo.
+    if (!cambiarLinea(canalDestino)) return
     pedidoRef.current = null
-    // Mismo motivo que en abrirChatDesdeContactos: `cambiarLinea` mantiene
-    // canalArmado y CANAL_ACTIVO sincronizados con la pestaña.
-    cambiarLinea(CANAL_POR_DEFECTO)
     openConv(conv.telefono)
   }, [convs])
 
@@ -1623,7 +1705,17 @@ export default function App() {
               // Encendido cuando estás en GENERAL y el chat abierto es de este
               // número: la pestaña deja de ser "dónde estoy" y pasa a ser
               // "por acá sale lo que escribas".
-              armado: linea === CANAL_GENERAL && canalArmado === c.id,
+              //
+              // ⚠️ `&& !canalSinResolver()`: cuando el canal del chat abierto NO
+              // se puede resolver, la caja de escribir se reemplaza por el cartel
+              // rojo que dice justamente que no se sabe por dónde sale la
+              // respuesta. Sin esta condición, al mismo tiempo seguía encendido el
+              // `◉` de la pestaña del chat ANTERIOR (`canalArmado` conserva el
+              // último valor a propósito, ver la rama GENERAL de `cambiarLinea`):
+              // la pantalla afirmaba "sale por MANDI" y negaba "no sé por dónde
+              // sale" en el mismo golpe de vista. Manda el cartel: si no se sabe,
+              // no se muestra nada armado.
+              armado: linea === CANAL_GENERAL && canalArmado === c.id && !canalSinResolver(),
             })),
             { id:'SOCIAL',   label:'SOCIAL',   icon:'🌐', color:'#1877F2', sub:'FB · IG' },
             { id:'CONTACTOS',label:'CONTACTOS',icon:'👥', color:'#38bdf8', sub:'Directorio' },
