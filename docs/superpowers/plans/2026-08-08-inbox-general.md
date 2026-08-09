@@ -449,13 +449,28 @@ Reemplazar el comienzo de `openConv` por:
     // (Tarea 2). Tiene que ser el mismo: si el color y el canal armado se
     // calcularan por separado podrían discrepar, y la línea diría un número
     // mientras la respuesta sale por el otro.
-    const canal = canalDePhoneId(phoneIdDe(telefono))
-    if (canal && canal.id !== canalArmado) {
-      setCanalActivo(canal.id)
-      setCanalArmado(canal.id)
-      // Los hilos cacheados NO se botan: `hilosRef` está indexado por teléfono, y
-      // cada conversación pertenece a un solo canal (comprobado contra la base el
-      // 8-ago-2026). Botarlos acá haría que GENERAL recargue todo a cada clic.
+    // ⚠️ CORREGIDO el 8-ago-2026 tras la revisión de la Tarea 3. La versión
+    // anterior de este plan tenía DOS errores acá:
+    //
+    // 1. `canalDePhoneId` devuelve un STRING, no un objeto: `canal.id` era
+    //    siempre `undefined`.
+    // 2. Comparar contra `canalArmado` (estado de React) no responde la pregunta
+    //    que importa. Lo que decide el número de salida es `CANAL_ACTIVO`, una
+    //    variable de módulo de `lib/api-client.js`, y las dos se desincronizan.
+    //    Con esa guarda, abrir en REPUBLIC el chat de un cliente que también le
+    //    escribió a MANDI convertía la columna entera en la de MANDI con la
+    //    pestaña de REPUBLIC encendida.
+    //
+    // Por eso: asignación idempotente, y SOLO dentro de GENERAL — en MANDI y
+    // REPUBLIC manda la pestaña, como hasta hoy.
+    if (linea === CANAL_GENERAL) {
+      const canal = canalDePhoneId(phoneIdDe(telefono))
+      if (canal) { setCanalActivo(canal); setCanalArmado(canal) }
+      // Los hilos cacheados NO se botan: `hilosRef` se indexa por teléfono, con
+      // UNA entrada por teléfono y no por canal. ⚠️ Para los 24 clientes que
+      // escribieron a los dos números, en GENERAL eso puede mezclar mensajes de
+      // ambos bajo la misma clave. Es una limitación conocida y aceptada:
+      // botarlos acá haría que GENERAL recargue todo a cada clic.
     }
 
     setActive(telefono)
@@ -632,6 +647,45 @@ Y en la rama que limpia todo al saltar entre números, excluir GENERAL del borra
 ```
 
 ⚠️ Cuando **sales** de GENERAL hacia MANDI o REPUBLIC, sí tiene que limpiar: te llevas el chat abierto de un número a la pestaña de otro. Esa rama ya lo hace porque `id !== CANAL_GENERAL` se cumple.
+
+- [ ] **Step 3b: Los dos caminos que se saltan `cambiarLinea`**
+
+Detectado en la revisión de la Tarea 3. `abrirChatDesdeContactos` (≈línea 791) y el salto desde un aviso push (≈línea 820) hacen `setLinea('MANDI')` **a pelo**, sin `setCanalActivo`. Con GENERAL existiendo, eso rompe de dos formas: la pestaña se mueve a MANDI mientras el canal armado sigue en REPUBLIC, y como `openConv` lee el `linea` del render vigente, el bloque de GENERAL corre mientras la pestaña ya se está moviendo.
+
+En los dos sitios, reemplazar el `setLinea('MANDI')` suelto por la función que ya sabe hacerlo bien:
+
+```js
+    cambiarLinea(CANAL_POR_DEFECTO)
+```
+
+⚠️ Verifica que en esos dos sitios `cambiarLinea` esté definida antes de usarse y que no rompa el flujo (los dos abren un chat justo después). Si el orden lo impide, deja el `setLinea` pero agrégale al lado `setCanalActivo(CANAL_POR_DEFECTO)` y `setCanalArmado(CANAL_POR_DEFECTO)`, que es lo mínimo para que no queden desincronizados.
+
+- [ ] **Step 3c: En GENERAL, sin canal conocido no se puede escribir**
+
+Decisión tomada tras la revisión de la Tarea 3, y es la regla de seguridad de toda la pestaña.
+
+`phoneIdDe(tel)` devuelve `''` cuando la ficha no tiene `phone_id` **y** no hay mensaje en `convs`. Pasa de verdad: los chats que nacen de un envío saliente (una plantilla desde CONTACTOS) se insertan sin `phone_id`. En GENERAL eso significaría **responderle al cliente B por el número del cliente A** que abriste antes, en silencio y dependiendo del historial de clics.
+
+Que la fila salga sin línea de color NO es aviso suficiente: una línea sin pintar se lee como "no hay dato", no como "peligro".
+
+Entonces, cuando `linea === CANAL_GENERAL` y `phoneIdDe(activeConv?.telefono)` no resuelve ningún canal, **bloquea el envío**: deshabilita la caja de texto y muestra en su lugar un aviso claro.
+
+```jsx
+{linea === CANAL_GENERAL && activeConv && !canalDePhoneId(phoneIdDe(activeConv.telefono)) ? (
+  <div style={{
+    padding: '12px 16px', margin: 12, borderRadius: 10,
+    background: 'rgba(248,113,113,.12)', border: '1px solid rgba(248,113,113,.45)',
+    color: '#f87171', fontSize: 12, lineHeight: 1.5,
+  }}>
+    ⚠️ <b>No sé por cuál número responderle a este chat.</b><br />
+    Ábrelo desde la pestaña de MANDI o de REPUBLIC, la que corresponda, y contéstale desde ahí.
+  </div>
+) : (
+  /* acá va la caja de escribir tal como está hoy */
+)}
+```
+
+⚠️ **Es un bloqueo, no un aviso que se pueda ignorar.** Mandar por el canal por defecto sería determinista pero igual de equivocado: le escribirías por MANDI a un cliente de REPUBLIC.
 
 - [ ] **Step 4: Comprobar a mano — la prueba de verdad**
 
