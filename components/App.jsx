@@ -162,6 +162,11 @@ export default function App() {
   // por el número equivocado.
   const [canalArmado, setCanalArmado] = useState(CANAL_POR_DEFECTO)
   const [pendientes, setPendientes] = useState({})   // { phoneId: nº pendientes }
+  // Pendientes de GENERAL: PERSONAS distintas. Va aparte y no se deriva de
+  // `pendientes`, porque quien está pendiente en los dos números suma en los dos
+  // botones de número y sumarlos contaría a esa persona dos veces. `null` = todavía
+  // no llegó del servidor (ver el badge de GENERAL más abajo).
+  const [pendientesTotal, setPendientesTotal] = useState(null)
   // Las dos pestañas de número Y la de GENERAL comparten la vista de chat de
   // abajo: sin CANAL_GENERAL acá, la pestaña 📥 GENERAL se ve en blanco porque
   // ninguna de las otras vistas (SOCIAL/CONTACTOS/AUTO) se enciende para ella.
@@ -290,6 +295,9 @@ export default function App() {
     const ctList = sync?.contactos ?? null
     // Pendientes de TODOS los canales (incluido el que no se está mirando).
     if (sync?.pendientes) setPendientes(sync.pendientes)
+    // Solo si vino un número: `null` significa que la lectura falló, y ahí es mejor
+    // conservar el valor anterior que pintar un 0 que diría "ya contestaste a todos".
+    if (typeof sync?.pendientesTotal === 'number') setPendientesTotal(sync.pendientesTotal)
     // Combinamos 3 fuentes (buildConvs deduplica por id de mensaje):
     //  · lista → ÚLTIMO msg de CADA conversación sobre TODO el historial → aparecen
     //            también los chats viejos que la ventana de 3000 ocultaba (el bug de
@@ -1735,11 +1743,16 @@ export default function App() {
           zIndex:200, overflowX:'auto',
         }}>
           {[
-            // GENERAL va primero: es la cola de trabajo, la que se mira todo el
-            // día. Su contador suma los pendientes de todos los números.
+            // GENERAL va primero: es la cola de trabajo, la que se mira todo el día.
+            // Su contador son PERSONAS distintas, y por eso NO es la suma de los
+            // otros botones: quien tiene un mensaje sin contestar en los dos números
+            // aparece en los dos contadores de número —correcto, son dos bandejas—
+            // pero abajo, en esta cola, es UNA sola fila. Sumar contaba de más.
+            // La suma queda de respaldo por si el total no llegó: prefiero un número
+            // levemente alto a un botón vacío que diga "ya contestaste a todos".
             {
               id: CANAL_GENERAL, label:'GENERAL', icon:'📥', color:'#a78bfa', sub:'Los dos',
-              badge: Object.values(pendientes).reduce((a, b) => a + (b || 0), 0),
+              badge: pendientesTotal ?? Object.values(pendientes).reduce((a, b) => a + (b || 0), 0),
               title:'Todos los números en una sola cola',
             },
             // Los dos siguientes son NÚMEROS (canales), no aplicaciones distintas:

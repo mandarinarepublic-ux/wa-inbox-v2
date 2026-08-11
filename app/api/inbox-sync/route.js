@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getLista, getMensajes } from '@/lib/mensajes'
 import { getContactos } from '@/lib/contactos'
-import { contarPendientesPorCanalSupabase } from '@/lib/inbox-supabase'
+import { contarPendientesPorCanalSupabase, contarPendientesTotalSupabase } from '@/lib/inbox-supabase'
 
 // Sync unificado del inbox: UNA sola función en vez de 3 (/api/lista +
 // /api/mensajes + /api/contactos) por cada ciclo de polling → 1/3 de las
@@ -15,7 +15,7 @@ export async function GET(req) {
     // ?canal=todos es la pestaña GENERAL: null = sin filtro de número.
     const pedido = new URL(req.url).searchParams.get('canal') || undefined
     const canal = pedido === 'todos' ? null : pedido
-    const [lista, rows, contactos, pendientes] = await Promise.all([
+    const [lista, rows, contactos, pendientes, pendientesTotal] = await Promise.all([
       getLista(canal),
       getMensajes(canal),
       // Contactos SIN filtro de canal, a propósito. El estado (pendiente, atendido,
@@ -30,8 +30,14 @@ export async function GET(req) {
       // De TODOS los canales, no solo del activo: alimenta el contador de la
       // pestaña que no se está mirando.
       contarPendientesPorCanalSupabase().catch(() => ({})),
+      // El de GENERAL va aparte y NO es la suma de los de arriba: quien está
+      // pendiente en los dos números cuenta en los dos botones de número, pero es
+      // UNA sola fila en la cola de GENERAL. Ver contarPendientesTotalSupabase.
+      // `null` (no 0) si falla, para que la pantalla sepa distinguir "no vino" de
+      // "no hay ninguno" y caiga a la suma en vez de mostrar un 0 falso.
+      contarPendientesTotalSupabase().catch(() => null),
     ])
-    return NextResponse.json({ lista, rows, contactos, pendientes }, {
+    return NextResponse.json({ lista, rows, contactos, pendientes, pendientesTotal }, {
       // Cache COMPARTIDO en el edge, corto (5s) para no agregar latencia visible al
       // vendedor: varias pestañas que pollean dentro de la misma ventana comparten
       // UNA ejecución de origen. stale-while-revalidate sirve al instante y revalida.
