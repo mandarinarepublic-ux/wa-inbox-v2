@@ -17,6 +17,15 @@ import { chatsQueAvisar, textoAviso, enHorarioLaboral } from '@/lib/pendientes'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
+// El link tiene que apuntar SIEMPRE al dominio real. `req.url` en una invocacion de
+// cron trae la URL del despliegue (wa-inbox-v2-xxxx.vercel.app), donde NO existe la
+// cookie de sesion: tocar ese link desde el celular te deja fuera del inbox. Medido
+// en produccion el 13-ago-2026, con los avisos ya andando.
+// Se puede sobreescribir con INBOX_URL sin tocar codigo.
+const BASE_URL = String(process.env.INBOX_URL || 'https://inbox.apps.mandarinaec.com')
+  .replace(/[^\x21-\x7E]/g, '')   // por si la variable llega con BOM desde PowerShell
+  .replace(/\/+$/, '')            // sin barra final: el link ya la pone
+
 function autorizado(req) {
   const secret = process.env.CRON_SECRET
   const auth = req.headers.get('authorization') || ''
@@ -43,7 +52,6 @@ export async function GET(req) {
   }
 
   const ahora = Date.now()
-  const baseUrl = new URL(req.url).origin
 
   // ⚠️ `getContactos(null)` con el null EXPLÍCITO, nunca `getContactos()`.
   // La firma es `getContactosSupabase(canal = canalPorDefecto())`: sin argumento
@@ -78,7 +86,7 @@ export async function GET(req) {
     return NextResponse.json({ ok: true, avisados: 0, pendientes: aAvisar.length, motivo: 'sin-config' })
   }
 
-  const r = await enviarTelegram(textoAviso(aAvisar, ahora, baseUrl))
+  const r = await enviarTelegram(textoAviso(aAvisar, ahora, BASE_URL))
   if (!r.ok) {
     // NO se estampa la marca si el envío falló: así el próximo ciclo reintenta.
     console.error('[cron/pendientes] Telegram falló:', r.motivo)
