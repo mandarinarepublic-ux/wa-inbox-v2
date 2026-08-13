@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert'
 import {
   horaEcuador, enHorarioLaboral, chatsQueAvisar, textoAviso, escaparHtml,
-  ESPERA_MINIMA_MS, REPETIR_CADA_MS,
+  ESPERA_MINIMA_MS, REPETIR_CADA_MS, ESPERA_MAXIMA_MS,
 } from '../lib/pendientes.js'
 
 const MIN = 60 * 1000
@@ -144,4 +144,39 @@ test('pero si el aviso es POSTERIOR al entrante, la ventana de 30 min manda', ()
     ultimoAvisoTelegramAt: haceMin(5),
   })
   assert.equal(chatsQueAvisar([c], AHORA).length, 0)
+})
+
+test('el borde del techo: exactamente 24h todavia avisa', () => {
+  assert.equal(chatsQueAvisar([chat({ ultimoEntranteAt: haceMin(24 * 60) })], AHORA).length, 1)
+})
+
+test('el borde del techo: un pelo mas de 24h ya NO avisa', () => {
+  const viejo = new Date(AHORA - (24 * 60 * MIN + 1000)).toISOString()
+  assert.equal(chatsQueAvisar([chat({ ultimoEntranteAt: viejo })], AHORA).length, 0)
+})
+
+test('un chat abandonado no se roba el aviso del reciente', () => {
+  // El caso real del 12-ago: el de 45 dias tapaba al de 20 minutos.
+  const lista = [
+    chat({ telefono: '1', nombre: 'Vieja',   ultimoEntranteAt: new Date(AHORA - 45 * 24 * 60 * MIN).toISOString() }),
+    chat({ telefono: '2', nombre: 'Reciente', ultimoEntranteAt: haceMin(20) }),
+  ]
+  const r = chatsQueAvisar(lista, AHORA)
+  assert.equal(r.length, 1, 'solo entra el reciente')
+  assert.equal(r[0].telefono, '2')
+  assert.ok(textoAviso(r, AHORA, 'https://inbox.test').includes('Reciente'))
+})
+
+test('la constante del techo es de 24 horas', () => {
+  assert.equal(ESPERA_MAXIMA_MS, 24 * 60 * 60 * 1000)
+})
+
+test('el texto plural dice "esperando respuesta hoy", no un total de pendientes', () => {
+  const lista = chatsQueAvisar([
+    chat({ telefono: '1', nombre: 'Ana', ultimoEntranteAt: haceMin(20) }),
+    chat({ telefono: '2', nombre: 'Bea', ultimoEntranteAt: haceMin(90) }),
+  ], AHORA)
+  const t = textoAviso(lista, AHORA, 'https://inbox.test')
+  assert.ok(t.includes('esperando respuesta hoy'), `debe decir la frase nueva, salio: ${t}`)
+  assert.ok(!t.includes('chats pendientes'), `no debe decir el total de pendientes, salio: ${t}`)
 })
