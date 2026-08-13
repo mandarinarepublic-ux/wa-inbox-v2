@@ -100,12 +100,10 @@ test('tras contestar, el siguiente mensaje vuelve a sonar', () => {
 test('dentro de la ventana el aviso IGUAL se manda, solo que callado', () => {
   const ahora = Date.now()
   const hace10seg = new Date(ahora - 10 * 1000).toISOString()
-  const suena = debeSonar(hace10seg, ahora)
-  assert.equal(suena, false, 'no debe sonar')
-  // El webhook no consulta nada más para decidir el envío: manda siempre y usa
+  assert.equal(debeSonar(hace10seg, ahora), false, 'no debe sonar')
+  // El webhook no consulta nada más para decidir el envío: manda SIEMPRE y usa
   // este booleano solo como `renotify`. Si algún día alguien lo vuelve a usar
-  // como guarda de envío, este comentario y el test de arriba son la alarma.
-  assert.equal(typeof suena, 'boolean')
+  // como guarda de envío, la alarma es este comentario más el grep del Step 7.
 })
 ```
 
