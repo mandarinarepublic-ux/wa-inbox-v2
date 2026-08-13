@@ -6,7 +6,7 @@ import { guardarMensajeSupabase, existeWamidSupabase, guardarEventoCrudoSupabase
 import { archivarMedia } from '@/lib/media-archive'
 import { parseLinkpago, crearLinkPago, mensajeLinkPago } from '@/lib/dlocal'
 import { getAutomatizaciones } from '@/lib/automatizaciones'
-import { enviarPush, cuerpoDeMensaje, debeSonar } from '@/lib/push'
+import { enviarPush, avisoDeEntrante } from '@/lib/push'
 import { decidirIA } from '@/lib/ia-canal'
 import { extraer } from '@/lib/wa-mensaje'
 import { extraerEchoes } from '@/lib/echoes'
@@ -150,15 +150,7 @@ async function procesar(nuevos, origin) {
     const t = tail9(m.telefono)
     if (avisados.has(t)) return
     avisados.add(t)
-    const nombre = m.nombre || m.telefono
-    await enviarPush({
-      titulo: `💬 ${nombre}`,
-      cuerpo: cuerpoDeMensaje({ tipo: m.tipo, contenido: m.contenido }),
-      url:    `/inbox?tel=${encodeURIComponent(m.telefono)}`,
-      tag:    `chat-${t}`,
-      tel:    m.telefono,
-      renotify: debeSonar(ultimoPushAtDe(m.telefono), Date.now()),
-    })
+    await enviarPush(avisoDeEntrante(m, ultimoPushAtDe(m.telefono), Date.now()))
     await marcarPush(m.telefono)
   }
 

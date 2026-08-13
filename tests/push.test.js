@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert'
-import { recortar, cuerpoDeMensaje, debeSonar, VENTANA_SONIDO_MS } from '../lib/push.js'
+import { recortar, cuerpoDeMensaje, debeSonar, VENTANA_SONIDO_MS, avisoDeEntrante } from '../lib/push.js'
 
 test('recortar deja los textos cortos intactos', () => {
   assert.equal(recortar('hola'), 'hola')
@@ -68,15 +68,40 @@ test('tras contestar, el siguiente mensaje vuelve a sonar', () => {
   assert.equal(debeSonar(null, Date.now()), true)
 })
 
-// ── LA PRUEBA QUE DISTINGUE ESTE ARREGLO DE UN CAMBIO DE NOMBRE ──────────────
-// Antes, dentro del enfriamiento NO se mandaba nada y el mensaje se perdía.
-// Ahora se manda igual, callado. `debeSonar` solo puede apagar el sonido; no
-// existe ningún camino donde su `false` impida el envío.
-test('dentro de la ventana el aviso IGUAL se manda, solo que callado', () => {
+const ENTRANTE = { telefono: '593999111222', nombre: 'Karilu', tipo: 'texto', contenido: 'hola' }
+
+// LA prueba de la garantía: dentro de la ventana el aviso EXISTE igual.
+// Si alguien vuelve a usar debeSonar como guarda de envio, esto se cae.
+test('avisoDeEntrante devuelve un aviso aunque NO toque sonar', () => {
   const ahora = Date.now()
   const hace10seg = new Date(ahora - 10 * 1000).toISOString()
-  assert.equal(debeSonar(hace10seg, ahora), false, 'no debe sonar')
-  // El webhook no consulta nada más para decidir el envío: manda SIEMPRE y usa
-  // este booleano solo como `renotify`. Si algún día alguien lo vuelve a usar
-  // como guarda de envío, la alarma es este comentario más el grep del Step 7.
+  const aviso = avisoDeEntrante(ENTRANTE, hace10seg, ahora)
+  assert.ok(aviso, 'SIEMPRE tiene que haber aviso')
+  assert.equal(aviso.renotify, false, 'pero callado')
+  assert.equal(aviso.tel, '593999111222')
+  assert.ok(aviso.cuerpo, 'con cuerpo, no vacio')
+})
+
+test('avisoDeEntrante suena cuando la ventana ya paso', () => {
+  const ahora = Date.now()
+  const hace2min = new Date(ahora - 2 * 60 * 1000).toISOString()
+  assert.equal(avisoDeEntrante(ENTRANTE, hace2min, ahora).renotify, true)
+})
+
+test('avisoDeEntrante suena la primera vez (sin aviso previo)', () => {
+  assert.equal(avisoDeEntrante(ENTRANTE, null, Date.now()).renotify, true)
+})
+
+// Lo unico que cambia entre sonar y no sonar es `renotify`. Si algun dia cambia
+// algo mas, es que la ventana empezo a decidir cosas que no le tocan.
+test('la ventana SOLO cambia renotify, nada mas del aviso', () => {
+  const ahora = Date.now()
+  const callado = avisoDeEntrante(ENTRANTE, new Date(ahora - 10 * 1000).toISOString(), ahora)
+  const sonoro  = avisoDeEntrante(ENTRANTE, null, ahora)
+  assert.deepEqual({ ...callado, renotify: null }, { ...sonoro, renotify: null })
+})
+
+test('avisoDeEntrante cae al telefono cuando no hay nombre', () => {
+  const sinNombre = { ...ENTRANTE, nombre: '' }
+  assert.ok(avisoDeEntrante(sinNombre, null, Date.now()).titulo.includes('593999111222'))
 })
