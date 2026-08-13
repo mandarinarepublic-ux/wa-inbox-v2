@@ -116,6 +116,12 @@ test('avisoDeEntrante cae al telefono cuando no hay nombre', () => {
 // cada mensaje de cada clienta. Asi que en vez de eso leemos el archivo y afirmamos
 // su FORMA. Es fragil ante un reformateo — y es a proposito: preferimos un test que
 // se queje de mas a que vuelva en silencio el bug de los 12 chats sin contestar.
+//
+// Lo que se exige, sin vueltas: el envío es INCONDICIONAL, punto. No importa la
+// forma que se use para condicionarlo — un `if` nuevo, un `if` que envuelva TODO
+// desde antes del `add`, un `&&` de corto-circuito, un ternario — cualquiera de
+// esas formas tiene que romper este test. No se trata de cazar la palabra
+// `return`: se trata de que `enviarPush` corra siempre que la función corra.
 test('el webhook manda el aviso SIN condicion (reja estructural)', () => {
   const ruta = new URL('../app/api/webhook/route.js', import.meta.url)
   const src = readFileSync(ruta, 'utf8')
@@ -142,5 +148,22 @@ test('el webhook manda el aviso SIN condicion (reja estructural)', () => {
   assert.ok(
     !cuerpo.slice(desdeAdd, desdeEnvio).includes('if '),
     'apareció un `if` entre avisados.add y enviarPush: eso es una guarda de envio',
+  )
+
+  // UN solo `if` en TODA la funcion: el de `avisados`. Esto tapa la variante que
+  // las dos aserciones de arriba no ven — envolver la función ENTERA (add incluido)
+  // en un `if (debeSonar(...))` puesto ANTES del `add`: ahí sigue habiendo un solo
+  // `return`, sigue estando `if (avisados.has(`, y no hay ningún `if` ENTRE el add
+  // y el envío porque los dos quedaron adentro del mismo bloque condicional.
+  const ifs = cuerpo.match(/\bif\s*\(/g) || []
+  assert.equal(ifs.length, 1, `avisarSiCorresponde tiene ${ifs.length} ifs; solo puede tener el de avisados`)
+
+  // Y el envío va SOLO en su línea: nada de `&&` de corto-circuito ni ternario
+  // delante de `enviarPush(` disfrazando una condición sin `if` ni `return`.
+  const lineaEnvio = cuerpo.split('\n').find((l) => l.includes('enviarPush('))
+  assert.match(
+    lineaEnvio.trim(),
+    /^await enviarPush\(/,
+    `el envio tiene que ser incondicional, y salio: ${lineaEnvio.trim()}`,
   )
 })
