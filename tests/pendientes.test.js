@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert'
 import {
-  horaEcuador, enHorarioLaboral, chatsQueAvisar, textoAviso,
+  horaEcuador, enHorarioLaboral, chatsQueAvisar, textoAviso, escaparHtml,
   ESPERA_MINIMA_MS, REPETIR_CADA_MS,
 } from '../lib/pendientes.js'
 
@@ -89,4 +89,40 @@ test('con un solo chat el texto va en singular', () => {
 test('las constantes son las acordadas', () => {
   assert.equal(ESPERA_MINIMA_MS, 10 * MIN)
   assert.equal(REPETIR_CADA_MS, 30 * MIN)
+})
+
+test('el borde de la espera: exactamente 10 min YA avisa', () => {
+  assert.equal(chatsQueAvisar([chat({ ultimoEntranteAt: haceMin(10) })], AHORA).length, 1)
+})
+
+test('el borde de la espera: un pelo menos de 10 min NO avisa', () => {
+  const casi = new Date(AHORA - (10 * MIN - 1000)).toISOString()
+  assert.equal(chatsQueAvisar([chat({ ultimoEntranteAt: casi })], AHORA).length, 0)
+})
+
+test('el borde de la repeticion: exactamente 30 min SI vuelve a insistir', () => {
+  assert.equal(chatsQueAvisar([chat({ ultimoAvisoTelegramAt: haceMin(30) })], AHORA).length, 1)
+})
+
+test('el borde de la repeticion: un pelo menos de 30 min todavia calla', () => {
+  const casi = new Date(AHORA - (30 * MIN - 1000)).toISOString()
+  assert.equal(chatsQueAvisar([chat({ ultimoAvisoTelegramAt: casi })], AHORA).length, 0)
+})
+
+test('el borde del horario: 20:00 Ecuador todavia es laboral', () => {
+  assert.equal(enHorarioLaboral(Date.parse('2026-08-12T01:00:00.000Z')), true)
+})
+
+test('el borde del horario: 21:00 Ecuador ya NO', () => {
+  assert.equal(enHorarioLaboral(Date.parse('2026-08-12T02:00:00.000Z')), false)
+})
+
+test('el nombre se escapa: un < en el nombre no rompe el mensaje', () => {
+  const t = textoAviso(chatsQueAvisar([chat({ nombre: 'Ana <3 & Co' })], AHORA), AHORA, 'https://inbox.test')
+  assert.ok(t.includes('Ana &lt;3 &amp; Co'), `el nombre tiene que ir escapado, salio: ${t}`)
+  assert.ok(!t.includes('Ana <3'), 'no puede quedar el < crudo')
+})
+
+test('escaparHtml pone el & primero, sin doble escape', () => {
+  assert.equal(escaparHtml('a & b < c'), 'a &amp; b &lt; c')
 })
