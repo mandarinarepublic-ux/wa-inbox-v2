@@ -126,3 +126,22 @@ test('el nombre se escapa: un < en el nombre no rompe el mensaje', () => {
 test('escaparHtml pone el & primero, sin doble escape', () => {
   assert.equal(escaparHtml('a & b < c'), 'a &amp; b &lt; c')
 })
+
+test('una espera NUEVA no la tapa el aviso viejo: contestaste y volvio a escribir', () => {
+  // Aviso a las 10:00, ella escribe a las 10:02, ahora son las 10:12.
+  // La marca tiene 12 min (< 30) pero es ANTERIOR al mensaje: toca avisar igual.
+  const c = chat({
+    ultimoAvisoTelegramAt: haceMin(12),
+    ultimoEntranteAt:      haceMin(10),
+  })
+  assert.equal(chatsQueAvisar([c], AHORA).length, 1)
+})
+
+test('pero si el aviso es POSTERIOR al entrante, la ventana de 30 min manda', () => {
+  // Mismo mensaje, ya avisado despues: es la misma espera, no repetir todavia.
+  const c = chat({
+    ultimoEntranteAt:      haceMin(40),
+    ultimoAvisoTelegramAt: haceMin(5),
+  })
+  assert.equal(chatsQueAvisar([c], AHORA).length, 0)
+})
