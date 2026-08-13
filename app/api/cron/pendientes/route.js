@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getContactos, marcarAvisoTelegram } from '@/lib/contactos'
 import { enviarTelegram, telegramConfigurado } from '@/lib/telegram'
-import { chatsQueAvisar, textoAviso, enHorarioLaboral } from '@/lib/pendientes'
+import { chatsQueAvisar, textoAviso, enHorarioLaboral, partirPorAntiguedad } from '@/lib/pendientes'
 
 // Recordatorio de chats sin contestar, por Telegram. Lo llama Vercel Cron cada
 // 5 min (ver vercel.json).
@@ -86,7 +86,11 @@ export async function GET(req) {
     return NextResponse.json({ ok: true, avisados: 0, pendientes: aAvisar.length, motivo: 'sin-config' })
   }
 
-  const r = await enviarTelegram(textoAviso(aAvisar, ahora, BASE_URL))
+  // El arrastre (pasado el techo de 24h) se MENCIONA en el texto pero nunca se
+  // estampa ni decide el titular — ver `partirPorAntiguedad` en lib/pendientes.js.
+  // Estamparlo lo apagaría para siempre, que es el bug que esto arregla.
+  const { arrastre } = partirPorAntiguedad(contactos, ahora)
+  const r = await enviarTelegram(textoAviso(aAvisar, ahora, BASE_URL, arrastre.length))
   if (!r.ok) {
     // NO se estampa la marca si el envío falló: así el próximo ciclo reintenta.
     console.error('[cron/pendientes] Telegram falló:', r.motivo)

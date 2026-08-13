@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert'
 import {
   horaEcuador, enHorarioLaboral, chatsQueAvisar, textoAviso, escaparHtml,
-  ESPERA_MINIMA_MS, REPETIR_CADA_MS, ESPERA_MAXIMA_MS,
+  ESPERA_MINIMA_MS, REPETIR_CADA_MS, ESPERA_MAXIMA_MS, partirPorAntiguedad,
 } from '../lib/pendientes.js'
 
 const MIN = 60 * 1000
@@ -179,4 +179,57 @@ test('el texto plural dice "esperando respuesta hoy", no un total de pendientes'
   const t = textoAviso(lista, AHORA, 'https://inbox.test')
   assert.ok(t.includes('esperando respuesta hoy'), `debe decir la frase nueva, salio: ${t}`)
   assert.ok(!t.includes('chats pendientes'), `no debe decir el total de pendientes, salio: ${t}`)
+})
+
+test('partirPorAntiguedad separa lo de hoy del arrastre', () => {
+  const lista = [
+    chat({ telefono: '1', ultimoEntranteAt: haceMin(30) }),
+    chat({ telefono: '2', ultimoEntranteAt: new Date(AHORA - 45 * 24 * 60 * MIN).toISOString() }),
+    chat({ telefono: '3', ultimoEntranteAt: haceMin(2) }),   // no llega al minimo
+  ]
+  const { recientes, arrastre } = partirPorAntiguedad(lista, AHORA)
+  assert.equal(recientes.length, 1, 'solo el de 30 min')
+  assert.equal(arrastre.length, 1, 'solo el de 45 dias')
+})
+
+test('el arrastre NO incluye chats que no llegan al minimo de espera', () => {
+  const { arrastre } = partirPorAntiguedad([chat({ ultimoEntranteAt: haceMin(2) })], AHORA)
+  assert.equal(arrastre.length, 0)
+})
+
+test('el arrastre NO cuenta chats que ya no estan pendientes', () => {
+  const viejo = new Date(AHORA - 45 * 24 * 60 * MIN).toISOString()
+  const lista = [
+    chat({ telefono: '1', estado: 'atendido',  ultimoEntranteAt: viejo }),
+    chat({ telefono: '2', estado: 'venta',     ultimoEntranteAt: viejo }),
+    chat({ telefono: '3', estado: 'pendiente', ultimoEntranteAt: viejo }),
+  ]
+  const { arrastre } = partirPorAntiguedad(lista, AHORA)
+  assert.equal(arrastre.length, 1, 'solo el pendiente')
+})
+
+test('recientes tampoco cuenta lo que ya no esta pendiente', () => {
+  const lista = [
+    chat({ telefono: '1', estado: 'atendido',  ultimoEntranteAt: haceMin(30) }),
+    chat({ telefono: '2', estado: 'pendiente', ultimoEntranteAt: haceMin(30) }),
+  ]
+  const { recientes } = partirPorAntiguedad(lista, AHORA)
+  assert.equal(recientes.length, 1)
+})
+
+test('el texto nombra el arrastre cuando lo hay', () => {
+  const r = chatsQueAvisar([chat({ nombre: 'Ana' }), chat({ telefono: '9', nombre: 'Bea' })], AHORA)
+  const t = textoAviso(r, AHORA, 'https://inbox.test', 206)
+  assert.ok(t.includes('206'), `debe decir cuantos arrastra, salio: ${t}`)
+})
+
+test('sin arrastre, el texto no inventa un parentesis vacio', () => {
+  const r = chatsQueAvisar([chat({ nombre: 'Ana' })], AHORA)
+  const t = textoAviso(r, AHORA, 'https://inbox.test', 0)
+  assert.ok(!t.includes('('), `no debe haber parentesis, salio: ${t}`)
+})
+
+test('textoAviso sin el cuarto argumento se comporta como antes', () => {
+  const r = chatsQueAvisar([chat({ nombre: 'Ana' })], AHORA)
+  assert.equal(textoAviso(r, AHORA, 'https://inbox.test'), textoAviso(r, AHORA, 'https://inbox.test', 0))
 })
