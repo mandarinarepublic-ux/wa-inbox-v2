@@ -197,6 +197,20 @@ test('el arrastre NO incluye chats que no llegan al minimo de espera', () => {
   assert.equal(arrastre.length, 0)
 })
 
+test('el borde del techo en partirPorAntiguedad: exactamente 24h cuenta como reciente', () => {
+  const { recientes, arrastre } = partirPorAntiguedad(
+    [chat({ ultimoEntranteAt: haceMin(24 * 60) })], AHORA)
+  assert.equal(recientes.length, 1, 'exactamente el techo todavia es reciente')
+  assert.equal(arrastre.length, 0)
+})
+
+test('el borde del techo en partirPorAntiguedad: un pelo mas ya es arrastre', () => {
+  const viejo = new Date(AHORA - (24 * 60 * MIN + 1000)).toISOString()
+  const { recientes, arrastre } = partirPorAntiguedad([chat({ ultimoEntranteAt: viejo })], AHORA)
+  assert.equal(recientes.length, 0)
+  assert.equal(arrastre.length, 1)
+})
+
 test('el arrastre NO cuenta chats que ya no estan pendientes', () => {
   const viejo = new Date(AHORA - 45 * 24 * 60 * MIN).toISOString()
   const lista = [
