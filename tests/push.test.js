@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert'
+import { readFileSync } from 'node:fs'
 import { recortar, cuerpoDeMensaje, debeSonar, VENTANA_SONIDO_MS, avisoDeEntrante } from '../lib/push.js'
 
 test('recortar deja los textos cortos intactos', () => {
@@ -104,4 +105,42 @@ test('la ventana SOLO cambia renotify, nada mas del aviso', () => {
 test('avisoDeEntrante cae al telefono cuando no hay nombre', () => {
   const sinNombre = { ...ENTRANTE, nombre: '' }
   assert.ok(avisoDeEntrante(sinNombre, null, Date.now()).titulo.includes('593999111222'))
+})
+
+// ── Reja estructural del webhook ─────────────────────────────────────────────
+// `avisarSiCorresponde` es un closure dentro de `procesar`: no se exporta y no hay
+// forma de llamarlo desde acá. Y es JUSTO ahí donde vive la garantía de este plan:
+// el aviso se manda SIEMPRE, y la ventana solo decide si suena.
+//
+// Sacarlo a lib/ seria mas elegante, pero obliga a operar la ruta por donde entra
+// cada mensaje de cada clienta. Asi que en vez de eso leemos el archivo y afirmamos
+// su FORMA. Es fragil ante un reformateo — y es a proposito: preferimos un test que
+// se queje de mas a que vuelva en silencio el bug de los 12 chats sin contestar.
+test('el webhook manda el aviso SIN condicion (reja estructural)', () => {
+  const ruta = new URL('../app/api/webhook/route.js', import.meta.url)
+  const src = readFileSync(ruta, 'utf8')
+
+  const desde = src.indexOf('async function avisarSiCorresponde')
+  assert.ok(desde > 0, 'no encontre avisarSiCorresponde — si la renombraste, actualiza esta reja')
+  // El cuerpo termina en el primer cierre de funcion a dos espacios de sangria.
+  const hasta = src.indexOf('\n  }', desde)
+  assert.ok(hasta > desde, 'no pude delimitar el cuerpo de avisarSiCorresponde')
+  const cuerpo = src.slice(desde, hasta)
+
+  assert.ok(cuerpo.includes('enviarPush('), 'el webhook tiene que mandar el aviso')
+
+  // UN solo return: el de `avisados`, que evita dos avisos del mismo lote. Cualquier
+  // otro return es una guarda de envio y eso es exactamente lo que arreglamos.
+  const returns = cuerpo.match(/\breturn\b/g) || []
+  assert.equal(returns.length, 1, `avisarSiCorresponde tiene ${returns.length} returns; solo puede tener el de avisados`)
+  assert.ok(cuerpo.includes('if (avisados.has('), 'el unico return permitido es el de avisados')
+
+  // Y entre el add y el envio no puede aparecer ningun `if`.
+  const desdeAdd = cuerpo.indexOf('avisados.add(')
+  const desdeEnvio = cuerpo.indexOf('enviarPush(')
+  assert.ok(desdeAdd > 0 && desdeEnvio > desdeAdd, 'el orden esperado es: add, despues enviar')
+  assert.ok(
+    !cuerpo.slice(desdeAdd, desdeEnvio).includes('if '),
+    'apareció un `if` entre avisados.add y enviarPush: eso es una guarda de envio',
+  )
 })
