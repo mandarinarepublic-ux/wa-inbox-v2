@@ -166,4 +166,22 @@ test('el webhook manda el aviso SIN condicion (reja estructural)', () => {
     /^await enviarPush\(/,
     `el envio tiene que ser incondicional, y salio: ${lineaEnvio.trim()}`,
   )
+
+  // La reja de arriba mira DENTRO de la función. Pero la garantía también se puede
+  // romper desde AFUERA: basta condicionar la LLAMADA en `procesar()`. Se lee como
+  // una optimización sensata —"para qué llamarla si no va a hacer nada"— y por eso
+  // hay que vigilarla igual que el cuerpo.
+  //
+  // Se busca DESPUÉS de `hasta` (el cierre de la propia función) a propósito: la
+  // definición también contiene el texto "avisarSiCorresponde(m)" (en
+  // "async function avisarSiCorresponde(m) {"), así que buscar en el archivo
+  // completo encontraría esa línea primero y nunca llegaría a la llamada real.
+  const restoTrasLaFuncion = src.slice(hasta)
+  const lineaLlamada = restoTrasLaFuncion.split('\n').find((l) => l.includes('avisarSiCorresponde(m)'))
+  assert.ok(lineaLlamada, 'no encontre la llamada a avisarSiCorresponde')
+  assert.match(
+    lineaLlamada.trim(),
+    /^await avisarSiCorresponde\(m\)/,
+    `la llamada tiene que ser incondicional, y salio: ${lineaLlamada.trim()}`,
+  )
 })
