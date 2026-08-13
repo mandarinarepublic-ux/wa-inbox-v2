@@ -24,7 +24,32 @@ IND no es MANDI a otra escala: es otro problema. Dos cosas que en MANDI nunca se
 
 Portar antes de arreglar significa estrenar en IND justo el defecto que ahí sí se rompe.
 
-**Decisión de Rodrigo (13-ago):** los 206 de arrastre son peso muerto, nadie los va a contestar. Entonces ignorarlos es correcto por diseño — y el "+N de más de un día" deja de ser ruido y pasa a ser una señal útil, porque después de una limpieza ese número va a ser chico.
+### ⚠️ CORRECCIÓN — lo anterior estaba mal, y Rodrigo hizo bien en pedir que lo confirmara
+
+La primera lectura fue "arrastre viejo, peso muerto". **Falso.** Al desglosar por semana:
+
+```
+2026-07-06     1 chat
+2026-07-27    57
+2026-08-03    56
+2026-08-10   169   <- esta semana
+```
+
+**169 de los 284 son de esta semana**, ninguno tiene venta asociada y casi ninguno tiene
+temperatura clasificada. No es basura acumulada durante años: es entrada reciente sin contestar,
+a un ritmo de ~40 clientas por día. Marcarlas como atendidas habría enterrado conversaciones
+vivas de hace tres días.
+
+(Los estados están limpios: `PENDIENTE` 285 · `ATENDIDO` 2405 · `ARCHIVADO` 3 · `SOPORTE` 3 ·
+`VENTA` 1, sin nulos ni vacíos. Un solo registro con fecha de 2017, que es un dato corrupto suelto.)
+
+**Decisión de Rodrigo (13-ago), con esos números en la mano: en IND va SOLO el push, nada de
+Telegram.** Con 284 pendientes reales, un recordatorio cada 30 minutos sería cierto e inútil —
+IND no tiene un problema de recordatorio, tiene uno de capacidad, y una alerta no lo arregla.
+
+**Consecuencia sobre el orden:** el motivo para arreglar antes de portar era el riesgo del sello
+secuencial con los 70 avisos de IND. Sin Telegram en IND ese riesgo desaparece, así que el port
+del push pasa PRIMERO y los arreglos de MANDI van después. Las Tasks 5 y 6 quedan canceladas.
 
 ## Global Constraints
 
