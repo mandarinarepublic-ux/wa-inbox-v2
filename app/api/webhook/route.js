@@ -6,7 +6,7 @@ import { guardarMensajeSupabase, existeWamidSupabase, guardarEventoCrudoSupabase
 import { archivarMedia } from '@/lib/media-archive'
 import { parseLinkpago, crearLinkPago, mensajeLinkPago } from '@/lib/dlocal'
 import { getAutomatizaciones } from '@/lib/automatizaciones'
-import { enviarPush, cuerpoDeMensaje, debeNotificar } from '@/lib/push'
+import { enviarPush, cuerpoDeMensaje, debeSonar } from '@/lib/push'
 import { decidirIA } from '@/lib/ia-canal'
 import { extraer } from '@/lib/wa-mensaje'
 import { extraerEchoes } from '@/lib/echoes'
@@ -141,10 +141,14 @@ async function procesar(nuevos, origin) {
 
   // Aviso de mensaje nuevo al equipo (web push). Nunca lanza: un fallo acá no puede
   // tocar el webhook. Sin claves VAPID, enviarPush es un no-op silencioso.
+  //
+  // Se manda SIEMPRE. Lo único que se modera es el sonido, como WhatsApp: si ya
+  // avisamos de esta conversación hace menos de un minuto, el aviso se actualiza
+  // callado en vez de volver a sonar. `avisados` sigue evitando dos avisos por el
+  // mismo lote de webhook.
   async function avisarSiCorresponde(m) {
     const t = tail9(m.telefono)
     if (avisados.has(t)) return
-    if (!debeNotificar(ultimoPushAtDe(m.telefono), Date.now())) return
     avisados.add(t)
     const nombre = m.nombre || m.telefono
     await enviarPush({
@@ -153,6 +157,7 @@ async function procesar(nuevos, origin) {
       url:    `/inbox?tel=${encodeURIComponent(m.telefono)}`,
       tag:    `chat-${t}`,
       tel:    m.telefono,
+      renotify: debeSonar(ultimoPushAtDe(m.telefono), Date.now()),
     })
     await marcarPush(m.telefono)
   }

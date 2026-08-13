@@ -34,8 +34,8 @@ self.addEventListener('push', (event) => {
 
     await self.registration.showNotification(titulo, {
       body: cuerpo,
-      tag,                       // un aviso por chat: el nuevo reemplaza al anterior
-      renotify: true,            // pero vuelve a sonar
+      tag,                                  // un aviso por chat: el nuevo reemplaza al anterior
+      renotify: d.renotify !== false,       // …y suena, salvo que sea la misma ráfaga
       icon: '/icon-192.png',
       badge: '/icon-192.png',
       data: { url, tel },

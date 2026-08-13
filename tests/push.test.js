@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert'
-import { recortar, cuerpoDeMensaje, debeNotificar, ENFRIAMIENTO_MS } from '../lib/push.js'
+import { recortar, cuerpoDeMensaje, debeSonar, VENTANA_SONIDO_MS } from '../lib/push.js'
 
 test('recortar deja los textos cortos intactos', () => {
   assert.equal(recortar('hola'), 'hola')
@@ -38,41 +38,45 @@ test('cuerpoDeMensaje nunca queda vacio', () => {
   assert.equal(cuerpoDeMensaje({ tipo: 'texto', contenido: '   ' }), 'Mensaje nuevo')
 })
 
-test('debeNotificar deja pasar la primera vez', () => {
-  assert.equal(debeNotificar(null, Date.now()), true)
+test('debeSonar suena la primera vez', () => {
+  assert.equal(debeSonar(null, Date.now()), true)
 })
 
-test('debeNotificar bloquea dentro del enfriamiento', () => {
-  const ahora = Date.parse('2026-07-26T12:00:00Z')
-  const hace1min = new Date(ahora - 60_000).toISOString()
-  assert.equal(debeNotificar(hace1min, ahora), false)
+test('debeSonar NO suena dentro de la ventana', () => {
+  const ahora = Date.now()
+  const hace10seg = new Date(ahora - 10 * 1000).toISOString()
+  assert.equal(debeSonar(hace10seg, ahora), false)
 })
 
-test('debeNotificar deja pasar despues del enfriamiento', () => {
-  const ahora = Date.parse('2026-07-26T12:00:00Z')
-  const hace6min = new Date(ahora - 6 * 60_000).toISOString()
-  assert.equal(debeNotificar(hace6min, ahora), true)
+test('debeSonar vuelve a sonar pasada la ventana', () => {
+  const ahora = Date.now()
+  const hace2min = new Date(ahora - 2 * 60 * 1000).toISOString()
+  assert.equal(debeSonar(hace2min, ahora), true)
 })
 
-test('debeNotificar ignora una fecha corrupta y deja pasar', () => {
-  assert.equal(debeNotificar('no-es-fecha', Date.now()), true)
+test('debeSonar ignora una fecha corrupta y suena', () => {
+  assert.equal(debeSonar('no-es-fecha', Date.now()), true)
 })
 
-test('el enfriamiento es de 5 minutos', () => {
-  assert.equal(ENFRIAMIENTO_MS, 5 * 60 * 1000)
+test('la ventana de sonido es de 60 segundos, no de 5 minutos', () => {
+  assert.equal(VENTANA_SONIDO_MS, 60 * 1000)
 })
 
-// Contestar borra ultimo_push_at (lo hace limpiarPush desde /api/saliente). Este
-// test fija la consecuencia: con el campo en null SIEMPRE se avisa, aunque el aviso
-// anterior haya sido hace segundos. Sin esto volvía el bug de "solo llega el primer
-// mensaje de cada persona aunque yo ya haya respondido".
-test('tras responder (campo limpiado) se avisa aunque hayan pasado segundos', () => {
-  const ahora = Date.parse('2026-07-26T12:00:00Z')
-  assert.equal(debeNotificar(null, ahora), true)
+// Contestar borra ultimo_push_at (lo hace limpiarPush desde /api/saliente).
+// Con el significado nuevo eso quiere decir: la próxima entrante suena sí o sí.
+test('tras contestar, el siguiente mensaje vuelve a sonar', () => {
+  assert.equal(debeSonar(null, Date.now()), true)
 })
 
-test('sin responder, una rafaga seguida sigue silenciada', () => {
-  const ahora = Date.parse('2026-07-26T12:00:00Z')
-  const hace10seg = new Date(ahora - 10_000).toISOString()
-  assert.equal(debeNotificar(hace10seg, ahora), false)
+// ── LA PRUEBA QUE DISTINGUE ESTE ARREGLO DE UN CAMBIO DE NOMBRE ──────────────
+// Antes, dentro del enfriamiento NO se mandaba nada y el mensaje se perdía.
+// Ahora se manda igual, callado. `debeSonar` solo puede apagar el sonido; no
+// existe ningún camino donde su `false` impida el envío.
+test('dentro de la ventana el aviso IGUAL se manda, solo que callado', () => {
+  const ahora = Date.now()
+  const hace10seg = new Date(ahora - 10 * 1000).toISOString()
+  assert.equal(debeSonar(hace10seg, ahora), false, 'no debe sonar')
+  // El webhook no consulta nada más para decidir el envío: manda SIEMPRE y usa
+  // este booleano solo como `renotify`. Si algún día alguien lo vuelve a usar
+  // como guarda de envío, la alarma es este comentario más el grep del Step 7.
 })
