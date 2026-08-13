@@ -1,0 +1,82 @@
+import { NextResponse } from 'next/server'
+import { getContactos, marcarAvisoTelegram } from '@/lib/contactos'
+import { enviarTelegram, telegramConfigurado } from '@/lib/telegram'
+import { chatsQueAvisar, textoAviso } from '@/lib/pendientes'
+
+// Recordatorio de chats sin contestar, por Telegram. Lo llama Vercel Cron cada
+// 5 min (ver vercel.json).
+//
+// Por qué existe, además del push: el push avisa de un EVENTO (entró un mensaje).
+// Si te lo perdiste, se perdió. Esto avisa de un ESTADO (hay gente esperando) e
+// insiste cada 30 min hasta que la bandeja quede vacía. El 12-ago-2026 había 12
+// chats pendientes en MANDI y el más viejo llevaba 31 horas: todos habían
+// disparado su push, y todos se habían apagado.
+//
+// Sin TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID no manda nada y no rompe nada.
+
+export const dynamic = 'force-dynamic'
+export const maxDuration = 60
+
+function autorizado(req) {
+  const secret = process.env.CRON_SECRET
+  const auth = req.headers.get('authorization') || ''
+  const isVercelCron = req.headers.get('x-vercel-cron') != null // Vercel lo pone solo en crons reales
+  const keyQ = new URL(req.url).searchParams.get('key')
+  if (isVercelCron) return true
+  if (secret && (auth === `Bearer ${secret}` || keyQ === secret)) return true
+  return false
+}
+
+export async function GET(req) {
+  if (!autorizado(req)) {
+    return NextResponse.json({ error: 'no autorizado' }, { status: 401 })
+  }
+
+  const ahora = Date.now()
+  const baseUrl = new URL(req.url).origin
+
+  // ⚠️ `getContactos(null)` con el null EXPLÍCITO, nunca `getContactos()`.
+  // La firma es `getContactosSupabase(canal = canalPorDefecto())`: sin argumento
+  // filtra por el phone_id de MANDI y las conversaciones de REPUBLIC quedarían
+  // INVISIBLES para el recordatorio — pendientes reales que nadie ve, que es
+  // justo el bug que este cron viene a matar. `null` apaga el filtro
+  // (`lib/inbox-supabase.js:67`) y trae los dos números de la cuenta.
+  const contactos = await getContactos(null).catch((e) => {
+    console.error('[cron/pendientes] no se pudo leer contactos:', e?.message || e)
+    return null
+  })
+  if (!contactos) {
+    return NextResponse.json({ ok: false, error: 'sin contactos' }, { status: 500 })
+  }
+
+  const aAvisar = chatsQueAvisar(contactos, ahora)
+  if (!aAvisar.length) {
+    // Bandeja vacía o fuera de horario: calla solo, sin que nadie apague nada.
+    return NextResponse.json({ ok: true, avisados: 0, pendientes: 0 })
+  }
+
+  if (!telegramConfigurado()) {
+    // Desplegado y mudo. Se reporta para que el silencio sea VISIBLE en los
+    // registros: un cron que no manda nada tiene que poder distinguirse de un
+    // cron que no corre.
+    console.log(`[cron/pendientes] ${aAvisar.length} pendientes, Telegram sin configurar`)
+    return NextResponse.json({ ok: true, avisados: 0, pendientes: aAvisar.length, motivo: 'sin-config' })
+  }
+
+  const r = await enviarTelegram(textoAviso(aAvisar, ahora, baseUrl))
+  if (!r.ok) {
+    // NO se estampa la marca si el envío falló: así el próximo ciclo reintenta.
+    console.error('[cron/pendientes] Telegram falló:', r.motivo)
+    return NextResponse.json({ ok: false, avisados: 0, pendientes: aAvisar.length, motivo: r.motivo })
+  }
+
+  // Recién ahora se marca, y con await: sin await la función serverless devuelve
+  // la respuesta y se congela antes del update, y el aviso se repetiría cada 5
+  // minutos para siempre.
+  for (const c of aAvisar) {
+    await marcarAvisoTelegram(c.telefono).catch((e) =>
+      console.error('[cron/pendientes] marcar', c.telefono, e?.message || e))
+  }
+
+  return NextResponse.json({ ok: true, avisados: aAvisar.length, pendientes: aAvisar.length })
+}

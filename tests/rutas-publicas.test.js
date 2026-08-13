@@ -5,11 +5,12 @@ import test from 'node:test'
 import assert from 'node:assert'
 import { esRutaPublica } from '../lib/rutas-publicas.js'
 
-// Las 4 que NUNCA pueden pedir sesión. Cada una se defiende sola.
+// Las 5 que NUNCA pueden pedir sesión. Cada una se defiende sola.
 const PUBLICAS = [
   '/api/webhook',            // Meta (WhatsApp) — 1035 llamadas en 24h
   '/api/social/webhook',     // Meta (FB/IG)
   '/api/cron/seguimientos',  // cron de Vercel, cada hora
+  '/api/cron/pendientes',    // cron de Vercel, cada 5 min — recordatorio Telegram
   '/api/pago-dlocal',        // dLocal, ya protegida con secreto en la URL
 ]
 

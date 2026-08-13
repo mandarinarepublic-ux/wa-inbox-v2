@@ -95,6 +95,6 @@ export async function middleware(req) {
 // capa, por si alguien toca esto sin pensar.
 export const config = {
   matcher: [
-    '/((?!api/webhook|api/social/webhook|api/cron/seguimientos|api/pago-dlocal|_next/static|_next/image|favicon.ico|sw.js|icon-|manifest.webmanifest).*)',
+    '/((?!api/webhook|api/social/webhook|api/cron/seguimientos|api/cron/pendientes|api/pago-dlocal|_next/static|_next/image|favicon.ico|sw.js|icon-|manifest.webmanifest).*)',
   ],
 }
