@@ -4,18 +4,16 @@ import { getSupabase, CUENTA } from '@/lib/supabase'
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-// Barrera mínima: el inbox no tiene login, así que sin esto cualquiera con la URL
-// podría suscribirse y recibir los mensajes de los clientes en su teléfono.
-// No es seguridad de verdad — el arreglo real es un login (ver el spec).
-const CLAVE = process.env.PUSH_CLAVE || ''
+// Antes esto pedía PUSH_CLAVE porque el inbox no tenía login y cualquiera con la
+// URL podía suscribirse y recibir los mensajes de las clientas en su teléfono.
+// Desde el 7-ago-2026 hay login de verdad (middleware.js, AUTH_MODO=bloquear) y
+// esta ruta queda dentro del candado, así que la clave sobraba — y era peor que
+// inútil: en el celular su error salía por un `title=`, que al tacto no se ve.
 
 export async function POST(req) {
   try {
-    const { subscription, clave } = await req.json().catch(() => ({}))
+    const { subscription } = await req.json().catch(() => ({}))
 
-    if (CLAVE && String(clave || '') !== CLAVE) {
-      return NextResponse.json({ ok: false, error: 'clave incorrecta' }, { status: 401 })
-    }
     const endpoint = subscription?.endpoint
     const p256dh   = subscription?.keys?.p256dh
     const auth     = subscription?.keys?.auth
