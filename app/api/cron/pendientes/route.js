@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getContactos, marcarAvisoTelegram } from '@/lib/contactos'
 import { enviarTelegram, telegramConfigurado } from '@/lib/telegram'
-import { chatsQueAvisar, textoAviso } from '@/lib/pendientes'
+import { chatsQueAvisar, textoAviso, enHorarioLaboral } from '@/lib/pendientes'
 
 // Recordatorio de chats sin contestar, por Telegram. Lo llama Vercel Cron cada
 // 5 min (ver vercel.json).
@@ -20,15 +20,25 @@ export const maxDuration = 60
 function autorizado(req) {
   const secret = process.env.CRON_SECRET
   const auth = req.headers.get('authorization') || ''
-  const isVercelCron = req.headers.get('x-vercel-cron') != null // Vercel lo pone solo en crons reales
   const keyQ = new URL(req.url).searchParams.get('key')
-  if (isVercelCron) return true
-  if (secret && (auth === `Bearer ${secret}` || keyQ === secret)) return true
-  return false
+  // ⚠️ La cabecera `x-vercel-cron` NO alcanza por sí sola cuando hay secreto: no
+  // está documentada como imposible de falsificar, y aceptarla primero dejaba la
+  // ruta abierta a cualquiera que supiera el path. Con secreto configurado manda
+  // el secreto —que Vercel manda solo en los crons de verdad—; sin secreto, la
+  // cabecera es lo único que hay y ahí sí vale.
+  if (secret) return auth === `Bearer ${secret}` || keyQ === secret
+  return req.headers.get('x-vercel-cron') != null
 }
 
 export async function GET(req) {
   if (!autorizado(req)) {
+    // Si algún día Vercel deja de mandar el Authorization esperado, esto tiene
+    // que quedar en los registros: un cron que empieza a dar 401 en silencio es
+    // la misma clase de falla que este cron entero vino a matar. Nunca el valor
+    // del secreto, solo si estaba configurado.
+    const traeCabeceraCron = req.headers.get('x-vercel-cron') != null
+    const haySecreto = Boolean(process.env.CRON_SECRET)
+    console.error(`[cron/pendientes] no autorizado — x-vercel-cron: ${traeCabeceraCron}, CRON_SECRET configurado: ${haySecreto}`)
     return NextResponse.json({ error: 'no autorizado' }, { status: 401 })
   }
 
@@ -40,7 +50,7 @@ export async function GET(req) {
   // filtra por el phone_id de MANDI y las conversaciones de REPUBLIC quedarían
   // INVISIBLES para el recordatorio — pendientes reales que nadie ve, que es
   // justo el bug que este cron viene a matar. `null` apaga el filtro
-  // (`lib/inbox-supabase.js:67`) y trae los dos números de la cuenta.
+  // (`lib/inbox-supabase.js:68`) y trae los dos números de la cuenta.
   const contactos = await getContactos(null).catch((e) => {
     console.error('[cron/pendientes] no se pudo leer contactos:', e?.message || e)
     return null
@@ -51,8 +61,13 @@ export async function GET(req) {
 
   const aAvisar = chatsQueAvisar(contactos, ahora)
   if (!aAvisar.length) {
-    // Bandeja vacía o fuera de horario: calla solo, sin que nadie apague nada.
-    return NextResponse.json({ ok: true, avisados: 0, pendientes: 0 })
+    // `sin-pendientes` cubre bandeja vacía de verdad Y todo lo que está dentro del
+    // enfriamiento de 30 min — ambos son "no toca avisar todavía". `fuera-de-horario`
+    // es la otra causa posible (fuera de 08:00-21:00 Ecuador). Sin distinguirlas,
+    // Rodrigo llama la ruta de noche, ve ceros, y no sabe si está sana o rota.
+    const motivo = enHorarioLaboral(ahora) ? 'sin-pendientes' : 'fuera-de-horario'
+    console.log(`[cron/pendientes] nada que avisar (${motivo})`)
+    return NextResponse.json({ ok: true, avisados: 0, pendientes: 0, motivo })
   }
 
   if (!telegramConfigurado()) {
