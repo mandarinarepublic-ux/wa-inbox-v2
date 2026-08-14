@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { getPago } from '@/lib/dlocal'
+import { getPago, notaResultadoPago } from '@/lib/dlocal'
+import { crearNota } from '@/lib/notas'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -100,6 +101,19 @@ async function enviarPlantilla(to, p) {
   }
 }
 
+// Guarda la nota de resultado del pago (o no hace nada si es PENDING). Nunca
+// tira: si Supabase falla, el pago igual tiene que avisarse por WhatsApp.
+async function guardarNotaPago(clienteTel, pago) {
+  if (!clienteTel) return
+  const nota = notaResultadoPago(pago)
+  if (!nota) return
+  try {
+    await crearNota(clienteTel, nota.texto, nota.tipo)
+  } catch (e) {
+    console.error('[/api/pago-dlocal] no se pudo guardar la nota del pago:', e.message)
+  }
+}
+
 // Lee el body venga como JSON o como form-urlencoded (dLocal puede usar cualquiera).
 async function leerBody(req) {
   const ctype = req.headers.get('content-type') || ''
@@ -124,6 +138,13 @@ export async function POST(req) {
     const pago = await getPago(paymentId)
     // order_id = "<telefono>-<timestamp>" → sacamos el teléfono del cliente.
     const clienteTel = soloDigitos(String(pago?.order_id || '').split('-')[0])
+
+    // Nota en el panel Ventas con el resultado del pago (verde si pagó, roja si
+    // expiró o no se completó; nada si sigue PENDING). Ver lib/dlocal.js
+    // notaResultadoPago. Envuelto en try/catch a propósito: la confirmación por
+    // WhatsApp al cliente importa más que esta nota interna, así que un fallo
+    // acá NUNCA frena el envío de la plantilla.
+    await guardarNotaPago(clienteTel, pago)
 
     await Promise.all([
       enviarPlantilla(clienteTel, pago),

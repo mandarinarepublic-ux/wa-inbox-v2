@@ -1,7 +1,7 @@
 'use client'
 import { useState, useRef, useEffect } from 'react'
 import { Avatar } from '@/components/Components'
-import { fetchRepliesFromSheet, writeReply, reorderReplies, addNota, setIdVenta, fetchProductos } from '@/lib/api-client'
+import { fetchRepliesFromSheet, writeReply, reorderReplies, addNota, setIdVenta, fetchProductos, generarLinkPago } from '@/lib/api-client'
 import Notas from './Notas'
 import PedidoManual from './PedidoManual'
 import VerPedido from './VerPedido'
@@ -10,6 +10,14 @@ import { parseDate } from '@/lib/utils'
 import { moverItem } from '@/lib/orden-lista'
 
 const MAX_IMGS  = 10
+
+// Mismo estilo de textarea de solo-lectura que usa <Notas/>, para que el texto
+// del link de pago (listo para copiar) se vea igual que el resto del panel.
+const sTextareaLinkPago = {
+  width: '100%', background: '#111c2a', border: '1px solid #1e2d3d', borderRadius: 7,
+  color: '#e2e8f0', fontSize: 11, padding: '6px 8px', resize: 'vertical', outline: 'none',
+  fontFamily: 'inherit', whiteSpace: 'pre-wrap',
+}
 
 // Extrae todas las urls de imagen de un reply (imageUrl, imageUrl2..imageUrl10)
 function getImgUrls(reply) {
@@ -302,6 +310,17 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
   // "✅ Pedido creado" más abajo. Se limpia al cambiar de contacto.
   const [pedidoRes,     setPedidoRes]     = useState(null)
 
+  // ── LINK PAGO: genera el link dLocal + el texto listo para copiar ─────
+  // NO se manda nada al chat desde acá — el vendedor copia y decide cuándo y
+  // cómo mandarlo. `/api/linkpago` deja además una nota neutral ("Link
+  // generado"), que es el diagnóstico: si nunca aparece una nota verde después,
+  // dLocal no está avisando el pago (ver app/api/pago-dlocal/route.js).
+  const [montoLink,     setMontoLink]     = useState('')
+  const [generandoLink, setGenerandoLink] = useState(false)
+  const [linkPago,      setLinkPago]      = useState(null)  // { link, texto }
+  const [linkPagoError, setLinkPagoError] = useState('')
+  const [linkCopiado,   setLinkCopiado]   = useState(false)
+
   // ── PEDIDO MANUAL: el formulario del CRM dentro de este panel ──
   const [manualAbierto, setManualAbierto] = useState(false)
 
@@ -371,6 +390,38 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
   useEffect(() => {
     if (activeConv) setPedidoRes(null)
   }, [activeConv?.telefono])
+
+  // Mismo motivo que arriba: el link generado es del chat anterior, no de este.
+  useEffect(() => {
+    setMontoLink(''); setLinkPago(null); setLinkPagoError(''); setLinkCopiado(false)
+  }, [activeConv?.telefono])
+
+  async function generarLink() {
+    if (generandoLink || !activeConv) return
+    setGenerandoLink(true); setLinkPagoError(''); setLinkPago(null); setLinkCopiado(false)
+    try {
+      const res = await generarLinkPago(activeConv.telefono, Number(montoLink))
+      setLinkPago({ link: res.link, texto: res.texto })
+      // La nota "Link de pago generado por $X" ya quedó guardada en el
+      // servidor; refrescamos la lista para que aparezca sin recargar.
+      setNotasRefrescar(n => n + 1)
+    } catch (e) {
+      setLinkPagoError(e.message)
+    } finally {
+      setGenerandoLink(false)
+    }
+  }
+
+  async function copiarLink() {
+    if (!linkPago) return
+    try {
+      await navigator.clipboard.writeText(linkPago.texto)
+      setLinkCopiado(true)
+      setTimeout(() => setLinkCopiado(false), 2000)
+    } catch (e) {
+      setLinkPagoError('No se pudo copiar al portapapeles: ' + e.message)
+    }
+  }
 
   // Avisarle al padre cuando se abre o se cierra el PEDIDO MANUAL: con eso
   // ensancha el panel y sabe que tiene que preguntar antes de cambiar de chat.
@@ -904,6 +955,69 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                 número, no con el nombre— y saber de quién es el chat que tienes
                 abierto mientras lees su pedido vale más que esos 90 px. */}
             <div style={{ display: (manualAbierto || verPedidoId != null) ? 'none' : 'contents' }}>
+
+            {/* LINK PAGO — arma el link dLocal y el texto listo para copiar.
+                A propósito NO manda nada al chat: el vendedor lo copia y decide
+                cuándo y cómo mandarlo (distinto del LINKPAGO<monto> del chat,
+                que sí envía directo). */}
+            <div style={{ padding:'10px 12px', borderTop:'1px solid #111c2a', marginTop:8, background:'#0a1019' }}>
+              <p style={{ fontSize:10, color:'#10b981', fontWeight:700, letterSpacing:'.08em', margin:'0 0 6px' }}>
+                💳 LINK PAGO
+              </p>
+              <div style={{ display:'flex', gap:6 }}>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  value={montoLink}
+                  onChange={e => setMontoLink(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') generarLink() }}
+                  placeholder="Monto en $"
+                  style={{ flex:1, minWidth:0, background:'#111c2a', border:'1px solid #1e2d3d', borderRadius:7, color:'#ffffff', fontSize:11, padding:'6px 8px', outline:'none', fontFamily:'inherit' }}
+                />
+                <button
+                  onClick={generarLink}
+                  disabled={!montoLink || generandoLink}
+                  style={{
+                    flexShrink:0, padding:'6px 14px',
+                    background: generandoLink ? '#111c2a' : 'linear-gradient(135deg,#10b981,#059669)',
+                    border:'1px solid rgba(16,185,129,.4)', color:'#fff', borderRadius:7,
+                    fontSize:11, fontWeight:800, fontFamily:'inherit',
+                    cursor: !montoLink || generandoLink ? 'default' : 'pointer',
+                    opacity: !montoLink && !generandoLink ? .5 : 1,
+                  }}>
+                  {generandoLink ? '⏳ Generando...' : 'Generar'}
+                </button>
+              </div>
+
+              {/* El error se pinta EN PANTALLA, nunca en un title: un title es
+                  invisible en celular y ese bug ya se arregló una vez acá. */}
+              {linkPagoError && (
+                <div style={{ marginTop:6, fontSize:11, color:'#f87171' }}>⚠️ {linkPagoError}</div>
+              )}
+
+              {linkPago && (
+                <div style={{ marginTop:8 }}>
+                  <textarea
+                    readOnly
+                    value={linkPago.texto}
+                    rows={5}
+                    onFocus={e => e.target.select()}
+                    style={sTextareaLinkPago}
+                  />
+                  <button onClick={copiarLink}
+                    style={{
+                      width:'100%', marginTop:5, padding:6,
+                      background: linkCopiado ? 'rgba(16,185,129,.22)' : 'rgba(16,185,129,.12)',
+                      border:'1px solid rgba(16,185,129,.35)', color:'#10b981', borderRadius:7,
+                      fontSize:11, fontWeight:700, fontFamily:'inherit', cursor:'pointer',
+                    }}>
+                    {linkCopiado ? '✅ Copiado' : '📋 Copiar'}
+                  </button>
+                </div>
+              )}
+            </div>
 
             {/* NOTAS DEL VENDEDOR — varias por chat, cada una con su fecha */}
             <div style={{ padding:'10px 12px', borderTop:'1px solid #111c2a', marginTop:8, background:'#0a1019' }}>
