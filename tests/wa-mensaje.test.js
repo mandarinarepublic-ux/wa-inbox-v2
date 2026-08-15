@@ -149,7 +149,80 @@ test('contenidoTipoEspecial arma el unsupported con motivo desde raw', () => {
   assert.equal(contenidoTipoEspecial('unsupported', raw), '⚠️ Te escribió algo que no podemos mostrar (This message is unavailable.)')
 })
 
-test('contenidoTipoEspecial no revienta con tipos comunes: devuelve vacio', () => {
-  assert.equal(contenidoTipoEspecial('texto', null), '')
+test('contenidoTipoEspecial deja los tipos con media propio en vacio (la burbuja los pinta por mediaId)', () => {
   assert.equal(contenidoTipoEspecial('imagen', {}), '')
+  assert.equal(contenidoTipoEspecial('video', {}), '')
+  assert.equal(contenidoTipoEspecial('audio', {}), '')
+  assert.equal(contenidoTipoEspecial('documento', {}), '')
+  assert.equal(contenidoTipoEspecial('sticker', {}), '')
+})
+
+// ── bug #4: reaction / edit / revoke / contacts / texto vacio de verdad ────
+// Antes de este fix, estos tipos caían en el `default` de contenidoTipoEspecial
+// y salían con '' -> si eran el ULTIMO mensaje de la conversación, la persona
+// entera desaparecía del sidebar (medido: 32 conversaciones, 13 pendientes).
+
+test('contenidoTipoEspecial arma la reaccion con el emoji del payload', () => {
+  const raw = { reaction: { message_id: 'wamid.ABC', emoji: '👍' } }
+  assert.equal(contenidoTipoEspecial('reaction', raw), '👍 Reaccionó a un mensaje')
+})
+
+test('contenidoTipoEspecial arma la reaccion sin emoji cuando no hay payload', () => {
+  assert.equal(contenidoTipoEspecial('reaction', null), 'Reaccionó a un mensaje')
+  assert.equal(contenidoTipoEspecial('reaction', {}), 'Reaccionó a un mensaje')
+})
+
+test('contenidoTipoEspecial etiqueta un edit', () => {
+  assert.equal(contenidoTipoEspecial('edit', null), '✏️ Editó un mensaje')
+})
+
+test('contenidoTipoEspecial etiqueta un revoke (mensaje eliminado)', () => {
+  assert.equal(contenidoTipoEspecial('revoke', null), '🚫 Eliminó un mensaje')
+})
+
+test('contenidoTipoEspecial etiqueta contacts, con y sin nombre en el payload', () => {
+  assert.equal(contenidoTipoEspecial('contacts', { contacts: [{ name: { formatted_name: 'Juan Perez' } }] }), '👤 Compartió un contacto (Juan Perez)')
+  assert.equal(contenidoTipoEspecial('contacts', null), '👤 Compartió un contacto')
+})
+
+test('contenidoTipoEspecial etiqueta location, con y sin nombre/direccion en el payload', () => {
+  assert.equal(contenidoTipoEspecial('location', { location: { name: 'Tienda', address: 'Av. Siempre Viva' } }), '📍 Compartió su ubicación (Tienda, Av. Siempre Viva)')
+  assert.equal(contenidoTipoEspecial('location', null), '📍 Compartió su ubicación')
+})
+
+// ── LA prueba que tiene que romperse si alguien vuelve a poner una lista ───
+// de tipos permitidos: un tipo INVENTADO, que no existe en ningún case de
+// contenidoTipoEspecial ni de extraer(), con texto vacío y sin media, tiene
+// que seguir dando contenido no vacío. Si esto falla, alguien reintrodujo el
+// allow-list y el bug #5 ya está en camino.
+
+test('contenidoTipoEspecial nombra el tipo, aunque sea uno que no existe todavia', () => {
+  const etiqueta = contenidoTipoEspecial('tipo_que_no_existe_todavia', {})
+  assert.ok(etiqueta.trim(), 'un tipo desconocido tiene que dar etiqueta, no vacio')
+  assert.match(etiqueta, /tipo_que_no_existe_todavia/, 'la etiqueta tiene que nombrar el tipo para poder diagnosticarlo')
+})
+
+test('extraer nunca guarda contenido vacio para un tipo inventado sin texto ni media', () => {
+  const r = extraer({ type: 'tipo_que_no_existe_todavia' })
+  assert.equal(r.tipo, 'tipo_que_no_existe_todavia')
+  assert.ok(String(r.contenido).trim(), 'extraer tiene que producir contenido no vacio para CUALQUIER tipo')
+  assert.match(r.contenido, /tipo_que_no_existe_todavia/)
+})
+
+test('extraer etiqueta un reaction con el emoji real de Meta', () => {
+  const r = extraer({ type: 'reaction', reaction: { message_id: 'wamid.ABC', emoji: '❤️' } })
+  assert.equal(r.tipo, 'reaction')
+  assert.equal(r.contenido, '❤️ Reaccionó a un mensaje')
+})
+
+test('extraer etiqueta un edit sin necesitar mas payload', () => {
+  const r = extraer({ type: 'edit' })
+  assert.equal(r.tipo, 'edit')
+  assert.equal(r.contenido, '✏️ Editó un mensaje')
+})
+
+test('extraer no guarda un texto realmente vacio en blanco (bug real de MANDI)', () => {
+  const r = extraer({ type: 'text', text: { body: '' } })
+  assert.equal(r.tipo, 'texto')
+  assert.ok(String(r.contenido).trim(), 'un texto vacio de verdad tiene que producir etiqueta, no ""')
 })
