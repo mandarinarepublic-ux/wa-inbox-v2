@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert'
-import { extraer, normalizarReferral, formatearPedido } from '../lib/wa-mensaje.js'
+import { extraer, normalizarReferral, formatearPedido, contenidoTipoEspecial } from '../lib/wa-mensaje.js'
 
 test('extraer lee un texto', () => {
   const r = extraer({ type: 'text', text: { body: 'hola' } })
@@ -128,4 +128,28 @@ test('extraer etiqueta un system como aviso de WhatsApp', () => {
   const r = extraer({ type: 'system', system: { body: 'El numero cambio', type: 'user_changed_number' } })
   assert.equal(r.tipo, 'system')
   assert.equal(r.contenido, 'ℹ️ Aviso de WhatsApp')
+})
+
+// ── contenidoTipoEspecial: la misma función que usa extraer(), pero llamada
+// directo con `raw` (lo que hace lib/inbox-supabase.js al leer filas viejas
+// con `texto` vacío). Tiene que decir EXACTAMENTE lo mismo que extraer().
+
+test('contenidoTipoEspecial reconstruye el order desde raw igual que extraer', () => {
+  const raw = { type: 'order', order: { product_items: [{ currency: 'USD', quantity: 1, item_price: 30, product_retailer_id: 'X' }] } }
+  assert.equal(contenidoTipoEspecial('order', raw), extraer(raw).contenido)
+})
+
+test('contenidoTipoEspecial deja la etiqueta generica cuando el order no tiene raw', () => {
+  assert.equal(contenidoTipoEspecial('order', null), '📦 Pedido del catálogo')
+  assert.equal(contenidoTipoEspecial('order', {}), '📦 Pedido del catálogo')
+})
+
+test('contenidoTipoEspecial arma el unsupported con motivo desde raw', () => {
+  const raw = { errors: [{ title: 'This message is unavailable.' }] }
+  assert.equal(contenidoTipoEspecial('unsupported', raw), '⚠️ Te escribió algo que no podemos mostrar (This message is unavailable.)')
+})
+
+test('contenidoTipoEspecial no revienta con tipos comunes: devuelve vacio', () => {
+  assert.equal(contenidoTipoEspecial('texto', null), '')
+  assert.equal(contenidoTipoEspecial('imagen', {}), '')
 })
