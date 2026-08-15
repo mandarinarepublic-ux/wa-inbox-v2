@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert'
-import { extraer, normalizarReferral } from '../lib/wa-mensaje.js'
+import { extraer, normalizarReferral, formatearPedido } from '../lib/wa-mensaje.js'
 
 test('extraer lee un texto', () => {
   const r = extraer({ type: 'text', text: { body: 'hola' } })
@@ -38,4 +38,94 @@ test('extraer arrastra el id del mensaje citado', () => {
 test('normalizarReferral devuelve null cuando no hay pauta', () => {
   assert.equal(normalizarReferral(null), null)
   assert.equal(normalizarReferral({}), null)
+})
+
+// ── order (pedido del catálogo) ─────────────────────────────────────────────
+
+test('formatearPedido arma el total y las lineas de un pedido de dos articulos', () => {
+  const texto = formatearPedido({
+    catalog_id: '748962957813465',
+    text: '',
+    product_items: [
+      { currency: 'USD', quantity: 1, item_price: 30, product_retailer_id: '8011691753565' },
+      { currency: 'USD', quantity: 2, item_price: 25, product_retailer_id: '108' },
+    ],
+  })
+  assert.equal(texto, [
+    '📦 Pedido del catálogo — 3 artículos · $80.00',
+    '   • 1 × $30.00  (8011691753565)',
+    '   • 2 × $25.00  (108)',
+  ].join('\n'))
+})
+
+test('formatearPedido con un solo articulo dice "articulo" en singular', () => {
+  const texto = formatearPedido({
+    product_items: [{ currency: 'USD', quantity: 1, item_price: 15, product_retailer_id: 'ABC' }],
+  })
+  assert.match(texto, /^📦 Pedido del catálogo — 1 artículo · \$15\.00$/m)
+})
+
+test('formatearPedido con cero articulos NUNCA revienta ni desaparece', () => {
+  const texto = formatearPedido({ product_items: [] })
+  assert.equal(texto, '📦 Pedido del catálogo — 0 artículos · $0.00')
+})
+
+test('formatearPedido pinta un articulo con precio en 0 (pasó de verdad)', () => {
+  const texto = formatearPedido({
+    product_items: [{ currency: 'USD', quantity: 1, item_price: 0, product_retailer_id: 'SINPRECIO' }],
+  })
+  assert.equal(texto, [
+    '📦 Pedido del catálogo — 1 artículo · $0.00',
+    '   • 1 × $0.00  (SINPRECIO)',
+  ].join('\n'))
+})
+
+test('formatearPedido incluye la nota del cliente cuando viene', () => {
+  const texto = formatearPedido({
+    text: 'sin arroz por favor',
+    product_items: [{ currency: 'USD', quantity: 1, item_price: 10, product_retailer_id: 'X' }],
+  })
+  assert.match(texto, /📝 sin arroz por favor$/)
+})
+
+test('extraer arma el contenido de un order desde el payload real de Meta', () => {
+  const r = extraer({
+    type: 'order',
+    order: {
+      catalog_id: '748962957813465',
+      text: '',
+      product_items: [
+        { currency: 'USD', quantity: 1, item_price: 30, product_retailer_id: '8011691753565' },
+        { currency: 'USD', quantity: 2, item_price: 25, product_retailer_id: '108' },
+      ],
+    },
+  })
+  assert.equal(r.tipo, 'order')
+  assert.match(r.contenido, /^📦 Pedido del catálogo — 3 artículos · \$80\.00/)
+  assert.equal(r.mediaId, '')
+})
+
+// ── unsupported (Meta no manda el contenido, pero SÍ escribió una persona) ──
+
+test('extraer etiqueta un unsupported con el motivo que manda Meta', () => {
+  const r = extraer({
+    type: 'unsupported',
+    errors: [{ code: 131060, title: 'This message is unavailable.' }],
+    unsupported: { type: 'unknown', raw_type: 'unknown' },
+  })
+  assert.equal(r.tipo, 'unsupported')
+  assert.equal(r.contenido, '⚠️ Te escribió algo que no podemos mostrar (This message is unavailable.)')
+})
+
+test('extraer etiqueta un unsupported sin motivo (sin errors)', () => {
+  const r = extraer({ type: 'unsupported' })
+  assert.equal(r.contenido, '⚠️ Te escribió algo que no podemos mostrar')
+})
+
+// ── system (aviso de WhatsApp, no una persona escribiendo) ──────────────────
+
+test('extraer etiqueta un system como aviso de WhatsApp', () => {
+  const r = extraer({ type: 'system', system: { body: 'El numero cambio', type: 'user_changed_number' } })
+  assert.equal(r.tipo, 'system')
+  assert.equal(r.contenido, 'ℹ️ Aviso de WhatsApp')
 })
