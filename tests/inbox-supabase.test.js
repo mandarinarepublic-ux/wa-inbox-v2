@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert'
-import { toMensaje, esPintable } from '../lib/inbox-supabase.js'
+import { toMensaje, esPintable, paginarLimite } from '../lib/inbox-supabase.js'
 
 // Caso que se escapó en el deploy de wa-mensaje.js: filas YA GUARDADAS en la
 // base con `texto` vacío (la ingestión vieja no derivaba la etiqueta), leídas
@@ -81,4 +81,43 @@ test('toMensaje: un order de la consulta SIN raw (polling) sigue pasando el filt
   assert.equal(m.mensaje, '📦 Pedido del catálogo')
   assert.ok(m.mensaje.trim(), 'tiene que producir una etiqueta no vacia')
   assert.ok(esPintable(m), 'una fila de polling sin raw NO puede quedar invisible')
+})
+
+// paginarLimite es el que le faltaba a getListaSupabase: PostgREST corta en
+// 1000 filas por request y un solo `.limit(4000)` se quedaba callado en las
+// primeras 1000. Este es el test que falla si alguien vuelve a reemplazar el
+// loop por un `.limit()` de una sola llamada — no habla con Supabase, solo
+// con un `fetchPage` falso.
+
+test('paginarLimite junta varias paginas cortas hasta que una vuelve incompleta', async () => {
+  const paginas = [
+    Array.from({ length: 1000 }, (_, i) => i),
+    Array.from({ length: 1000 }, (_, i) => 1000 + i),
+    Array.from({ length: 762 }, (_, i) => 2000 + i),
+  ]
+  let llamadas = 0
+  const fetchPage = async () => paginas[llamadas++]
+  const filas = await paginarLimite(fetchPage, 4000)
+  assert.equal(filas.length, 2762)
+  assert.equal(llamadas, 3)
+})
+
+test('paginarLimite hace UNA sola llamada cuando la primera pagina ya viene incompleta', async () => {
+  let llamadas = 0
+  const fetchPage = async () => { llamadas++; return Array.from({ length: 400 }, (_, i) => i) }
+  const filas = await paginarLimite(fetchPage, 4000)
+  assert.equal(filas.length, 400)
+  assert.equal(llamadas, 1)
+})
+
+test('paginarLimite respeta el tope aunque haya mas filas disponibles', async () => {
+  // Fuente con de sobra (5000 filas): fetchPage respeta el rango pedido,
+  // igual que `.range(from, to)` en Supabase. Con limite=1500 la segunda
+  // llamada pide solo 500 (no 1000), y no debe hacer una tercera.
+  const todas = Array.from({ length: 5000 }, (_, i) => i)
+  let llamadas = 0
+  const fetchPage = async (from, to) => { llamadas++; return todas.slice(from, to + 1) }
+  const filas = await paginarLimite(fetchPage, 1500)
+  assert.equal(filas.length, 1500)
+  assert.equal(llamadas, 2)
 })
