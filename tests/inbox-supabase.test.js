@@ -69,3 +69,16 @@ test('toMensaje respeta el texto ya derivado (fila nueva, ingestion arreglada) s
   const m = toMensaje(fila)
   assert.equal(m.mensaje, '📦 Pedido del catálogo — 1 artículo · $10.00')
 })
+
+// getMensajesSupabase (el polling de /api/inbox-sync, cada ~20s por pestaña)
+// dejó de pedir `raw` por peso (539 kB por ventana de 3.000 mensajes en IND).
+// Una fila de ESA consulta llega sin la clave `raw` (no `raw: null`, sino
+// ausente del objeto) — este test es el que tiene que cazarlo si alguien
+// vuelve a optimizar la consulta mañana y esconde gente otra vez.
+test('toMensaje: un order de la consulta SIN raw (polling) sigue pasando el filtro', () => {
+  const filaDePolling = { telefono: '593987654321', tipo: 'order', texto: '' } // sin `raw`
+  const m = toMensaje(filaDePolling)
+  assert.equal(m.mensaje, '📦 Pedido del catálogo')
+  assert.ok(m.mensaje.trim(), 'tiene que producir una etiqueta no vacia')
+  assert.ok(esPintable(m), 'una fila de polling sin raw NO puede quedar invisible')
+})
