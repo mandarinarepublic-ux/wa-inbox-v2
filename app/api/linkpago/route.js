@@ -49,13 +49,15 @@ export async function POST(req) {
 
     const texto = mensajeLinkPago(monto, link)
 
-    // Nota neutral que deja constancia de que el link se generó. Es el
+    // Nota neutral con el MENSAJE COMPLETO (no un resumen): es lo que el
+    // vendedor realmente pega en el chat, y así no tiene que reconstruirlo si
+    // le toca generar otro link para el mismo cliente. También es el
     // diagnóstico: si nunca aparece una nota verde (pago_ok) después de esta,
     // es que dLocal no está llamando al callback. AWAITED: una escritura sin
     // esperar puede morir si la función serverless se congela justo después
     // de responder (ya pasó una vez con la factura de Dátil).
     try {
-      await crearNota(telefono, `Link de pago generado por $${monto}`, null)
+      await crearNota(telefono, texto, null)
     } catch (e) {
       // La nota es diagnóstico, no el resultado: si falla, el vendedor igual
       // tiene que poder copiar el link. Se reporta en logs, no se corta el flujo.

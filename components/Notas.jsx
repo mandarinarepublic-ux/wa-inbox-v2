@@ -51,6 +51,11 @@ export default function Notas({ telefono, refrescar = 0, onVerPedido }) {
   const [editandoId, setEditandoId] = useState(null)
   const [editTexto, setEditTexto] = useState('')
   const [confirmarBorrar, setConfirmarBorrar] = useState(null)
+  // id de la nota cuya copia se acaba de confirmar (2s). La confirmación es
+  // el propio botón cambiando a "✅ Copiado" — EN PANTALLA, nunca un title:
+  // un title es invisible en celular y esa exacta trampa ya costó 17 días de
+  // un teléfono que no sonaba.
+  const [copiadoId, setCopiadoId] = useState(null)
 
   const cargar = useCallback(async () => {
     if (!telefono) return
@@ -102,6 +107,21 @@ export default function Notas({ telefono, refrescar = 0, onVerPedido }) {
       setNotas(n => n.filter(x => x.id !== id))
       setConfirmarBorrar(null)
     } catch (e) { setError(e.message) }
+  }
+
+  // Copia el texto de LA nota (no un resumen) — sirve para cualquier nota, no
+  // solo la del link de pago: una nota es texto, y copiarlo siempre es útil.
+  // `navigator.clipboard` puede no existir (origen inseguro) o rechazar el
+  // permiso: el fallo se avisa en el mismo `error` de arriba, nunca en silencio.
+  async function copiarNota(id, texto) {
+    try {
+      if (!navigator.clipboard) throw new Error('el navegador no permite copiar acá')
+      await navigator.clipboard.writeText(texto)
+      setCopiadoId(id)
+      setTimeout(() => setCopiadoId(actual => (actual === id ? null : actual)), 2000)
+    } catch (e) {
+      setError('No se pudo copiar al portapapeles: ' + (e.message || e))
+    }
   }
 
   function alternar(id) {
@@ -219,6 +239,10 @@ export default function Notas({ telefono, refrescar = 0, onVerPedido }) {
                           {est ? `${est.marca} ` : ''}{nota.texto}
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
+                          <button onClick={() => copiarNota(nota.id, nota.texto)}
+                            style={{ background: 'none', border: 'none', padding: 0, color: copiadoId === nota.id ? VERDE : '#64748b', fontSize: 10, fontWeight: copiadoId === nota.id ? 700 : 400, cursor: 'pointer', fontFamily: 'inherit' }}>
+                            {copiadoId === nota.id ? '✅ Copiado' : '📋 Copiar'}
+                          </button>
                           <button onClick={() => { setEditandoId(nota.id); setEditTexto(nota.texto) }}
                             style={{ background: 'none', border: 'none', padding: 0, color: '#64748b', fontSize: 10, cursor: 'pointer', fontFamily: 'inherit' }}>✏️ Editar</button>
                           {confirmarBorrar === nota.id ? (

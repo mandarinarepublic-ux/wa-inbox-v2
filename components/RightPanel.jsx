@@ -11,14 +11,6 @@ import { moverItem } from '@/lib/orden-lista'
 
 const MAX_IMGS  = 10
 
-// Mismo estilo de textarea de solo-lectura que usa <Notas/>, para que el texto
-// del link de pago (listo para copiar) se vea igual que el resto del panel.
-const sTextareaLinkPago = {
-  width: '100%', background: '#111c2a', border: '1px solid #1e2d3d', borderRadius: 7,
-  color: '#e2e8f0', fontSize: 11, padding: '6px 8px', resize: 'vertical', outline: 'none',
-  fontFamily: 'inherit', whiteSpace: 'pre-wrap',
-}
-
 // Extrae todas las urls de imagen de un reply (imageUrl, imageUrl2..imageUrl10)
 function getImgUrls(reply) {
   return Array.from({ length: MAX_IMGS }, (_, i) =>
@@ -310,16 +302,17 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
   // "✅ Pedido creado" más abajo. Se limpia al cambiar de contacto.
   const [pedidoRes,     setPedidoRes]     = useState(null)
 
-  // ── LINK PAGO: genera el link dLocal + el texto listo para copiar ─────
-  // NO se manda nada al chat desde acá — el vendedor copia y decide cuándo y
-  // cómo mandarlo. `/api/linkpago` deja además una nota neutral ("Link
-  // generado"), que es el diagnóstico: si nunca aparece una nota verde después,
-  // dLocal no está avisando el pago (ver app/api/pago-dlocal/route.js).
+  // ── LINK PAGO: genera el link dLocal y deja el mensaje completo en la nota ──
+  // NO se manda nada al chat desde acá — el vendedor copia la nota y decide
+  // cuándo y cómo mandarlo. `/api/linkpago` ya deja el texto COMPLETO (no un
+  // resumen) como nota neutral — con el botón de copiar de <Notas/> — así que
+  // acá no se guarda ningún resultado: el panel se limpia solo después de
+  // generar, listo para otro monto en el mismo cliente. La nota es también el
+  // diagnóstico: si nunca aparece una verde después, dLocal no está avisando
+  // el pago (ver app/api/pago-dlocal/route.js).
   const [montoLink,     setMontoLink]     = useState('')
   const [generandoLink, setGenerandoLink] = useState(false)
-  const [linkPago,      setLinkPago]      = useState(null)  // { link, texto }
   const [linkPagoError, setLinkPagoError] = useState('')
-  const [linkCopiado,   setLinkCopiado]   = useState(false)
 
   // ── PEDIDO MANUAL: el formulario del CRM dentro de este panel ──
   const [manualAbierto, setManualAbierto] = useState(false)
@@ -391,35 +384,25 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
     if (activeConv) setPedidoRes(null)
   }, [activeConv?.telefono])
 
-  // Mismo motivo que arriba: el link generado es del chat anterior, no de este.
+  // Mismo motivo que arriba: el monto es del chat anterior, no de este.
   useEffect(() => {
-    setMontoLink(''); setLinkPago(null); setLinkPagoError(''); setLinkCopiado(false)
+    setMontoLink(''); setLinkPagoError('')
   }, [activeConv?.telefono])
 
   async function generarLink() {
     if (generandoLink || !activeConv) return
-    setGenerandoLink(true); setLinkPagoError(''); setLinkPago(null); setLinkCopiado(false)
+    setGenerandoLink(true); setLinkPagoError('')
     try {
-      const res = await generarLinkPago(activeConv.telefono, Number(montoLink))
-      setLinkPago({ link: res.link, texto: res.texto })
-      // La nota "Link de pago generado por $X" ya quedó guardada en el
-      // servidor; refrescamos la lista para que aparezca sin recargar.
+      await generarLinkPago(activeConv.telefono, Number(montoLink))
+      // El texto completo ya quedó guardado como nota en el servidor (con su
+      // propio botón de copiar) — acá solo se limpia el monto para dejar el
+      // panel listo si toca generar otro, sin nada que reconstruir.
+      setMontoLink('')
       setNotasRefrescar(n => n + 1)
     } catch (e) {
       setLinkPagoError(e.message)
     } finally {
       setGenerandoLink(false)
-    }
-  }
-
-  async function copiarLink() {
-    if (!linkPago) return
-    try {
-      await navigator.clipboard.writeText(linkPago.texto)
-      setLinkCopiado(true)
-      setTimeout(() => setLinkCopiado(false), 2000)
-    } catch (e) {
-      setLinkPagoError('No se pudo copiar al portapapeles: ' + e.message)
     }
   }
 
@@ -995,27 +978,6 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                   invisible en celular y ese bug ya se arregló una vez acá. */}
               {linkPagoError && (
                 <div style={{ marginTop:6, fontSize:11, color:'#f87171' }}>⚠️ {linkPagoError}</div>
-              )}
-
-              {linkPago && (
-                <div style={{ marginTop:8 }}>
-                  <textarea
-                    readOnly
-                    value={linkPago.texto}
-                    rows={5}
-                    onFocus={e => e.target.select()}
-                    style={sTextareaLinkPago}
-                  />
-                  <button onClick={copiarLink}
-                    style={{
-                      width:'100%', marginTop:5, padding:6,
-                      background: linkCopiado ? 'rgba(16,185,129,.22)' : 'rgba(16,185,129,.12)',
-                      border:'1px solid rgba(16,185,129,.35)', color:'#10b981', borderRadius:7,
-                      fontSize:11, fontWeight:700, fontFamily:'inherit', cursor:'pointer',
-                    }}>
-                    {linkCopiado ? '✅ Copiado' : '📋 Copiar'}
-                  </button>
-                </div>
               )}
             </div>
 
