@@ -128,3 +128,34 @@ test('sin estado en ninguna fuente queda vacío, para que la pantalla use el res
   const convs = buildConvs([msg('a', MANDI, 'hola', '2026-08-20T05:08:17Z')], true)
   assert.equal(convs[0].estadoBandeja, '')
 })
+
+// ── La ventana de 24 h también tiene que sobrevivir al merge ──────────────────
+//
+// `windowOpen` decide si se puede escribir o si solo queda plantilla, y hasta ahora
+// se calculaba buscando el último ENTRANTE dentro de los mensajes que hay en
+// pantalla. Eso falla en el instante ANTES de que el hilo filtrado por canal haya
+// cargado: ahí `msgs` viene del poll, que en GENERAL trae los DOS números, y el
+// entrante del OTRO canal haría creer que la ventana está abierta.
+//
+// Un falso "abierta" manda un mensaje que muere en Meta con 131047 y el vendedor
+// cree que llegó — exactamente lo que pasó el 19-ago. El dato autoritativo
+// (`ultimoEntranteCanal`, de la vista, ya por canal) tiene que sobrevivir igual
+// que el estado.
+
+test('ultimoEntranteCanal sobrevive aunque el último mensaje no lo traiga', () => {
+  const convs = buildConvs([
+    msg('a', MANDI, 'hola', '2026-08-20T05:08:17Z', { ultimoEntranteCanal: '2026-08-20T05:08:17Z' }),
+    msg('z', MANDI, 'respuesta', '2026-08-20T05:09:00Z'), // optimista, sin el dato
+  ], true)
+  assert.equal(convs[0].ultimoEntranteCanal, '2026-08-20T05:08:17Z')
+})
+
+test('cada canal conserva SU propia ventana', () => {
+  const convs = buildConvs([
+    msg('a', MANDI,    'viejo', '2026-07-15T19:08:58Z', { ultimoEntranteCanal: '2026-07-15T19:08:58Z' }),
+    msg('b', REPUBLIC, 'hoy',   '2026-08-19T16:20:35Z', { ultimoEntranteCanal: '2026-08-19T16:20:35Z' }),
+  ], true)
+  const porCanal = Object.fromEntries(convs.map(c => [c.phoneId, c.ultimoEntranteCanal]))
+  assert.equal(porCanal[MANDI],    '2026-07-15T19:08:58Z')
+  assert.equal(porCanal[REPUBLIC], '2026-08-19T16:20:35Z')
+})

@@ -16,6 +16,7 @@ import AvisoSesion from '@/components/AvisoSesion'
 import { actualizarNoLeidos, notificar } from '@/lib/notif'
 import { hayQueConfirmarDescarte, AVISO_DESCARTAR_PEDIDO, anchoPanelPedido, anchoPanelMinimo, bytesDeDataUrl, MAX_HOJA_BYTES } from '@/lib/pedido-manual'
 import { decidirArrastre } from '@/lib/arrastre'
+import { ventanaAbierta } from '@/lib/bandeja'
 import { ordenarBandeja } from '@/lib/orden-bandeja'
 import { decidirPegado, decidirAdjuntos, TOPE_FOTOS } from '@/lib/adjuntos'
 
@@ -1310,9 +1311,27 @@ export default function App() {
 
   const lastMsg      = activeConv?.last
   const lastIncoming = activeConv ? [...activeConv.msgs].reverse().find(m => m.direccion === 'ENTRANTE') : null
-  const windowOpen = lastIncoming
-    ? (Date.now() - parseDate(lastIncoming.timestamp).getTime()) < 24 * 60 * 60 * 1000
-    : false
+  /**
+   * ¿Se puede escribir libremente en este chat, o solo plantilla?
+   *
+   * Manda `ultimoEntranteCanal` — el último mensaje del cliente POR ESTE NÚMERO,
+   * que viene de la base ya separado por canal. El respaldo (buscar el último
+   * entrante entre los mensajes en pantalla) queda para cuando ese dato aún no
+   * llegó, pero NO puede ser la fuente principal:
+   *
+   * en GENERAL el poll trae los mensajes de los DOS números, y en el instante
+   * anterior a que cargue el hilo filtrado, un entrante del OTRO canal haría creer
+   * que la ventana está abierta. Ese falso "abierta" es exactamente lo que dejó
+   * salir los tres mensajes del 19-ago que Meta rechazó con 131047 — el vendedor
+   * los vio salir y el cliente nunca los recibió.
+   *
+   * `ventanaAbierta` (lib/bandeja.js, con pruebas) cierra ante la duda: sin fecha
+   * o con fecha corrupta devuelve false. Un falso "cerrada" solo obliga a usar
+   * plantilla; un falso "abierta" pierde el mensaje en silencio.
+   */
+  const windowOpen = activeConv?.ultimoEntranteCanal
+    ? ventanaAbierta(activeConv.ultimoEntranteCanal)
+    : (lastIncoming ? ventanaAbierta(lastIncoming.timestamp) : false)
 
   /**
    * Por qué número sale lo que se envía AHORA.

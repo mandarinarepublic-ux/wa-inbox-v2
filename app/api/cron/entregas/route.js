@@ -1,0 +1,104 @@
+import { NextResponse } from 'next/server'
+import { enviarTelegram, telegramConfigurado } from '@/lib/telegram'
+import {
+  getEntregasFallidasSupabase,
+  getMarcaAvisoFallidosSupabase,
+  setMarcaAvisoFallidosSupabase,
+} from '@/lib/inbox-supabase'
+import { agruparFallos, textoAvisoFallidos } from '@/lib/entregas-fallidas'
+import { CANALES } from '@/lib/canales'
+
+// Aviso de mensajes que NO le llegaron al cliente. Lo llama Vercel Cron (vercel.json).
+//
+// ⚠️ POR QUÉ EXISTE, con números: en agosto murieron 14 mensajes salientes sin que
+// nadie se enterara — los seis del 16-ago a un cliente que nunca había escrito a
+// ese número, los tres (más uno) del 19-ago, y otros cuatro repartidos. TODOS con
+// el mismo error 131047. Se encontraron por casualidad, revisando otra cosa.
+//
+// Lo único que lo decía era un `⚠` rojo de 11 px al lado de la hora, con el motivo
+// escondido en un `title=` — invisible al tacto en un celular. Es la misma trampa
+// del bug de push de julio, que estuvo 17 días roto porque el aviso solo se veía
+// en la PC.
+//
+// Este chequeo se pidió por escrito el 29-jul y no se hizo hasta el 21-ago.
+//
+// Sin TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID no manda nada y no rompe nada.
+
+export const dynamic = 'force-dynamic'
+export const maxDuration = 60
+
+const BASE_URL = String(process.env.INBOX_URL || 'https://inbox.apps.mandarinaec.com')
+  .replace(/[^\x21-\x7E]/g, '')   // por si la variable llega con BOM desde PowerShell
+  .replace(/\/+$/, '')
+
+// Cuánto mira hacia atrás la PRIMERA vez (sin marca guardada). Corto a propósito:
+// al encender esto no tiene sentido avisar de todo lo que murió en agosto — eso ya
+// se sabe, y llenar el primer aviso de historia vieja es la mejor forma de que se
+// aprenda a ignorarlo.
+const VENTANA_INICIAL_MIN = 60
+
+function autorizado(req) {
+  const secret = process.env.CRON_SECRET
+  const auth = req.headers.get('authorization') || ''
+  const keyQ = new URL(req.url).searchParams.get('key')
+  // Mismo criterio que /api/cron/pendientes: con secreto configurado manda el
+  // secreto —que Vercel manda solo en los crons de verdad—; sin secreto, la
+  // cabecera `x-vercel-cron` es lo único que hay.
+  if (secret) return auth === `Bearer ${secret}` || keyQ === secret
+  return req.headers.get('x-vercel-cron') != null
+}
+
+export async function GET(req) {
+  if (!autorizado(req)) {
+    // Un cron que empieza a dar 401 en silencio es un cron muerto que parece vivo.
+    console.error('[cron/entregas] 401: llamada sin autorización válida')
+    return NextResponse.json({ error: 'no autorizado' }, { status: 401 })
+  }
+
+  try {
+    const marca = await getMarcaAvisoFallidosSupabase()
+    const desde = marca || new Date(Date.now() - VENTANA_INICIAL_MIN * 60000).toISOString()
+
+    const filas = await getEntregasFallidasSupabase(desde)
+    const grupos = agruparFallos(filas)
+    const texto  = textoAvisoFallidos(grupos, { canales: CANALES, baseUrl: BASE_URL })
+
+    // La marca se mueve SIEMPRE que haya filas, se haya podido avisar o no.
+    //
+    // Si se moviera solo tras un envío exitoso, un Telegram caído acumularía
+    // fallos y al volver mandaría un aviso gigante con cosas de horas atrás. Y si
+    // no se moviera nunca sin avisar, el mismo fallo se repetiría cada media hora
+    // para siempre. Se mueve al fallo más reciente que se alcanzó a mirar.
+    const ultima = filas.reduce((max, f) => (f.fecha > max ? f.fecha : max), desde)
+
+    if (!texto) {
+      // Nada que avisar. NO se manda un "todo bien" periódico: un aviso vacío que
+      // llega cada media hora entrena a ignorarlos justo el día que trae algo.
+      await setMarcaAvisoFallidosSupabase(ultima)
+      return NextResponse.json({ ok: true, fallidos: 0, desde })
+    }
+
+    const envio = await enviarTelegram(texto)
+    // ⚠️ Se mira el resultado. `fetch` no lanza con 4xx/5xx, así que un token
+    // vencido se vería idéntico a un envío bueno — que es exactamente cómo este
+    // aviso se moriría en silencio, igual que lo que vino a vigilar.
+    if (!envio.ok) {
+      console.error('[cron/entregas] NO se pudo avisar:', envio.motivo,
+        `— ${filas.length} entregas fallidas sin reportar desde ${desde}`)
+    }
+    await setMarcaAvisoFallidosSupabase(ultima)
+
+    return NextResponse.json({
+      ok: true,
+      fallidos: filas.length,
+      clientes: grupos.length,
+      avisado: envio.ok,
+      motivo: envio.ok ? undefined : envio.motivo,
+      telegram: telegramConfigurado(),
+      desde,
+    })
+  } catch (err) {
+    console.error('[cron/entregas]', err)
+    return NextResponse.json({ error: err.message }, { status: 500 })
+  }
+}
