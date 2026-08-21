@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getLista, getMensajes } from '@/lib/mensajes'
 import { getContactos } from '@/lib/contactos'
-import { contarPendientesPorCanalSupabase, contarPendientesTotalSupabase, getBandejaSupabase } from '@/lib/inbox-supabase'
+import { contarPendientesPorCanalSupabase, contarPendientesTotalSupabase } from '@/lib/inbox-supabase'
 
 // Sync unificado del inbox: UNA sola función en vez de 3 (/api/lista +
 // /api/mensajes + /api/contactos) por cada ciclo de polling → 1/3 de las
@@ -15,7 +15,7 @@ export async function GET(req) {
     // ?canal=todos es la pestaña GENERAL: null = sin filtro de número.
     const pedido = new URL(req.url).searchParams.get('canal') || undefined
     const canal = pedido === 'todos' ? null : pedido
-    const [lista, rows, contactos, bandeja, pendientes, pendientesTotal] = await Promise.all([
+    const [lista, rows, contactos, pendientes, pendientesTotal] = await Promise.all([
       getLista(canal),
       getMensajes(canal),
       // Contactos SIN filtro de canal, a propósito. El estado (pendiente, atendido,
@@ -27,20 +27,14 @@ export async function GET(req) {
       // pantalla no encontraba su estado, asumía "pendiente", y ARCHIVAR parecía no
       // funcionar (se guardaba bien y volvía a pintarse pendiente al refrescar).
       getContactos(null),
-      // Bandeja: el estado POR CANAL. También sin filtro, y por un motivo distinto
-      // al de los contactos: la pantalla necesita saber el estado de las DOS
-      // conversaciones de un cliente para pintar bien sus dos filas en GENERAL.
+      // ☠️ AQUÍ ESTABA LA LECTURA QUE DEGRADÓ EL INBOX EL 19-ago. Se traía la tabla
+      // `bandeja` ENTERA (1.642 filas) para saber el estado por canal — y como los
+      // dos contadores de abajo también la leían, salían TRES lecturas completas
+      // por ciclo: 6 viajes de red extra y +142 kB, en la ruta que ya es el 47 %
+      // del consumo de Vercel. Se notaba a simple vista en el primer minuto de uso.
       //
-      // Trae solo 8 columnas (no `select('*')` como los contactos): esta ruta es la
-      // más cara del proyecto —el 47 % del consumo de Vercel, ~4,36 MB por poll— y
-      // no es lugar para traer campos de más. Son ~1.640 filas livianas.
-      //
-      // `[]` si falla, nunca null: la pantalla trata "sin fila" como 'pendiente', y
-      // un chat de más en Pendientes se ve; uno de menos desaparece.
-      getBandejaSupabase(null).catch((e) => {
-        console.error('[/api/inbox-sync] bandeja:', e.message)
-        return []
-      }),
+      // Ya no existe: el estado viene PEGADO a cada fila de `getLista` (vista
+      // `inbox.lista_bandeja`), sin una sola consulta extra.
       // De TODOS los canales, no solo del activo: alimenta el contador de la
       // pestaña que no se está mirando.
       contarPendientesPorCanalSupabase().catch(() => ({})),
@@ -52,7 +46,7 @@ export async function GET(req) {
       // "no hay ninguno" y caiga a la suma en vez de mostrar un 0 falso.
       contarPendientesTotalSupabase().catch(() => null),
     ])
-    return NextResponse.json({ lista, rows, contactos, bandeja, pendientes, pendientesTotal }, {
+    return NextResponse.json({ lista, rows, contactos, pendientes, pendientesTotal }, {
       // Cache COMPARTIDO en el edge, corto (5s) para no agregar latencia visible al
       // vendedor: varias pestañas que pollean dentro de la misma ventana comparten
       // UNA ejecución de origen. stale-while-revalidate sirve al instante y revalida.

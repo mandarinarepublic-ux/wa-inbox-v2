@@ -7,7 +7,7 @@ import RightPanel from '@/components/RightPanel'
 import SetupModal from '@/components/SetupModal'
 import GuideModal from '@/components/GuideModal'
 import { CANALES, CANAL_GENERAL, CANAL_POR_DEFECTO, colorDeCanal, canalDePhoneId, phoneIdDeCanal, etiquetaDePhoneId } from '@/lib/canales'
-import { mapaBandeja, estadoDeBandeja, claveBandeja } from '@/lib/bandeja'
+
 import SocialInbox from '@/components/SocialInbox'
 import Contactos, { PlantillaModal } from '@/components/Contactos'
 import Automatizaciones from '@/components/Automatizaciones'
@@ -169,11 +169,27 @@ export default function App() {
   // por el número equivocado.
   const [canalArmado, setCanalArmado] = useState(CANAL_POR_DEFECTO)
   const [pendientes, setPendientes] = useState({})   // { phoneId: nº pendientes }
-  // Estado de bandeja POR CANAL: Map de "teléfono|phone_id" → { estado, ventana… }.
-  // Convive con `contacts` a propósito y el reparto es: acá lo que es de la
-  // CONVERSACIÓN (¿le contesté?, ¿está abierta la ventana?), en `contacts` lo que
-  // es de la PERSONA (nombre, temperatura, notas, venta, IA). Ver lib/bandeja.js.
-  const [bandeja, setBandeja] = useState(() => mapaBandeja([]))
+  /**
+   * Número por el que va la CONVERSACIÓN ABIERTA.
+   *
+   * ⚠️ ESTA ES LA PIEZA QUE SOSTIENE TODO EL DISEÑO. El canal ya no sale de la
+   * pestaña: sale del chat que tienes abierto. Por eso se puede responder desde
+   * GENERAL sin moverse de ahí — es lo que pidió Rodrigo y es como se trabaja:
+   *
+   *   "en general respondo y solo cambia el número"
+   *
+   * El primer intento (19-ago) hizo lo contrario: al tocar una fila en GENERAL te
+   * MANDABA a la pestaña del número. Además de sacarte de la cola única —el valor
+   * entero de GENERAL— cada clic pasaba por `cambiarLinea`, que vacía `convs`,
+   * `contacts` y el caché de hilos y recarga todo de cero. O sea que abrir un chat
+   * borraba el inbox y lo volvía a bajar (474 kB + 370 kB + mensajes). Con 25
+   * chats al día eran 25 clics extra y 50 recargas completas.
+   *
+   * Con el canal acá, abrir un chat no toca la pestaña ni la lista: solo cambia
+   * cuál hilo se muestra y por dónde sale la respuesta.
+   */
+  const [activeCanal, setActiveCanal] = useState('')
+  const activeCanalRef = useRef('')
   // Pendientes de GENERAL: PERSONAS distintas. Va aparte y no se deriva de
   // `pendientes`, porque quien está pendiente en los dos números suma en los dos
   // botones de número y sumarlos contaría a esa persona dos veces. `null` = todavía
@@ -314,11 +330,12 @@ export default function App() {
     const lista  = sync?.lista ?? null
     const rows   = sync?.rows ?? null
     const ctList = sync?.contactos ?? null
-    // Estado POR CANAL. Es lo que permite que un cliente esté pendiente por un
-    // número y atendido por el otro. Si la lectura falla llega [], y `mapaBandeja`
-    // devuelve un Map vacío: todo cae a 'pendiente', que es el lado seguro (un
-    // chat de más en Pendientes se ve; uno de menos desaparece).
-    if (Array.isArray(sync?.bandeja)) setBandeja(mapaBandeja(sync.bandeja))
+    // El estado POR CANAL ya no se pide aparte: viene pegado a cada fila de
+    // `lista` (campo `estadoBandeja`, vista inbox.lista_bandeja).
+    //
+    // Traerlo por separado fue el error del 19-ago: +142 kB y 6 viajes de red por
+    // ciclo, y como el mapa arrancaba vacío, al abrir el inbox TODO se pintaba
+    // pendiente hasta que llegara. Pegado a la fila, ese instante no existe.
     // Pendientes de TODOS los canales (incluido el que no se está mirando).
     if (sync?.pendientes) setPendientes(sync.pendientes)
     // Solo si vino un número: `null` significa que la lectura falló, y ahí es mejor
@@ -684,21 +701,33 @@ export default function App() {
   // mensaje de cada conversación; sin esto un chat viejo se vería con una sola burbuja
   // (el síntoma de "se borraron los mensajes"). Cachea los últimos 5 hilos y se
   // re-inyectan en cada poll (load) para que no se pierdan entre refrescos.
-  const cargarHilo = useCallback(async (telefono) => {
+  const cargarHilo = useCallback(async (telefono, canal = '') => {
     if (!telefono) return
-    const msgs = await fetchHilo(telefono)
+    const canalHilo = canal || activeCanalRef.current
+    const msgs = await fetchHilo(telefono, 800, canalHilo)
     if (!Array.isArray(msgs) || !msgs.length) return
-    hilosRef.current[telefono] = msgs
+    // Clave por (teléfono, canal). Con la clave vieja —solo el teléfono— el caché
+    // MEZCLABA los hilos de los dos números del mismo cliente bajo la misma
+    // entrada: eso era lo que hacía que en GENERAL se viera una conversación que
+    // no existe, dos hilos distintos cosidos por fecha.
+    const clave = `${telefono}|${canalHilo || ''}`
+    hilosRef.current[clave] = msgs
     const abiertos = Object.keys(hilosRef.current)
     if (abiertos.length > 5) {
+      const claveActiva = `${activeRef.current}|${activeCanalRef.current || ''}`
       abiertos.slice(0, abiertos.length - 5)
-        .filter(t => t !== activeRef.current)
-        .forEach(t => { delete hilosRef.current[t] })
+        .filter(k => k !== claveActiva)
+        .forEach(k => { delete hilosRef.current[k] })
     }
     setConvs(prev => prev.map(c => {
       if (c.telefono !== telefono) return c
-      const merged = buildConvs([...c.msgs, ...msgs])[0]
-      return merged ? { ...c, msgs: merged.msgs, last: merged.last } : c
+      if (c.phoneId && canalHilo && c.phoneId !== canalHilo) return c  // la fila del OTRO número
+      // REEMPLAZA, no fusiona. El `buildConvs([...c.msgs, ...msgs])` de antes unía
+      // el hilo ya filtrado por canal con los mensajes SIN filtrar que trae el
+      // poll, así que el filtro no servía de nada y los dos números volvían a
+      // mezclarse en pantalla. `msgs` ya viene filtrado por el backend: manda.
+      const armado = buildConvs(msgs)[0]
+      return armado ? { ...c, msgs: armado.msgs, last: armado.last } : c
     }))
   }, [])
 
@@ -751,6 +780,7 @@ export default function App() {
       setCanalActivo(id)        // manda a api-client: lecturas y envíos van por acá
       setCanalArmado(id)        // el estado de React no puede quedar atrás del módulo
       setActive(null); activeRef.current = null
+      setActiveCanal(''); activeCanalRef.current = ''
       setCitando(null)
       setConvs([]); setContacts({})
       hilosRef.current = {}     // hilos cargados del canal anterior
@@ -760,23 +790,26 @@ export default function App() {
       setCanalActivo(id)
       setCanalArmado(id)        // idem: MANDI/REPUBLIC mandan sobre lo armado, no al revés
     } else if (id === CANAL_GENERAL) {
-      // GENERAL ES UN TABLERO, NO UN LUGAR DONDE SE CONVERSA.
+      // EN GENERAL SE CONVERSA. Es la cola única y es donde se trabaja:
       //
-      // Lista y despacha: al tocar una fila te LLEVA a la pestaña de su número y
-      // abre el chat allá (ver `openConv`). Por eso acá se cierra el chat: en
-      // GENERAL no hay hilo ni caja de respuesta que puedan salir por el canal
-      // equivocado.
+      //   "en general respondo y solo cambia el número"
       //
-      // Esto es lo que borra de raíz la familia de bugs que volvió cinco veces.
-      // Antes GENERAL sí conversaba, y para eso tenía que ADIVINAR por cuál número
-      // mandar: leía el `phone_id` de la ficha del cliente, que es UNA sola por
-      // persona y guardaba el número del último mensaje. Cuando esa adivinanza
-      // fallaba, el mensaje salía por el número equivocado y Meta lo rechazaba con
-      // 131047 — el vendedor lo veía salir y el cliente nunca lo recibía.
+      // Lo que cambió el 20-ago no es dónde se responde, sino DE DÓNDE SALE EL
+      // CANAL: ya no de la pestaña (que en GENERAL no puede decidir, porque
+      // conviven los dos números) sino de la conversación abierta, que sabe cuál
+      // es el suyo porque la lista da una fila por (cliente, número).
       //
-      // Ya no hay nada que adivinar: el canal es la pestaña, y a la pestaña se
-      // llega desde la fila, que sabe de qué número es.
+      // Ya no hay nada que adivinar, y por eso desaparece la familia de bugs que
+      // volvió cinco veces: antes había que deducir el número del `phone_id` de la
+      // ficha del cliente —UNA sola por persona— y cuando deducía mal, el mensaje
+      // salía por el otro número y Meta lo rechazaba con 131047.
+      //
+      // ⚠️ El chat SÍ se cierra al entrar a GENERAL, igual que en cualquier cambio
+      // de pestaña: la conversación que estabas mirando pertenece a la bandeja que
+      // dejas. Lo que NO pasa —y era el error de la primera entrega— es cerrarlo y
+      // recargar el inbox entero cada vez que abres un chat DENTRO de GENERAL.
       setActive(null); activeRef.current = null
+      setActiveCanal(''); activeCanalRef.current = ''
       setCitando(null)
       // El canal armado se conserva igual porque CONTACTOS y las plantillas leen
       // `CANAL_ACTIVO` sin preguntar. Nunca null: un envío con Canal vacío cae al
@@ -883,67 +916,27 @@ export default function App() {
     // se llegó a resolver. Mejor cerrarlo siempre: reabrirlo es un clic.
     setShowTplModal(false)
 
-    // ⚠️ ORDEN CRÍTICO: armar el canal ANTES de tocar `active`. El hilo se pide
-    // con CANAL_ACTIVO (fetchHilo) y el envío inyecta Canal: getCanalActivo()
-    // (postSaliente). Si esto corriera después, el primer hilo se pediría por
-    // el canal anterior y una respuesta rápida saldría por el número equivocado.
-    // `phoneIdDe` es el MISMO helper que pinta la línea de color de la fila
-    // (Tarea 2): tiene que ser el mismo, porque si el color y el canal armado se
-    // calcularan por separado podrían discrepar y la fila diría un número
-    // mientras la respuesta sale por otro.
+    // EL CANAL DE LA CONVERSACIÓN, sin moverse de pestaña.
     //
-    // Solo pisa el canal en GENERAL. En MANDI/REPUBLIC manda la pestaña, no el
-    // contacto: la agenda se pide SIN filtro de canal (getContactos(null) en
-    // /api/inbox-sync) y una fila es UNA sola por teléfono con el phone_id del
-    // ÚLTIMO mensaje — un cliente que escribió a los dos números puede aparecer
-    // en la columna de REPUBLIC con `phoneIdDe` devolviendo MANDI. Si esto
-    // corriera también en pestañas de un solo número, abrir esa fila mixta
-    // podría dejar CANAL_ACTIVO apuntando al número que NO es el de la pestaña
-    // encendida.
+    // Sale de `phoneIdFila` — el número de la fila que tocaste, un HECHO que trae
+    // la lista (vista lista_bandeja, una fila por cliente y número). Antes había
+    // que deducirlo de la ficha del cliente, que es UNA por persona: cuando deducía
+    // mal, la respuesta salía por el otro número y Meta la rechazaba con 131047.
     //
-    // ⚠️ `lineaRef.current`, NO `linea`. `linea` es el valor de ESTE render; si
-    // `openConv` corre justo después de `cambiarLinea` en el mismo tick (Step
-    // 3b: abrirChatDesdeContactos, el salto desde un aviso push), `linea`
-    // todavía es la pestaña VIEJA — React no vuelve a renderizar hasta que el
-    // tick termina. `cambiarLinea` ya deja `lineaRef.current` al día de forma
-    // síncrona (ver ahí), así que leer la ref acá es lo único que garantiza
-    // "la pestaña a la que se está saltando", no "la que se estaba dejando".
+    // ⚠️ NO se cambia de pestaña. En GENERAL se responde desde GENERAL; lo único
+    // que cambia es por cuál número sale. Sacar al vendedor de la cola única
+    // rompía su forma de trabajar Y disparaba una recarga completa del inbox en
+    // cada clic (`cambiarLinea` vacía convs, contacts y el caché de hilos).
     //
-    // Asignación idempotente y sin condición contra `canalArmado`: lo que
-    // importa es la verdad del envío (CANAL_ACTIVO, en el módulo), no si el
-    // estado de React ya "cree" que está en ese canal — `cambiarLinea` puede
-    // haber movido CANAL_ACTIVO sin que canalArmado se enterara.
-    if (lineaRef.current === CANAL_GENERAL) {
-      // GENERAL DESPACHA: te lleva a la pestaña del número de la fila y abre el
-      // chat allá. No se conversa desde GENERAL.
-      //
-      // El canal sale de `phoneIdFila` —el dato de la fila que tocaste— y NO de
-      // `phoneIdDe`. Esa diferencia es todo el arreglo: la fila SABE de qué número
-      // es porque la lista viene de `ultimos_mensajes_canal`, mientras que
-      // `phoneIdDe` tenía que deducirlo de la ficha del cliente, que es UNA por
-      // persona. Cuando deducía mal, la respuesta salía por el otro número y moría
-      // en Meta con 131047.
-      //
-      // Fallback a `phoneIdDe` solo para una fila sin canal (un chat tan nuevo que
-      // ni la lista ni la ficha lo tienen todavía). Si tampoco hay, se deja pasar
-      // sin cambiar de pestaña: mejor abrir el chat donde estás que mandarlo a un
-      // canal inventado.
-      const canal = canalDePhoneId(phoneIdFila || phoneIdDe(telefono))
-      if (canal && canal !== lineaRef.current) {
-        // `cambiarLinea` es el ÚNICO camino para moverse de pestaña: mueve
-        // `CANAL_ACTIVO`, `canalArmado` y `lineaRef` a la vez. Un `setLinea` suelto
-        // dejaría la pestaña diciendo un número mientras el envío usa otro.
-        //
-        // Si aborta (el vendedor canceló el aviso de descartar el PEDIDO MANUAL)
-        // NO se abre el chat: abrirlo con la pestaña sin mover es exactamente el
-        // estado que produce el bug.
-        if (!cambiarLinea(canal)) return
-        // Ojo: `cambiarLinea` acaba de botar `convs`, `hilosRef` y el chat abierto
-        // (rama de chat→chat). Da igual: `setActive` + `cargarHilo` de más abajo
-        // rearman todo para el canal nuevo, y el hilo se pide ya filtrado por él.
-      }
-    }
-
+    // Respaldo: si la fila no trae canal (un chat tan nuevo que la lista todavía
+    // no lo tiene), se usa la ficha; y si tampoco, el de la pestaña. Nunca vacío:
+    // un envío con Canal vacío cae al número principal en silencio.
+    const canalConv = phoneIdFila || phoneIdDe(telefono) || phoneIdDeCanal(lineaRef.current) || phoneIdDeCanal(CANAL_POR_DEFECTO)
+    setActiveCanal(canalConv)
+    activeCanalRef.current = canalConv
+    // El módulo de envíos sigue leyendo CANAL_ACTIVO cuando quien llama no pasa
+    // canal explícito (CONTACTOS, plantillas), así que se mantiene al día.
+    setCanalActivo(canalDePhoneId(canalConv) || CANAL_POR_DEFECTO)
     setActive(telefono)
     activeRef.current = telefono
     setShowSidebar(false)
@@ -1047,7 +1040,17 @@ export default function App() {
   }, [contacts, convs])
 
   // ── Derived state ─────────────────────────────────────────────
-  const activeConv  = convs.find(c => c.telefono === active) || null
+  // La conversación abierta se identifica por (teléfono, número), no solo por
+  // teléfono: en GENERAL el mismo cliente tiene DOS filas y con la clave vieja
+  // `find` devolvía siempre la primera — abrías la de REPUBLIC y el panel te
+  // mostraba la de MANDI.
+  //
+  // El respaldo por teléfono a secas cubre a quien llegó sin canal resuelto
+  // (CONTACTOS, un aviso push) y a las pestañas de un solo número, donde solo
+  // puede haber una fila por cliente.
+  const activeConv  = convs.find(c => c.telefono === active && (!activeCanal || !c.phoneId || c.phoneId === activeCanal))
+                   || convs.find(c => c.telefono === active)
+                   || null
   const totalUnread = convs.reduce((s, c) => s + c.unread, 0)
 
   /**
@@ -1129,31 +1132,41 @@ export default function App() {
    * reincidente de este inbox.
    */
   const estadoFila = (conv) => {
-    // Quién manda es distinto en cada pestaña, y es la MISMA regla que usa el
-    // color de la fila — tienen que coincidir o la fila diría un canal y su
-    // estado vendría de otro:
-    //   · GENERAL         → manda la FILA (es la única que trae dos números)
-    //   · MANDI/REPUBLIC  → manda la PESTAÑA (ahí todas las filas son de ese número)
-    const canal = linea === CANAL_GENERAL
-      ? conv.phoneId
-      : (phoneIdDeCanal(linea) || conv.phoneId)
-    // Sin canal (una pestaña que no es de chat) cae al estado por persona, que es
-    // exactamente lo que se hacía antes: no rompe a nadie.
-    if (!canal) return getStatus(conv.telefono)
-    return estadoDeBandeja(bandeja, conv.telefono, canal)
+    // El estado viene PEGADO a la fila (campo `estadoBandeja` del último mensaje,
+    // vista inbox.lista_bandeja). No se busca en ningún mapa aparte.
+    //
+    // Eso no es solo más rápido: es lo que hace imposible el defecto del 19-ago.
+    // Cuando el estado se leía por separado, había un instante —el primer render,
+    // antes de que llegara la respuesta— en que la fila existía sin su estado, y
+    // "sin estado" se traducía a PENDIENTE. Resultado: al abrir el inbox TODAS las
+    // conversaciones se pintaban pendientes. Pegado a la fila, ese instante no
+    // existe: si hay fila, hay estado.
+    //
+    // Respaldo al estado por persona para las filas que no vienen de esa vista
+    // (búsqueda de mensajes, mensajes optimistas todavía sin confirmar).
+    return conv.last?.estadoBandeja || getStatus(conv.telefono)
   }
   // Eje 2: temperatura del lead ('' = sin clasificar).
   const getTemp = (tel) => contacts[tel]?.temperatura || ''
 
   // Ventana de 24h: ms transcurridos desde el último mensaje del cliente.
-  const silencioMs = (tel) => {
-    const t = contacts[tel]?.ultimoEntranteAt
+  //
+  // `conv` (opcional) permite medirla POR CANAL, que es la única forma correcta:
+  // la ventana de WhatsApp es por par (cliente ↔ número nuestro). El dato de la
+  // ficha —`contacts[tel].ultimoEntranteAt`— mezcla los dos números, y por eso
+  // decía "quedan 20 horas" cuando por ESE número hacía 35 días que no escribía.
+  // Es el mismo error que mató 9 mensajes en agosto, con otra cara.
+  //
+  // Sin `conv` cae al dato de la persona: es lo que había, y sirve para CONTACTOS
+  // y el aviso push, donde no hay canal de por medio.
+  const silencioMs = (tel, conv = null) => {
+    const t = conv?.last?.ultimoEntranteCanal || contacts[tel]?.ultimoEntranteAt
     return t ? (Date.now() - new Date(t).getTime()) : Infinity
   }
   // 🔥 caliente que se acerca al cierre de la ventana (entre el umbral y las 24h) → ⏰.
-  const alertaVentana = (tel) => {
+  const alertaVentana = (tel, conv = null) => {
     if (getTemp(tel) !== 'caliente') return false
-    const ms = silencioMs(tel)
+    const ms = silencioMs(tel, conv)
     return ms >= ALERTA_CALIENTE_MS && ms < VENTANA_MS
   }
   // Horas que faltan para cerrar la ventana de 24h (para el texto del aviso).
@@ -1253,7 +1266,7 @@ export default function App() {
     tibio:      searched.filter(c => getTemp(c.telefono) === 'tibio').length,
     frio:       searched.filter(c => getTemp(c.telefono) === 'frio').length,
     // Calientes que se acercan a las 24h → para el aviso ⏰.
-    alerta:     searched.filter(c => alertaVentana(c.telefono)).length,
+    alerta:     searched.filter(c => alertaVentana(c.telefono, c)).length,
   }
 
   const lastMsg      = activeConv?.last
@@ -1262,35 +1275,52 @@ export default function App() {
     ? (Date.now() - parseDate(lastIncoming.timestamp).getTime()) < 24 * 60 * 60 * 1000
     : false
 
+  /**
+   * Por qué número sale lo que se envía AHORA.
+   *
+   * Es el canal de la CONVERSACIÓN ABIERTA, no el de la pestaña. Esa es la regla
+   * de la que depende todo:
+   *
+   *   "en general respondo y solo cambia el número"
+   *
+   * En GENERAL conviven los dos números, así que la pestaña no puede decidir. La
+   * conversación sí: cada fila sabe de qué número es.
+   *
+   * Se lee de la REF y no del estado de React a propósito. Los envíos se congelan
+   * al ENCOLAR y salen segundos después (una tanda de 5-10 fotos), y mientras
+   * salen el vendedor hace lo normal: clic en el siguiente chat. `activeCanal`
+   * (estado) todavía sería el del render viejo; la ref está al día siempre.
+   *
+   * Nunca devuelve vacío: un `Canal` vacío cae al número principal en silencio
+   * (ver `canalDe` en /api/saliente), que es exactamente cómo mueren los mensajes.
+   */
+  const canalDeEnvio = () =>
+    activeCanalRef.current || getCanalActivo() || phoneIdDeCanal(CANAL_POR_DEFECTO)
+
   // ── Cambiar estado de BANDEJA (Eje 1) ─────────────────────────
   const changeStatus = async (telefono, status) => {
     // Clic en la misma bandeja = sin efecto (también evita el doble-clic sin bloquear
     // un clic legítimo a OTRA bandeja, que antes se tragaba un guard de 3s).
-    // El canal de ESTA conversación. El chat abierto vive siempre en una pestaña
-    // de un solo número (GENERAL ya no conversa: despacha), así que la pestaña ES
-    // el canal. Es lo que decide CUÁL de las dos conversaciones del cliente se
-    // marca — sin esto, atender por REPUBLIC apagaba también la de MANDI.
-    const canalFila = phoneIdDeCanal(linea) || getCanalActivo()
-    const estadoActual = canalFila
-      ? estadoDeBandeja(bandeja, telefono, canalFila)
-      : (contacts[telefono]?.estado || 'pendiente')
+    // El canal de ESTA conversación: el del chat abierto, no el de la pestaña.
+    // Es lo que decide CUÁL de las dos conversaciones del cliente se marca — sin
+    // esto, darle ATENDIDO por REPUBLIC apagaba también la de MANDI, donde quizá
+    // todavía le debes una respuesta.
+    const canalFila = activeCanalRef.current || phoneIdDeCanal(linea) || getCanalActivo()
+    const convFila = convs.find(c => c.telefono === telefono && (!canalFila || !c.phoneId || c.phoneId === canalFila))
+    const estadoActual = convFila?.last?.estadoBandeja || contacts[telefono]?.estado || 'pendiente'
     if (estadoActual === status) return
 
     // Override local para que el polling (8s) no pise el cambio mientras se guarda.
     localStatusRef.current[telefono] = { estado: status, expiresAt: Date.now() + 15000 }
-    // Optimista: se ve al instante. Los DOS lados, porque la lista lee `bandeja`
-    // (por conversación) y el panel del chat lee `contacts` (por persona): pintar
-    // solo uno deja la fila con el estado viejo hasta el próximo poll.
+    // Optimista: se ve al instante. El estado de bandeja vive PEGADO al último
+    // mensaje de la fila, así que el pintado optimista va ahí — y solo en la fila
+    // de ESTE número, no en las dos.
     setContacts(prev => ({ ...prev, [telefono]: { ...(prev[telefono] || {}), estado: status } }))
-    if (canalFila) {
-      setBandeja(prev => {
-        const m = new Map(prev)
-        const k = claveBandeja(telefono, canalFila)
-        m.set(k, { ...(m.get(k) || { telefono, phoneId: canalFila }), estado: status })
-        return m
-      })
-    }
-
+    const pintar = (est) => setConvs(prev => prev.map(c =>
+      (c.telefono === telefono && (!canalFila || !c.phoneId || c.phoneId === canalFila) && c.last)
+        ? { ...c, last: { ...c.last, estadoBandeja: est } }
+        : c))
+    pintar(status)
     const conv = convs.find(c => c.telefono === telefono)
     const res = await updateContact(telefono, conv?.nombre || '', status, contacts[telefono]?.alias || '', true, null, canalFila)
     // Si el guardado falló: avisar y revertir (no dejar un estado fantasma que el poll
@@ -1371,7 +1401,7 @@ export default function App() {
     if (canalSinResolver()) { avisarCanalSinResolver(); return }
     const telefono = activeConv.telefono
     const nombre   = activeConv.nombre
-    const canal    = getCanalActivo()   // congelado con el teléfono, ver `encolar`
+    const canal    = canalDeEnvio()   // congelado con el teléfono, ver `encolar`
     const estadoDestino = estadoAlResponder(currentStatus)
     // Se toma la cita ANTES de limpiarla: si el envío espera turno en la fila, la
     // barra ya no está pero el wamid citado tiene que viajar igual.
@@ -1418,7 +1448,7 @@ export default function App() {
     if (canalSinResolver()) { avisarCanalSinResolver(); return }
     const telefono = activeConv.telefono
     const nombre   = activeConv.nombre
-    const canal    = getCanalActivo()
+    const canal    = canalDeEnvio()
     const estadoDestino = estadoAlResponder(currentStatus)
     return encolar(telefono, async () => {
       await enviarTextoSuelto(telefono, nombre, t, canal)
@@ -1456,7 +1486,7 @@ export default function App() {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         Telefono: telefono, Nombre: nombre, ImagenURL: imageUrl,
-        Canal: canal || getCanalActivo(),
+        Canal: canal || canalDeEnvio(),
         ...(mediaId ? { ImagenMediaId: mediaId } : {}),
       }),
     })
@@ -1629,7 +1659,7 @@ export default function App() {
     }
     const telefono = activeConv.telefono
     const nombre   = activeConv.nombre
-    const canal    = getCanalActivo()   // el bucle puede durar 10 archivos con pausas
+    const canal    = canalDeEnvio()   // el bucle puede durar 10 archivos con pausas
     const estadoDestino = estadoAlResponder(currentStatus)
     const archivos = imgFiles
     setImgUploading(true); setImgResult(null); setImgProgress(0)
@@ -1721,7 +1751,7 @@ export default function App() {
     // llega por el equivocado; al resto Meta se lo rechaza y la tanda se corta).
     const telefono = activeConv.telefono
     const nombre   = activeConv.nombre
-    const canal    = getCanalActivo()
+    const canal    = canalDeEnvio()
     const estadoDestino = estadoAlResponder(currentStatus)
 
     const imgs = Array.from({ length: 10 }, (_, i) =>
@@ -1787,7 +1817,7 @@ export default function App() {
     if (canalSinResolver()) { avisarCanalSinResolver(); return }
     const telefono = activeConv.telefono
     const nombre   = activeConv.nombre
-    const canal    = getCanalActivo()
+    const canal    = canalDeEnvio()
     const estadoDestino = estadoAlResponder(currentStatus)
     return encolar(telefono, async () => {
       const ok = await sendImageUrl(telefono, nombre, imageUrl, '', canal)
@@ -1805,7 +1835,7 @@ export default function App() {
     if (canalSinResolver()) { avisarCanalSinResolver(); return }
     const telefono = activeConv.telefono
     const nombre   = activeConv.nombre
-    const canal    = getCanalActivo()
+    const canal    = canalDeEnvio()
     const estadoDestino = estadoAlResponder(currentStatus)
     return encolar(telefono, async () => {
       if (modo === 'info') {
@@ -1851,7 +1881,7 @@ export default function App() {
     // esta vista no puede sobrevivir a un cambio de cliente.
     const telefono = activeConv.telefono
     const nombre   = activeConv.nombre
-    const canal    = getCanalActivo()
+    const canal    = canalDeEnvio()
     const estadoDestino = estadoAlResponder(currentStatus)
     return encolar(telefono, async () => {
       let archivo
@@ -1898,7 +1928,7 @@ export default function App() {
     if (validBtns.length === 0) return
     const telefono = activeConv.telefono
     const nombre   = activeConv.nombre
-    const canal    = getCanalActivo()
+    const canal    = canalDeEnvio()
     const cuerpo   = input.trim()
     const estadoDestino = estadoAlResponder(currentStatus)
     setSendingBtns(true)
@@ -2208,16 +2238,18 @@ export default function App() {
                   // de la otra.
                   key={linea === CANAL_GENERAL ? `${conv.telefono}|${conv.phoneId || ''}` : conv.telefono}
                   conv={{ ...conv, nombre: displayName(conv.telefono) }}
-                  isActive={active===conv.telefono}
+                  // Activa = mismo teléfono Y mismo número. Sin lo segundo, abrir
+                  // la fila de REPUBLIC dejaba resaltadas las DOS filas del cliente.
+                  isActive={active === conv.telefono && (!conv.phoneId || !activeCanal || conv.phoneId === activeCanal)}
                   // El canal de la fila viaja con el clic: es lo que le dice a
-                  // `openConv` a qué pestaña llevarte. Sin esto habría que volver a
-                  // adivinarlo, que es el bug que estamos cerrando.
+                  // `openConv` por cuál número responde este chat. No cambia de
+                  // pestaña — te quedas en GENERAL, que es como se trabaja.
                   onClick={() => openConv(conv.telefono, conv.phoneId)}
                   search={search}
                   estado={estadoFila(conv)}
                   modoIA={getModoIA(conv.telefono)}
                   temp={getTemp(conv.telefono)}
-                  alerta={alertaVentana(conv.telefono)}
+                  alerta={alertaVentana(conv.telefono, conv)}
                   msgSnippet={searchingMsgs ? matchSnippet(conv) : null}
                   // El color y la etiqueta salen del canal DE LA FILA, que ahora
                   // es un hecho y no una deducción: la lista viene de
