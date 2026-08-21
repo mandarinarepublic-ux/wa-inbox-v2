@@ -1,8 +1,9 @@
 'use client'
 import { useState, useRef, useEffect } from 'react'
 import { Avatar } from '@/components/Components'
-import { fetchRepliesFromSheet, writeReply, reorderReplies, addNota, setIdVenta, fetchProductos, generarLinkPago, subirAudioNota } from '@/lib/api-client'
+import { fetchRepliesFromSheet, writeReply, reorderReplies, addNota, setIdVenta, fetchProductos, generarLinkPago, subirAudioNota, subirDocumento } from '@/lib/api-client'
  import { esAudio as esAudioArchivo } from '@/lib/audio-nota-voz'
+import { esDocumento as esDocumentoArchivo } from '@/lib/adjuntos'
 import { adjuntosDeRespuesta } from '@/lib/adjuntos-respuesta'
 import Notas from './Notas'
 import PedidoManual from './PedidoManual'
@@ -28,13 +29,18 @@ function getImgUrls(reply) {
  *  · `imageUrl1..N` — el formato viejo que espera la ruta de guardado.
  *  · (el backend además escribe `imagenes`, que es lo que lee IND.)
  *
- * Los audios NO entran en `imageUrlN`: si entraran, IND intentaría mandarlos como
- * fotos y Meta los rechazaría.
+ * ⚠️ En `imageUrlN` entran SOLO las fotos. Ni audios ni documentos: el otro
+ * inbox lee esa lista y los mandaria como fotos, y Meta los rechazaria.
+ *
+ * ☠️ El filtro dice `=== 'imagen'`, NO `!== 'audio'`. Con la negacion, cada tipo
+ * nuevo se cuela solo — asi fue como el documento estuvo a punto de terminar en
+ * la lista de fotos. Una lista blanca es lo correcto ACA justamente porque el
+ * destino es una columna que solo admite fotos.
  */
 function urlsToReply(adjuntos) {
   const lista = Array.isArray(adjuntos) ? adjuntos : []
   const obj = { adjuntos: lista }
-  const fotos = lista.filter(a => a?.tipo !== 'audio').map(a => a?.url || '')
+  const fotos = lista.filter(a => a?.tipo === 'imagen').map(a => a?.url || '')
   for (let i = 0; i < MAX_IMGS; i++) {
     obj[i === 0 ? 'imageUrl' : `imageUrl${i + 1}`] = fotos[i] || ''
   }
@@ -103,9 +109,24 @@ function MultiImgEditor({ urls, onChange }) {
       // El audio se convierte a OGG/Opus ACÁ, una sola vez. A partir de entonces
       // usar la respuesta solo manda el link: ni codificador ni espera.
       const esAud = esAudioArchivo(f)
-      const url = esAud
-        ? await subirAudioNota(f).catch(e => { console.error('[RightPanel] subirAudio:', e); return '' })
-        : await subirFoto(f).catch(e => { console.error('[RightPanel] subirFoto:', e); return '' })
+      // Un documento es todo lo que no es foto, video ni audio — misma regla que
+      // en el chat (lib/adjuntos.js). Se decide DESPUES del audio, porque los
+      // audios generados llegan marcados como video.
+      const esDoc = !esAud && esDocumentoArchivo(f)
+
+      let url = ''
+      let nombreDoc = ''
+      if (esAud) {
+        url = await subirAudioNota(f).catch(e => { console.error('[RightPanel] subirAudio:', e); return '' })
+      } else if (esDoc) {
+        const sub = await subirDocumento(f).catch(e => { console.error('[RightPanel] subirDocumento:', e); return null })
+        url = sub?.url || ''
+        // El nombre viaja con el adjunto: es lo que va a ver el cliente en su
+        // WhatsApp cada vez que se use esta respuesta.
+        nombreDoc = sub?.nombre || ''
+      } else {
+        url = await subirFoto(f).catch(e => { console.error('[RightPanel] subirFoto:', e); return '' })
+      }
       if (url) {
         // ⚠️ SE ACTUALIZA CON FUNCIÓN, NO CON `urls` A SECAS.
         //
@@ -120,7 +141,11 @@ function MultiImgEditor({ urls, onChange }) {
         onChange(prev => {
           const base = Array.isArray(prev) ? prev : []
           const next = [...base]
-          next[idx] = { tipo: esAud ? 'audio' : 'imagen', url }
+          next[idx] = esAud
+            ? { tipo: 'audio', url }
+            : esDoc
+            ? { tipo: 'documento', url, nombre: nombreDoc }
+            : { tipo: 'imagen', url }
           return next.filter(Boolean) // compactar — quitar huecos, conservar orden
         })
       }
@@ -151,6 +176,14 @@ function MultiImgEditor({ urls, onChange }) {
                   <span style={{ fontSize:15 }}>🎤</span>
                   <span style={{ fontSize:8, color:'#64748b' }}>{idx + 1}º</span>
                 </div>
+              ) : url.tipo === 'documento' ? (
+                // Tampoco tiene miniatura. El title lleva el nombre real del
+                // archivo, que es lo que recibe el cliente.
+                <div title={`${url.nombre || 'Documento'} — sale en el lugar ${idx + 1}`}
+                  style={{ width:44, height:44, borderRadius:6, background:'#132437', border:'1px solid #1e3a52', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:1 }}>
+                  <span style={{ fontSize:15 }}>📄</span>
+                  <span style={{ fontSize:8, color:'#64748b' }}>{idx + 1}º</span>
+                </div>
               ) : (
               <img src={url.url} style={{ width:44, height:44, borderRadius:6, objectFit:'cover', display:'block' }} alt=""
                 onError={e => e.currentTarget.style.display='none'} />
@@ -167,7 +200,9 @@ function MultiImgEditor({ urls, onChange }) {
                 style={{ width:44, height:44, border:'1px dashed #2a3f55', borderRadius:6, background:'transparent', cursor:'pointer', color:'#475569', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:'inherit' }}>
                 {uploading[idx] ? '↑' : '+'}
               </button>
-              <input ref={refs[idx]} type="file" accept="image/*,audio/*" style={{ display:'none' }} onChange={e => handleFile(e, idx)} />
+              {/* Sin `accept`: desde que caben documentos no hay tipo prohibido, y una
+                  lista aca los esconderia en el dialogo del sistema. */}
+              <input ref={refs[idx]} type="file" style={{ display:'none' }} onChange={e => handleFile(e, idx)} />
             </>
           )}
         </div>

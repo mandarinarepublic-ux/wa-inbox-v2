@@ -6,7 +6,7 @@
 // quiere contar.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { adjuntosDeRespuesta, guardarAdjuntos, urlEsAudio, TOPE_ADJUNTOS } from '../lib/adjuntos-respuesta.js'
+import { adjuntosDeRespuesta, guardarAdjuntos, urlEsAudio, tipoDeUrl, TOPE_ADJUNTOS } from '../lib/adjuntos-respuesta.js'
 
 const FOTO1 = 'https://x.supabase.co/storage/v1/object/public/inbox-media/fotos/MANDI/a.jpg'
 const FOTO2 = 'https://x.supabase.co/storage/v1/object/public/inbox-media/fotos/MANDI/b.jpg'
@@ -79,4 +79,67 @@ test('una respuesta sin adjuntos no revienta', () => {
   assert.deepEqual(adjuntosDeRespuesta({}), [])
   assert.deepEqual(adjuntosDeRespuesta(), [])
   assert.deepEqual(guardarAdjuntos().adjuntos, [])
+})
+
+// ── DOCUMENTOS en una respuesta rapida ────────────────────────────
+const DOC = 'https://x.supabase.co/storage/v1/object/public/inbox-media/documentos/MANDI/uuid-1.pdf'
+
+test('un documento sobrevive guardar y volver a leer, CON su nombre', () => {
+  const g = guardarAdjuntos([{ tipo: 'documento', url: DOC, nombre: 'Catálogo 2026.pdf' }])
+  assert.strictEqual(g.adjuntos.length, 1)
+  assert.strictEqual(g.adjuntos[0].tipo, 'documento')
+  assert.strictEqual(g.adjuntos[0].nombre, 'Catálogo 2026.pdf')
+
+  const leido = adjuntosDeRespuesta({ adjuntos: g.adjuntos })
+  assert.strictEqual(leido[0].tipo, 'documento')
+  assert.strictEqual(leido[0].nombre, 'Catálogo 2026.pdf')
+})
+
+// ☠️ LA prueba de este cambio. `imagenes` la lee el OTRO inbox: si un documento
+// entra ahi, lo mandaria como FOTO y Meta lo rechazaria. Mismo motivo por el que
+// los audios tampoco entran.
+test('un documento NO entra en la columna imagenes', () => {
+  const g = guardarAdjuntos([
+    { tipo: 'imagen', url: FOTO1 },
+    { tipo: 'documento', url: DOC, nombre: 'lista.pdf' },
+    { tipo: 'audio', url: AUDIO },
+  ])
+  assert.deepEqual(g.imagenes, [FOTO1])
+  assert.strictEqual(g.adjuntos.length, 3)
+})
+
+test('el ORDEN se respeta con los tres tipos mezclados', () => {
+  const g = guardarAdjuntos([
+    { tipo: 'documento', url: DOC, nombre: 'a.pdf' },
+    { tipo: 'imagen', url: FOTO1 },
+    { tipo: 'audio', url: AUDIO },
+  ])
+  assert.deepEqual(g.adjuntos.map(a => a.tipo), ['documento', 'imagen', 'audio'])
+})
+
+// Un tipo que no se reconoce cae a imagen (es lo que habia antes de que
+// existieran los otros dos), pero NUNCA al reves: un documento no puede
+// terminar tratado como foto.
+test('un tipo desconocido cae a imagen, y documento nunca se pierde', () => {
+  const g = guardarAdjuntos([{ tipo: 'vaya-a-saber', url: FOTO1 }, { tipo: 'documento', url: DOC }])
+  assert.strictEqual(g.adjuntos[0].tipo, 'imagen')
+  assert.strictEqual(g.adjuntos[1].tipo, 'documento')
+})
+
+test('un documento sin nombre guardado no revienta al leerlo', () => {
+  const leido = adjuntosDeRespuesta({ adjuntos: [{ tipo: 'documento', url: DOC }] })
+  assert.strictEqual(leido[0].tipo, 'documento')
+  assert.strictEqual(typeof leido[0].nombre, 'string')
+})
+
+// ── tipoDeUrl: el respaldo de las respuestas VIEJAS ───────────────
+test('tipoDeUrl reconoce los tres por carpeta y extension', () => {
+  assert.strictEqual(tipoDeUrl(AUDIO), 'audio')
+  assert.strictEqual(tipoDeUrl(DOC), 'documento')
+  assert.strictEqual(tipoDeUrl(FOTO1), 'imagen')
+})
+
+test('una respuesta VIEJA con un pdf colado en imagenes no se manda como foto', () => {
+  const leido = adjuntosDeRespuesta({ imagenes: [FOTO1, DOC] })
+  assert.deepEqual(leido.map(a => a.tipo), ['imagen', 'documento'])
 })
