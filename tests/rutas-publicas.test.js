@@ -55,3 +55,38 @@ test('las subrutas de una pública SÍ son públicas', () => {
 test('la barra final no cambia la decisión', () => {
   assert.strictEqual(esRutaPublica('/api/hilo/'), false)
 })
+
+// ── El candado no puede matar un cron ─────────────────────────────────────────
+//
+// ⚠️ ESTO PASÓ DE VERDAD, y por eso existe la prueba. `/api/cron/entregas` —el
+// aviso de mensajes que NO le llegaron al cliente— se desplegó el 21-ago sin
+// estar en el `matcher` del middleware. Vercel lo llamaba, el middleware lo
+// mandaba al login, y la tarea no corría NUNCA: sin error, sin registro, sin
+// nada. Un aviso construido para romper un silencio, muerto en el mismo silencio.
+//
+// La prueba lee `vercel.json` y exige que TODO cron programado esté fuera del
+// candado. Un cron nuevo que se olvide de la lista rompe acá, no en producción
+// tres semanas después.
+import { readFileSync } from 'node:fs'
+
+test('todo cron de vercel.json queda fuera del candado', () => {
+  const vercel = JSON.parse(readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'))
+  const crons = (vercel.crons || []).map(c => c.path)
+  assert.ok(crons.length > 0, 'vercel.json debería tener crons')
+  for (const ruta of crons) {
+    assert.ok(esRutaPublica(ruta),
+      `${ruta} está programado como cron pero el candado lo bloquea: agrégalo a RUTAS_PUBLICAS y al matcher de middleware.js`)
+  }
+})
+
+test('y el matcher del middleware también los excluye', () => {
+  // La lista de rutas públicas es la SEGUNDA capa. Si el `matcher` no los excluye,
+  // el middleware corre igual y redirige antes de que nadie mire la lista.
+  const mw = readFileSync(new URL('../middleware.js', import.meta.url), 'utf8')
+  const vercel = JSON.parse(readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'))
+  for (const ruta of (vercel.crons || []).map(c => c.path)) {
+    const sinBarra = ruta.replace(/^\//, '')
+    assert.ok(mw.includes(sinBarra),
+      `${ruta} no aparece en el matcher de middleware.js: el cron se va a redirigir al login y no correrá nunca`)
+  }
+})

@@ -95,6 +95,21 @@ export async function middleware(req) {
 // capa, por si alguien toca esto sin pensar.
 export const config = {
   matcher: [
-    '/((?!api/webhook|api/social/webhook|api/cron/seguimientos|api/cron/pendientes|api/pago-dlocal|_next/static|_next/image|favicon.ico|sw.js|icon-|manifest.webmanifest).*)',
+    // ⚠️ CADA CRON NUEVO TIENE QUE ENTRAR EN ESTA LISTA, o no corre nunca.
+    //
+    // Vercel llama al cron, el middleware lo manda al login y la tarea no se
+    // ejecuta jamás — sin error, sin registro, sin nada. `api/cron/entregas` (el
+    // aviso de mensajes que no le llegaron al cliente) se desplegó el 21-ago
+    // SIN estar acá: estuvo callado desde el primer minuto, que es exactamente
+    // la clase de silencio que ese aviso venía a romper.
+    //
+    // Sacarlos del middleware no los deja abiertos: cada ruta de cron valida
+    // `CRON_SECRET` por su cuenta (ver la función `autorizado` de cada una).
+    //
+    // `opus/` es el codificador de audio (librería MIT, sin nada privado). Va
+    // fuera porque lo carga un Worker, y un Worker que recibe el HTML del login
+    // en vez del JS falla con un error que no se parece en nada a "te falta
+    // sesión".
+    '/((?!api/webhook|api/social/webhook|api/cron/seguimientos|api/cron/pendientes|api/cron/entregas|api/pago-dlocal|_next/static|_next/image|opus/|favicon.ico|sw.js|icon-|manifest.webmanifest).*)',
   ],
 }
