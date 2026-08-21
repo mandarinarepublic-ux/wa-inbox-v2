@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getSupabase, CUENTA } from '@/lib/supabase'
+import { cuerpoDeSuscripcion } from '@/lib/push'
+import { usuarioDeCookie } from '@/lib/acceso'
+import { secretoSesion } from '@/lib/sesion'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -21,13 +24,21 @@ export async function POST(req) {
       return NextResponse.json({ ok: false, error: 'suscripción incompleta' }, { status: 400 })
     }
 
+    // Quién se suscribe, para poder responder '¿está cubierto el equipo?' sin
+    // preguntarle a la gente. Sale de la cookie firmada, nunca de una cabecera.
+    // ⚠️ Si no hay sesión NO se rechaza: se guarda con null. Ver cuerpoDeSuscripcion.
+    const usuarioId = await usuarioDeCookie(req.headers.get('cookie'), secretoSesion())
+
     const sb = getSupabase()
-    const { error } = await sb.from('push_subs').upsert({
-      endpoint, p256dh, auth,
-      cuenta: CUENTA,   // MANDI e IND comparten tabla y tienen claves VAPID distintas
-      user_agent: (req.headers.get('user-agent') || '').slice(0, 300),
-      fallos: 0,
-    }, { onConflict: 'endpoint' })
+    const { error } = await sb.from('push_subs').upsert(
+      cuerpoDeSuscripcion({
+        subscription,
+        cuenta: CUENTA,
+        userAgent: req.headers.get('user-agent'),
+        usuarioId,
+      }),
+      { onConflict: 'endpoint' },
+    )
     if (error) throw error
 
     return NextResponse.json({ ok: true })
