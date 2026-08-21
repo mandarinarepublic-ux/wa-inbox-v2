@@ -1,6 +1,6 @@
 'use client'
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
-import { fetchInboxSync, fetchHilo, buscarEnMensajes, sendReply, updateContact, updateTemperatura, isDemo, sendInteractiveButtons, toggleIAMode, sendVideo, sendImageFile, precacheMedia, setCanalActivo, getCanalActivo } from '@/lib/api-client'
+import { fetchInboxSync, fetchHilo, buscarEnMensajes, sendReply, updateContact, updateTemperatura, isDemo, sendInteractiveButtons, toggleIAMode, sendVideo, sendAudio, sendImageFile, precacheMedia, setCanalActivo, getCanalActivo } from '@/lib/api-client'
 import { buildConvs, fmtDate, parseDate } from '@/lib/utils'
 import { Spinner, Avatar, ContactRow, MessageBubble, Toast } from '@/components/Components'
 import RightPanel from '@/components/RightPanel'
@@ -17,6 +17,7 @@ import { actualizarNoLeidos, notificar } from '@/lib/notif'
 import { hayQueConfirmarDescarte, AVISO_DESCARTAR_PEDIDO, anchoPanelPedido, anchoPanelMinimo, bytesDeDataUrl, MAX_HOJA_BYTES } from '@/lib/pedido-manual'
 import { decidirArrastre } from '@/lib/arrastre'
 import { ventanaAbierta } from '@/lib/bandeja'
+import { avisoDeFormato } from '@/lib/audio-nota-voz'
 import { ordenarBandeja } from '@/lib/orden-bandeja'
 import { decidirPegado, decidirAdjuntos, TOPE_FOTOS } from '@/lib/adjuntos'
 
@@ -224,6 +225,13 @@ export default function App() {
   const [imgProgress,  setImgProgress]  = useState(0)
   const [imgResult,    setImgResult]    = useState(null)
   const [isVideo,      setIsVideo]      = useState(false)
+  // Un audio seleccionado. Va aparte de `isVideo` porque se manda por otro camino
+  // (`sendAudio`, que además CONVIERTE a OGG/Opus para que salga como nota de voz).
+  const [isAudio,      setIsAudio]      = useState(false)
+  // Aviso de qué va a pasar con el archivo: "se convertirá" o "ya está listo". Se
+  // muestra ANTES de mandar — enterarse por el chat del cliente de que salió como
+  // adjunto en vez de nota de voz es la pantalla mintiendo otra vez.
+  const [avisoAudio,   setAvisoAudio]   = useState('')
   // Aviso corto de los adjuntos ("eso no es una foto", "ya no caben más"). Sin
   // esto, pegar algo que no sirve no hace NADA en pantalla y parece un bug.
   const [avisoAdjunto, setAvisoAdjunto] = useState('')
@@ -1601,13 +1609,22 @@ export default function App() {
     // cuál número sale, no se arma ninguna tanda. Va acá y no en cada puerta,
     // para que pegar no pueda saltarse lo que el 📎 respeta.
     if (canalSinResolver()) { avisarCanalSinResolver(); return }
-    const plan = decidirAdjuntos({ actuales: imgFiles.length, esVideoActual: isVideo, entrantes: lista })
+    const plan = decidirAdjuntos({ actuales: imgFiles.length, esVideoActual: isVideo || isAudio, entrantes: lista })
     avisarAdjunto(plan.aviso)
     if (plan.accion === 'nada') return
     setImgResult(null)
 
+    if (plan.tipo === 'audio') {
+      // El audio NO pasa por `toJpeg` (obvio) ni genera miniatura: se muestra su
+      // nombre y el aviso de formato.
+      setIsAudio(true); setIsVideo(false)
+      setAvisoAudio(avisoDeFormato(plan.archivos[0]))
+      setImgFiles([{ file: plan.archivos[0], preview: '' }])
+      return
+    }
+
     if (plan.tipo === 'video') {
-      setIsVideo(true)
+      setIsVideo(true); setIsAudio(false); setAvisoAudio('')
       setImgFiles([{ file: plan.archivos[0], preview: URL.createObjectURL(plan.archivos[0]) }])
       return
     }
@@ -1617,7 +1634,7 @@ export default function App() {
       preview: await new Promise(res => { const r = new FileReader(); r.onload = ev => res(ev.target.result); r.readAsDataURL(f) })
     })))
     if (plan.accion === 'reemplazar') {
-      setIsVideo(false)
+      setIsVideo(false); setIsAudio(false); setAvisoAudio('')
       setImgFiles(procesadas)
     } else {
       // El `slice` no sobra: procesar es asíncrono y dos pegados seguidos y
@@ -1729,7 +1746,15 @@ export default function App() {
       await encolar(telefono, async () => {
       let allOk = true
       let sendErr = ''
-      if (isVideo) {
+      if (isAudio) {
+        // `onProgreso` mueve la barra durante la CONVERSIÓN, que en un audio largo
+        // puede tardar unos segundos. Sin eso el botón se queda mudo y parece colgado.
+        const result = await sendAudio(telefono, nombre, archivos[0].file, canal, {
+          onProgreso: (p) => setImgProgress(Math.round(p * 100) / 100),
+        })
+        allOk = result.ok
+        if (!result.ok) sendErr = result.error || ''
+      } else if (isVideo) {
         const result = await sendVideo(telefono, nombre, archivos[0].file, canal)
         allOk = result.ok
         if (!result.ok) sendErr = result.error || ''
@@ -1747,7 +1772,7 @@ export default function App() {
       setImgResult({ ok: allOk, error: sendErr })
       await changeStatus(telefono, estadoDestino)
       })
-      setTimeout(() => { setImgFiles([]); setImgResult(null); setIsVideo(false); setImgProgress(0); if (fileRef.current) fileRef.current.value = '' }, 1500)
+      setTimeout(() => { setImgFiles([]); setImgResult(null); setIsVideo(false); setIsAudio(false); setAvisoAudio(''); setImgProgress(0); if (fileRef.current) fileRef.current.value = '' }, 1500)
       setTimeout(load, 4000)
     } catch { setImgResult({ ok: false }) }
     finally  { setImgUploading(false) }
@@ -1755,7 +1780,7 @@ export default function App() {
 
   const cancelImage = () => {
     imgFiles.forEach(f => { if (isVideo) URL.revokeObjectURL(f.preview) })
-    setImgFiles([]); setImgResult(null); setIsVideo(false); setImgProgress(0); avisarAdjunto('')
+    setImgFiles([]); setImgResult(null); setIsVideo(false); setIsAudio(false); setAvisoAudio(''); setImgProgress(0); avisarAdjunto('')
     if (fileRef.current) fileRef.current.value = ''
   }
 
@@ -2537,7 +2562,12 @@ export default function App() {
                   <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:8 }}>
                     {imgFiles.map((item, i) => (
                       <div key={i} style={{ position:'relative' }}>
-                        {isVideo
+                        {isAudio
+                          // El audio no tiene miniatura. Sin esta rama saldría un
+                          // `<img src="">` con el icono de imagen rota, que se lee
+                          // como "algo falló" cuando en realidad está todo bien.
+                          ? <div style={{ width:44, height:44, borderRadius:8, background:'#132437', border:'1px solid #1e3a52', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20 }}>🎤</div>
+                          : isVideo
                           ? <video src={item.preview} style={{ width:64, height:44, borderRadius:8, objectFit:'cover' }} muted />
                           : <img src={item.preview} style={{ width:44, height:44, borderRadius:8, objectFit:'cover' }} alt={`preview-${i}`} />
                         }
@@ -2556,8 +2586,8 @@ export default function App() {
                       {imgUploading
                         ? `Enviando ${imgProgress}/${imgFiles.length}...`
                         : imgResult
-                          ? imgResult.ok ? (isVideo ? '✓ video enviado' : `✓ ${imgFiles.length} enviada${imgFiles.length>1?'s':''}`) : `✗ ${imgResult.error || 'Error al enviar'}`
-                          : isVideo ? '1 video seleccionado' : `${imgFiles.length} foto${imgFiles.length>1?'s':''} seleccionada${imgFiles.length>1?'s':''}`
+                          ? imgResult.ok ? (isAudio ? '✓ nota de voz enviada' : isVideo ? '✓ video enviado' : `✓ ${imgFiles.length} enviada${imgFiles.length>1?'s':''}`) : `✗ ${imgResult.error || 'Error al enviar'}`
+                          : isAudio ? `🎤 ${imgFiles[0]?.file?.name || 'audio'}${avisoAudio ? ' — ' + avisoAudio : ''}` : isVideo ? '1 video seleccionado' : `${imgFiles.length} foto${imgFiles.length>1?'s':''} seleccionada${imgFiles.length>1?'s':''}`
                       }
                     </span>
                     {!imgResult && (
@@ -2692,7 +2722,7 @@ export default function App() {
                 </button>
                 <button onClick={() => setShowBtnPanel(p=>!p)} title="Botones interactivos" style={{ width:42, height:42, flexShrink:0, background:showBtnPanel?'rgba(37,211,102,.15)':'#111c2a', border:`1px solid ${showBtnPanel?'rgba(37,211,102,.4)':'#1e2d3d'}`, borderRadius:11, cursor:'pointer', fontSize:16, display:'flex', alignItems:'center', justifyContent:'center', color:showBtnPanel?'#25d366':'#475569', transition:'all .15s' }}>🔘</button>
                 <button onClick={() => { setShowEmoji(p=>!p); setShowBtnPanel(false) }} title="Emojis" style={{ width:42, height:42, flexShrink:0, background:showEmoji?'rgba(245,158,11,.15)':'#111c2a', border:`1px solid ${showEmoji?'rgba(245,158,11,.4)':'#1e2d3d'}`, borderRadius:11, cursor:'pointer', fontSize:20, display:'flex', alignItems:'center', justifyContent:'center', transition:'all .15s' }}>😊</button>
-                <input ref={fileRef} type="file" accept="image/*,video/*" multiple style={{ display:'none' }} onChange={handleFileSelect} />
+                <input ref={fileRef} type="file" accept="image/*,video/*,audio/*" multiple style={{ display:'none' }} onChange={handleFileSelect} />
               </div>
               </>)}
             </div>

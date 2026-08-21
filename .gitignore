@@ -17,3 +17,10 @@ Captura de pantalla*.png
 Captura de pantalla*.jpg
 Screenshot*.png
 *.screenshot.png
+
+# Audios de prueba sueltos en la raiz (Fish Audio y demas). El codigo va en
+# public/opus/, estos no.
+*.mp3
+*.mp3.mpeg
+*.wav
+*.ogg

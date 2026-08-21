@@ -14,9 +14,16 @@ export const dynamic = 'force-dynamic'
 const BUCKET = 'inbox-media'
 // WhatsApp Cloud API: límite duro de 16 MB para video.
 const MAX_BYTES = 16 * 1024 * 1024
+// WhatsApp acepta 16 MB de audio, igual que el video.
 const EXT = {
   'video/mp4': 'mp4', 'video/3gpp': '3gp', 'video/quicktime': 'mov', 'video/webm': 'webm',
   'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif',
+  // Audio. `ogg`/`opus` es el que llega como NOTA DE VOZ (la burbuja de micrófono);
+  // el resto llega como archivo adjunto reproducible. La conversión la hace el
+  // navegador antes de subir — ver lib/audio-nota-voz.js.
+  'audio/ogg': 'ogg', 'audio/opus': 'opus', 'audio/mpeg': 'mp3', 'audio/mp3': 'mp3',
+  'audio/mp4': 'm4a', 'audio/aac': 'aac', 'audio/wav': 'wav', 'audio/x-wav': 'wav',
+  'audio/amr': 'amr', 'audio/3gpp': '3gp',
 }
 
 export async function POST(req) {
@@ -24,15 +31,15 @@ export async function POST(req) {
     const { contentType = '', size = 0 } = await req.json().catch(() => ({}))
     const ct = String(contentType).split(';')[0].trim().toLowerCase()
 
-    if (!ct.startsWith('video/') && !ct.startsWith('image/')) {
+    if (!ct.startsWith('video/') && !ct.startsWith('image/') && !ct.startsWith('audio/')) {
       return NextResponse.json({ error: 'Tipo de archivo no permitido' }, { status: 400 })
     }
     if (size && Number(size) > MAX_BYTES) {
       return NextResponse.json({ error: 'El archivo supera el límite de 16 MB de WhatsApp' }, { status: 413 })
     }
 
-    const ext  = EXT[ct] || (ct.startsWith('video/') ? 'mp4' : 'jpg')
-    const kind = ct.startsWith('video/') ? 'videos' : 'fotos'
+    const ext  = EXT[ct] || (ct.startsWith('video/') ? 'mp4' : ct.startsWith('audio/') ? 'ogg' : 'jpg')
+    const kind = ct.startsWith('video/') ? 'videos' : ct.startsWith('audio/') ? 'audios' : 'fotos'
     const path = `${kind}/${CUENTA}/${crypto.randomUUID()}.${ext}`
 
     const sb = getSupabase()

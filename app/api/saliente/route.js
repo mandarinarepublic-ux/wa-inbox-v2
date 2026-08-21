@@ -126,6 +126,46 @@ function construir(body) {
     }
   }
 
+  // AUDIO por URL pública (Supabase Storage). Mismo camino que el video: el
+  // navegador sube directo a Supabase y Meta baja el archivo del link.
+  //
+  // ⚠️ Si el archivo es OGG/Opus, WhatsApp lo pinta como NOTA DE VOZ —la burbuja
+  // del micrófono con las ondas—. Cualquier otro formato llega como archivo
+  // adjunto: suena igual pero se ve como envío masivo en vez de una persona
+  // hablándote. La conversión la hace el navegador ANTES de subir, porque ahí
+  // decodificar el MP3 es gratis (API nativa) y en el servidor haría falta ffmpeg,
+  // que pesa 80 MB. Ver lib/audio-nota-voz.js.
+  //
+  // ⚠️ El audio NO acepta caption: la Cloud API lo ignora. Si el vendedor escribió
+  // texto además del audio, salen como DOS mensajes — está avisado en la interfaz,
+  // porque descubrirlo por el chat del cliente sería otra pantalla que miente.
+  if (body.AudioURL) {
+    return {
+      tipo: 'audio',
+      contenido: '', mediaUrl: body.AudioURL, mediaId: '',
+      payload: {
+        messaging_product: 'whatsapp',
+        to,
+        type: 'audio',
+        audio: { link: body.AudioURL },
+      },
+    }
+  }
+
+  // Audio por MediaID (subido antes a Meta), mismo criterio que el de video.
+  if (body.AudioMediaId) {
+    return {
+      tipo: 'audio',
+      contenido: '', mediaUrl: body.AudioURL || '', mediaId: body.AudioMediaId,
+      payload: {
+        messaging_product: 'whatsapp',
+        to,
+        type: 'audio',
+        audio: { id: body.AudioMediaId },
+      },
+    }
+  }
+
   // Imagen por MediaID (subida antes vía /api/media/upload — camino sin terceros)
   if (body.ImagenMediaId) {
     return {
@@ -181,7 +221,12 @@ export async function POST(req) {
     // Si el ejecutivo escribe "LINKPAGO35" en el chat, NO enviamos ese texto:
     // generamos un link de cobro dLocal por ese monto y enviamos el mensaje de
     // pago al cliente. (Recupera la herramienta que vivía en Make.)
-    if (!body.TipoMensaje && !body.ImagenURL && !body.VideoMediaId && !body.VideoURL) {
+    // `AudioURL`/`AudioMediaId` van en la lista por lo mismo que los demás: este
+    // atajo solo puede mirar mensajes de TEXTO. Un adjunto no lleva "LINKPAGO35"
+    // escrito, y dejarlo entrar acá es abrir la puerta a que un envío de archivo
+    // se convierta en un cobro por un parecido de cadena.
+    if (!body.TipoMensaje && !body.ImagenURL && !body.VideoMediaId && !body.VideoURL
+        && !body.AudioURL && !body.AudioMediaId) {
       const monto = parseLinkpago(body.Mensaje)
       if (monto) {
         try {

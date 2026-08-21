@@ -54,10 +54,13 @@ test('pegar dos veces SUMA (no reemplaza la anterior)', () => {
   assert.strictEqual(r.aviso, '')
 })
 
-test('un archivo que no es foto ni video avisa en vez de quedarse callado', () => {
+test('un archivo que no sirve avisa en vez de quedarse callado', () => {
+  // El texto nombra los TRES tipos desde que se puede mandar audio (21-ago). Si
+  // siguiera diciendo solo 'fotos y videos', alguien leería que el audio no se
+  // puede mandar cuando sí se puede.
   const r = decidirAdjuntos({ actuales: 0, entrantes: [pdf()] })
   assert.strictEqual(r.accion, 'nada')
-  assert.match(r.aviso, /solo se pueden mandar imágenes y videos/)
+  assert.match(r.aviso, /solo se pueden mandar esos tres/)
 })
 
 test('si vienen mezclados, se toman las fotos y se avisa del resto', () => {
@@ -106,4 +109,55 @@ test('con la tanda llena no entra nada, pero se avisa', () => {
   const r = decidirAdjuntos({ actuales: TOPE_FOTOS, entrantes: [foto()] })
   assert.strictEqual(r.accion, 'nada')
   assert.match(r.aviso, /Ya tienes 10 fotos/)
+})
+
+// ── Audio: nota de voz ────────────────────────────────────────────────────────
+//
+// Los audios entran por las mismas tres puertas que las fotos (clip, arrastrar,
+// Ctrl+V) y van SOLOS, igual que el video: se mandan por otro camino (`sendAudio`,
+// que además convierte a OGG/Opus) y de a uno.
+//
+// Antes de esto, soltar un MP3 en el chat no hacía absolutamente nada: el filtro
+// lo descartaba en silencio y parecía que el inbox estaba roto.
+
+test('un audio se acepta y va SOLO', () => {
+  const r = decidirAdjuntos({ entrantes: [{ name: 'saludo.mp3', type: 'audio/mpeg' }] })
+  assert.equal(r.accion, 'reemplazar')
+  assert.equal(r.tipo, 'audio')
+  assert.equal(r.archivos.length, 1)
+})
+
+test('el audio de Fish Audio entra aunque Windows lo marque como video', () => {
+  // Fish Audio suelta `.mp3.mpeg` y Windows lo marca `video/mpeg`. Si se mirara
+  // solo el tipo, se intentaría mandar como VIDEO y Meta lo rechazaría.
+  const r = decidirAdjuntos({ entrantes: [{ name: 'Goku-2026-08-21.mp3.mpeg', type: 'video/mpeg' }] })
+  assert.equal(r.tipo, 'audio')
+})
+
+test('el audio se lleva por delante las fotos que hubiera', () => {
+  const r = decidirAdjuntos({
+    actuales: 3,
+    entrantes: [{ name: 'nota.ogg', type: 'audio/ogg' }],
+  })
+  assert.equal(r.accion, 'reemplazar')
+  assert.equal(r.tipo, 'audio')
+})
+
+test('si entra audio junto con fotos, manda el audio y se avisa', () => {
+  const r = decidirAdjuntos({
+    entrantes: [
+      { name: 'foto.jpg', type: 'image/jpeg' },
+      { name: 'nota.mp3', type: 'audio/mpeg' },
+    ],
+  })
+  assert.equal(r.tipo, 'audio')
+  assert.match(r.aviso, /solo/i)
+})
+
+test('el aviso de "eso no sirve" ya nombra el audio', () => {
+  // Si el texto siguiera diciendo "solo fotos y videos", alguien leería que el
+  // audio no se puede mandar cuando sí se puede.
+  const r = decidirAdjuntos({ entrantes: [{ name: 'hoja.pdf', type: 'application/pdf' }] })
+  assert.equal(r.accion, 'nada')
+  assert.match(r.aviso, /audio/i)
 })
