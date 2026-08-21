@@ -1,6 +1,6 @@
 'use client'
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
-import { fetchInboxSync, fetchHilo, buscarEnMensajes, sendReply, updateContact, updateTemperatura, isDemo, sendInteractiveButtons, toggleIAMode, sendVideo, sendAudio, sendImageFile, precacheMedia, setCanalActivo, getCanalActivo } from '@/lib/api-client'
+import { fetchInboxSync, fetchHilo, buscarEnMensajes, sendReply, updateContact, updateTemperatura, isDemo, sendInteractiveButtons, toggleIAMode, sendVideo, sendAudio, enviarAudioUrl, sendImageFile, precacheMedia, setCanalActivo, getCanalActivo } from '@/lib/api-client'
 import { buildConvs, fmtDate, parseDate } from '@/lib/utils'
 import { Spinner, Avatar, ContactRow, MessageBubble, Toast } from '@/components/Components'
 import RightPanel from '@/components/RightPanel'
@@ -18,6 +18,7 @@ import { hayQueConfirmarDescarte, AVISO_DESCARTAR_PEDIDO, anchoPanelPedido, anch
 import { decidirArrastre } from '@/lib/arrastre'
 import { ventanaAbierta } from '@/lib/bandeja'
 import { avisoDeFormato } from '@/lib/audio-nota-voz'
+import { adjuntosDeRespuesta } from '@/lib/adjuntos-respuesta'
 import { ordenarBandeja } from '@/lib/orden-bandeja'
 import { decidirPegado, decidirAdjuntos, TOPE_FOTOS } from '@/lib/adjuntos'
 
@@ -1839,11 +1840,15 @@ export default function App() {
     const canal    = canalDeEnvio()
     const estadoDestino = estadoAlResponder(currentStatus)
 
-    const imgs = Array.from({ length: 10 }, (_, i) =>
-      i === 0 ? reply.imageUrl : reply[`imageUrl${i + 1}`]
-    ).filter(Boolean)
+    // EN ORDEN, mezclando fotos y audios como los cargó el vendedor. WhatsApp
+    // entrega cada uno como un mensaje aparte, así que este orden es el que ve el
+    // cliente: texto que presenta, foto que muestra, voz que cierra. Ver
+    // lib/adjuntos-respuesta.js.
+    const adjuntos = adjuntosDeRespuesta(reply)
+    // Solo las FOTOS se precachean a media id; el audio va por link, como el video.
+    const imgs = adjuntos.filter(a => a.tipo === 'imagen').map(a => a.url)
 
-    const total = (reply.text ? 1 : 0) + imgs.length
+    const total = (reply.text ? 1 : 0) + adjuntos.length
     let hechas = 0
     const avanzar = () => { hechas += 1; onProgress?.(hechas, total) }
 
@@ -1881,10 +1886,18 @@ export default function App() {
     // era de 800 ms cuando cada envío tardaba segundos; ahora que van por media id
     // alcanza con un respiro corto.
     const ids = await idsPromesa
-    for (let i = 0; i < imgs.length; i++) {
-      await sendImageUrl(telefono, nombre, imgs[i], ids[imgs[i]] || '', canal)
+    for (let i = 0; i < adjuntos.length; i++) {
+      const a = adjuntos[i]
+      if (a.tipo === 'audio') {
+        // El audio de una respuesta rápida YA está en OGG/Opus: se convirtió una
+        // sola vez, al guardar la respuesta. Acá solo se manda el link, así que
+        // sale tan rápido como una foto cacheada.
+        await enviarAudioUrl(telefono, nombre, a.url, canal)
+      } else {
+        await sendImageUrl(telefono, nombre, a.url, ids[a.url] || '', canal)
+      }
       avanzar()
-      if (i < imgs.length - 1) await new Promise(r => setTimeout(r, 150))
+      if (i < adjuntos.length - 1) await new Promise(r => setTimeout(r, 150))
     }
 
     changeStatus(telefono, estadoDestino)
