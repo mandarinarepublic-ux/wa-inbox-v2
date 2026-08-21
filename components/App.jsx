@@ -337,7 +337,29 @@ export default function App() {
     // ciclo, y como el mapa arrancaba vacío, al abrir el inbox TODO se pintaba
     // pendiente hasta que llegara. Pegado a la fila, ese instante no existe.
     // Pendientes de TODOS los canales (incluido el que no se está mirando).
-    if (sync?.pendientes) setPendientes(sync.pendientes)
+    //
+    // En GENERAL se cuentan desde las FILAS que se acaban de traer, no desde el
+    // contador del servidor. Son las mismas filas que se van a pintar, así que el
+    // botón dice exactamente lo que se ve debajo — por construcción, no por
+    // coincidencia. Es la garantía con la que se trabaja:
+    //
+    //   "si tengo esa bandeja vacía, he contestado a todas las personas"
+    //
+    // El contador del servidor (rpc, 0,1 ms) se sigue usando en las pestañas de un
+    // solo número, donde la lista viene filtrada y no alcanza para contar la otra.
+    // Contar desde la vista en el servidor costaría 12,2 ms por ciclo: no vale la
+    // pena para un caso que acá sale gratis.
+    if (enGeneral && Array.isArray(lista)) {
+      const porCanal = {}
+      for (const c of buildConvs(lista, true)) {
+        if ((c.estadoBandeja || '') !== 'pendiente') continue
+        const k = c.phoneId || 'sin-canal'
+        porCanal[k] = (porCanal[k] || 0) + 1
+      }
+      setPendientes(porCanal)
+    } else if (sync?.pendientes) {
+      setPendientes(sync.pendientes)
+    }
     // Solo si vino un número: `null` significa que la lectura falló, y ahí es mejor
     // conservar el valor anterior que pintar un 0 que diría "ya contestaste a todos".
     if (typeof sync?.pendientesTotal === 'number') setPendientesTotal(sync.pendientesTotal)
@@ -377,14 +399,31 @@ export default function App() {
           convsData.unshift({ telefono: tel, nombre: pend[tel][0].nombre, msgs: [...pend[tel]], last: pend[tel][pend[tel].length - 1], unread: 0 })
         }
       })
-      setConvs(convsData)
+      // Respetar los cambios de estado recién hechos, IGUAL que se hace abajo con
+      // los contactos. Sin esto: marcas ATENDIDO, la fila se apaga, y al siguiente
+      // poll (8 s) reaparece pendiente por unos segundos — porque la respuesta
+      // puede venir del caché del edge (s-maxage=2) o de antes de que la escritura
+      // se propagara. Marcar algo y verlo revivir es justo "la pantalla miente",
+      // el patrón que este proyecto viene a cerrar.
+      //
+      // El override va por (teléfono, canal) porque el estado es por conversación:
+      // marcar atendida la de REPUBLIC no puede tapar la de MANDI.
+      const ahoraOv = Date.now()
+      const conOverride = convsData.map(c => {
+        const ov = localStatusRef.current[`${c.telefono}|${c.phoneId || ''}`]
+        return (ov && ov.expiresAt > ahoraOv) ? { ...c, estadoBandeja: ov.estado } : c
+      })
+      setConvs(conOverride)
     }
     if (Array.isArray(ctList) && ctList.length > 0) {
       const ctMap = {}
       ctList.forEach(c => { ctMap[c.telefono] = c })
       // Respetar cambios locales recientes (evitar que el polling los pise)
       const now = Date.now()
-      Object.entries(localStatusRef.current).forEach(([tel, override]) => {
+      // Las claves llevan canal (`teléfono|phone_id`); la ficha del contacto es UNA
+      // por persona, así que acá se aplica por el teléfono de la clave.
+      Object.entries(localStatusRef.current).forEach(([clave, override]) => {
+        const tel = clave.split('|')[0]
         if (override.expiresAt > now && ctMap[tel]) {
           ctMap[tel] = { ...ctMap[tel], estado: override.estado }
         }
@@ -1132,7 +1171,7 @@ export default function App() {
    * reincidente de este inbox.
    */
   const estadoFila = (conv) => {
-    // El estado viene PEGADO a la fila (campo `estadoBandeja` del último mensaje,
+    // El estado viene PEGADO a la fila (campo `estadoBandeja` de la CONVERSACIÓN,
     // vista inbox.lista_bandeja). No se busca en ningún mapa aparte.
     //
     // Eso no es solo más rápido: es lo que hace imposible el defecto del 19-ago.
@@ -1144,7 +1183,7 @@ export default function App() {
     //
     // Respaldo al estado por persona para las filas que no vienen de esa vista
     // (búsqueda de mensajes, mensajes optimistas todavía sin confirmar).
-    return conv.last?.estadoBandeja || getStatus(conv.telefono)
+    return conv.estadoBandeja || getStatus(conv.telefono)
   }
   // Eje 2: temperatura del lead ('' = sin clasificar).
   const getTemp = (tel) => contacts[tel]?.temperatura || ''
@@ -1307,18 +1346,20 @@ export default function App() {
     // todavía le debes una respuesta.
     const canalFila = activeCanalRef.current || phoneIdDeCanal(linea) || getCanalActivo()
     const convFila = convs.find(c => c.telefono === telefono && (!canalFila || !c.phoneId || c.phoneId === canalFila))
-    const estadoActual = convFila?.last?.estadoBandeja || contacts[telefono]?.estado || 'pendiente'
+    const estadoActual = convFila?.estadoBandeja || contacts[telefono]?.estado || 'pendiente'
     if (estadoActual === status) return
 
     // Override local para que el polling (8s) no pise el cambio mientras se guarda.
-    localStatusRef.current[telefono] = { estado: status, expiresAt: Date.now() + 15000 }
+    // Clave (teléfono, canal): el override protege ESTA conversación, no las dos.
+    const claveOv = `${telefono}|${canalFila || ''}`
+    localStatusRef.current[claveOv] = { estado: status, expiresAt: Date.now() + 15000 }
     // Optimista: se ve al instante. El estado de bandeja vive PEGADO al último
     // mensaje de la fila, así que el pintado optimista va ahí — y solo en la fila
     // de ESTE número, no en las dos.
     setContacts(prev => ({ ...prev, [telefono]: { ...(prev[telefono] || {}), estado: status } }))
     const pintar = (est) => setConvs(prev => prev.map(c =>
       (c.telefono === telefono && (!canalFila || !c.phoneId || c.phoneId === canalFila) && c.last)
-        ? { ...c, last: { ...c.last, estadoBandeja: est } }
+        ? { ...c, estadoBandeja: est }
         : c))
     pintar(status)
     const conv = convs.find(c => c.telefono === telefono)
@@ -1326,7 +1367,7 @@ export default function App() {
     // Si el guardado falló: avisar y revertir (no dejar un estado fantasma que el poll
     // deshace solo en silencio a los 15s).
     if (res && res.ok === false) {
-      delete localStatusRef.current[telefono]
+      delete localStatusRef.current[claveOv]
       setContacts(prev => ({ ...prev, [telefono]: { ...(prev[telefono] || {}), estado: estadoActual } }))
       // Revertir TAMBIÉN la bandeja: es la que pinta la fila. Si solo se revirtiera
       // `contacts`, el aviso diría "no se pudo" y la fila seguiría mostrando el
