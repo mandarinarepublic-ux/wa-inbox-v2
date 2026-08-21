@@ -107,9 +107,22 @@ function MultiImgEditor({ urls, onChange }) {
         ? await subirAudioNota(f).catch(e => { console.error('[RightPanel] subirAudio:', e); return '' })
         : await subirFoto(f).catch(e => { console.error('[RightPanel] subirFoto:', e); return '' })
       if (url) {
-        const next = [...urls]
-        next[idx] = { tipo: esAud ? 'audio' : 'imagen', url }
-        onChange(next.filter(Boolean)) // compactar — quitar huecos, conservar orden
+        // ⚠️ SE ACTUALIZA CON FUNCIÓN, NO CON `urls` A SECAS.
+        //
+        // `urls` es el valor del render en que se hizo clic, y subir tarda: una
+        // foto un segundo, un audio más porque además se convierte. Si mientras
+        // sube una se agrega otra, la segunda partiría de la lista VIEJA y al
+        // terminar pisaría a la primera — se pierde un adjunto sin ningún error,
+        // y quien lo armó solo nota que "faltaba uno".
+        //
+        // Con el updater se parte siempre del estado de verdad. Es el mismo
+        // rastrillo que ya está documentado en `agregarAdjuntos` de App.jsx.
+        onChange(prev => {
+          const base = Array.isArray(prev) ? prev : []
+          const next = [...base]
+          next[idx] = { tipo: esAud ? 'audio' : 'imagen', url }
+          return next.filter(Boolean) // compactar — quitar huecos, conservar orden
+        })
       }
     } finally {
       setUploading(p => ({ ...p, [idx]: false }))
@@ -117,7 +130,9 @@ function MultiImgEditor({ urls, onChange }) {
     }
   }
 
-  const removeImg = (idx) => onChange(urls.filter((_, i) => i !== idx))
+  // También con updater: quitar uno mientras otro está subiendo repondría el que
+  // ya se había ido, o borraría el recién llegado.
+  const removeImg = (idx) => onChange(prev => (Array.isArray(prev) ? prev : []).filter((_, i) => i !== idx))
 
   // Adjuntos existentes + 1 slot vacío (si hay espacio)
   const slots = urls.length < MAX_IMGS ? [...urls, null] : urls
