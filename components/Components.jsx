@@ -115,7 +115,7 @@ function IABadge({ modoIA }) {
 
 // ── CONTACT ROW ──────────────────────────────────────────────────
 const TEMP_ICON = { caliente: '🔥', tibio: '🌤️', frio: '❄️' }
-export function ContactRow({ conv, isActive, onClick, search = '', estado, modoIA, temp = '', alerta = false, msgSnippet = null, colorCanal = '', etiquetaCanal = '' }) {
+export function ContactRow({ conv, isActive, onClick, search = '', estado, modoIA, temp = '', alerta = false, msgSnippet = null, colorCanal = '' }) {
   const [hovered, setHovered] = useState(false)
   const searching = String(search || '').trim().length > 0
   const info = ESTADO_INFO[estado] || null
@@ -141,21 +141,6 @@ export function ContactRow({ conv, isActive, onClick, search = '', estado, modoI
               {highlight(conv.nombre, search)}
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-              {/* Chip del canal — SOLO en GENERAL, la única pestaña donde conviven
-                  números distintos y donde el mismo cliente aparece dos veces.
-                  Lleva el nombre y no solo el color: dos filas idénticas separadas
-                  nada más por una franja se confunden en el celular, y equivocarse
-                  de fila es responder por el número donde la ventana está cerrada.
-                  El texto va en el color del canal para que casen chip y franja. */}
-              {etiquetaCanal && (
-                <span style={{
-                  fontSize: 9, fontWeight: 800, letterSpacing: '.04em',
-                  color: colorCanal || '#94a3b8',
-                  background: `${colorCanal || '#94a3b8'}1e`,
-                  border: `1px solid ${colorCanal || '#94a3b8'}55`,
-                  borderRadius: 6, padding: '1px 6px', flexShrink: 0,
-                }}>{etiquetaCanal}</span>
-              )}
               {alerta && <span title="🔥 Caliente — cerca de cerrar la ventana de 24h" style={{ fontSize: 12, animation: 'pulse 2s infinite' }}>⏰</span>}
               {temp && TEMP_ICON[temp] && <span title={`Lead ${temp}`} style={{ fontSize: 12 }}>{TEMP_ICON[temp]}</span>}
               <IABadge modoIA={modoIA} />

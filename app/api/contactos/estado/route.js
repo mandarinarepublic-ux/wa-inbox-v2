@@ -8,7 +8,7 @@ import { revisarVentaEnProceso } from '@/lib/capi'
 // campo: 'estado' | 'modoIA' | 'notas' | 'alias' | 'idVenta' | 'temperatura'
 export async function PATCH(req) {
   try {
-    const { telefono, campo, valor, phoneId } = await req.json()
+    const { telefono, campo, valor } = await req.json()
     if (!telefono || !campo) {
       return NextResponse.json({ error: 'Faltan campos: telefono, campo' }, { status: 400 })
     }
@@ -16,9 +16,7 @@ export async function PATCH(req) {
     let result
     switch (campo) {
       case 'estado':
-        // phoneId = en qué CANAL se cambia el estado. Sin él solo se escribe el
-        // lado viejo (conversaciones), que es lo que sigue leyendo IND.
-        result = await updateEstado(telefono, valor, phoneId)
+        result = await updateEstado(telefono, valor)
         break
       case 'modoIA':
         result = await updateModoIA(telefono, valor) // 'IA' | 'HUMANO'
