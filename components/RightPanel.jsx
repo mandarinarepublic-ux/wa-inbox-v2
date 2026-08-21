@@ -828,6 +828,8 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                             // con su url saldría el icono de imagen rota, que se
                             // lee como "algo falló" cuando está todo bien.
                             ? <div key={i} title="Nota de voz" style={{ flex:1, maxWidth:`${100/imgs.length}%`, display:'flex', alignItems:'center', justifyContent:'center', background:'#132437', fontSize:14 }}>🎤</div>
+                            : u.tipo === 'documento'
+                            ? <div key={i} title={u.nombre || 'Documento'} style={{ flex:1, maxWidth:`${100/imgs.length}%`, display:'flex', alignItems:'center', justifyContent:'center', background:'#132437', fontSize:14 }}>📄</div>
                             : <img key={i} src={u.url} style={{ flex:1, objectFit:'cover', display:'block', maxWidth:`${100/imgs.length}%` }} alt="" onError={e => e.currentTarget.style.display='none'} />
                           ))}
                         </div>
