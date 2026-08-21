@@ -2,7 +2,7 @@
 // las decisiones de esa tubería, que son donde estaban las trampas.
 import test from 'node:test'
 import assert from 'node:assert'
-import { decidirPegado, decidirAdjuntos, TOPE_FOTOS } from '../lib/adjuntos.js'
+import { decidirPegado, decidirAdjuntos, extDeNombre, TOPE_FOTOS } from '../lib/adjuntos.js'
 
 const foto  = (n = 'a.jpg') => ({ name: n, type: 'image/jpeg' })
 const clip  = (n = 'a.mp4') => ({ name: n, type: 'video/mp4' })
@@ -54,20 +54,55 @@ test('pegar dos veces SUMA (no reemplaza la anterior)', () => {
   assert.strictEqual(r.aviso, '')
 })
 
-test('un archivo que no sirve avisa en vez de quedarse callado', () => {
-  // El texto nombra los TRES tipos desde que se puede mandar audio (21-ago). Si
-  // siguiera diciendo solo 'fotos y videos', alguien leería que el audio no se
-  // puede mandar cuando sí se puede.
+test('un PDF ahora se manda como DOCUMENTO', () => {
   const r = decidirAdjuntos({ actuales: 0, entrantes: [pdf()] })
-  assert.strictEqual(r.accion, 'nada')
-  assert.match(r.aviso, /solo se pueden mandar esos tres/)
+  assert.strictEqual(r.accion, 'reemplazar')
+  assert.strictEqual(r.tipo, 'documento')
+  assert.strictEqual(r.archivos.length, 1)
+})
+
+// ☠️ Esta prueba existe para que nadie reponga una lista blanca de tipos.
+// Es la quinta vez en este repo que una lista blanca esconde algo en silencio
+// (ver el filtro de pintable): lo que no se reconoce se MANDA, no se descarta.
+test('un tipo INVENTADO tambien sale como documento, no se descarta', () => {
+  const raro = { name: 'plano.dwg', type: 'application/acad' }
+  const r = decidirAdjuntos({ actuales: 0, entrantes: [raro] })
+  assert.strictEqual(r.accion, 'reemplazar')
+  assert.strictEqual(r.tipo, 'documento')
+  assert.strictEqual(r.archivos[0].name, 'plano.dwg')
+})
+
+test('un archivo SIN tipo ni extension sale como documento', () => {
+  const r = decidirAdjuntos({ actuales: 0, entrantes: [{ name: 'sinnombre', type: '' }] })
+  assert.strictEqual(r.tipo, 'documento')
+})
+
+test('el documento va SOLO: si vienen dos, se manda el primero y se avisa', () => {
+  const r = decidirAdjuntos({ actuales: 0, entrantes: [pdf('uno.pdf'), pdf('dos.pdf')] })
+  assert.strictEqual(r.tipo, 'documento')
+  assert.strictEqual(r.archivos.length, 1)
+  assert.strictEqual(r.archivos[0].name, 'uno.pdf')
+  assert.match(r.aviso, /va solo/)
+})
+
+// ☠️ El documento entra ULTIMO a proposito. Si ganara, arrastrar una carpeta con
+// fotos y un readme.txt mandaria el readme e ignoraria las fotos.
+test('si hay fotos Y un documento, ganan las FOTOS', () => {
+  const r = decidirAdjuntos({ actuales: 0, entrantes: [foto('a.jpg'), foto('b.jpg'), pdf()] })
+  assert.strictEqual(r.tipo, 'imagen')
+  assert.strictEqual(r.archivos.length, 2)
+})
+
+test('un video le gana al documento', () => {
+  const r = decidirAdjuntos({ actuales: 0, entrantes: [pdf(), clip()] })
+  assert.strictEqual(r.tipo, 'video')
 })
 
 test('si vienen mezclados, se toman las fotos y se avisa del resto', () => {
   const r = decidirAdjuntos({ actuales: 0, entrantes: [foto(), pdf()] })
   assert.strictEqual(r.accion, 'reemplazar')
   assert.strictEqual(r.archivos.length, 1)
-  assert.match(r.aviso, /no era foto ni video/)
+  assert.match(r.aviso, /un documento va solo/)
 })
 
 test('el video va SOLO y se lleva por delante lo que hubiera', () => {
@@ -154,10 +189,49 @@ test('si entra audio junto con fotos, manda el audio y se avisa', () => {
   assert.match(r.aviso, /solo/i)
 })
 
-test('el aviso de "eso no sirve" ya nombra el audio', () => {
-  // Si el texto siguiera diciendo "solo fotos y videos", alguien leería que el
-  // audio no se puede mandar cuando sí se puede.
+test('ya no existe el rechazo POR TIPO: un pdf que antes se rechazaba ahora sale', () => {
+  // Esta prueba reemplaza a la del aviso "eso no sirve". Ese aviso desaparecio
+  // a proposito: no queda ningun tipo de archivo que el inbox rechace.
   const r = decidirAdjuntos({ entrantes: [{ name: 'hoja.pdf', type: 'application/pdf' }] })
-  assert.equal(r.accion, 'nada')
-  assert.match(r.aviso, /audio/i)
+  assert.notEqual(r.accion, 'nada')
+  assert.strictEqual(r.tipo, 'documento')
+  assert.strictEqual(r.aviso, '')
+})
+
+// ── La extension con la que se guarda un documento ────────────────
+test('extDeNombre saca la extension de un nombre normal', () => {
+  assert.strictEqual(extDeNombre('PROFORMA-5601.pdf'), 'pdf')
+  assert.strictEqual(extDeNombre('lista de precios.XLSX'), 'xlsx')
+  assert.strictEqual(extDeNombre('plano.dwg'), 'dwg')
+})
+
+// ☠️ Este valor termina DENTRO de la ruta del archivo en el bucket. Si dejara
+// pasar barras o puntos, un nombre de archivo podria escribir donde no debe.
+test('extDeNombre no deja escapar de la carpeta', () => {
+  // Lo que importa no es QUE devuelve sino que lo que devuelve no pueda ser un
+  // path: nada de barras, puntos o espacios, pase lo que pase.
+  const hostiles = [
+    'x.../../../etc/passwd',
+    'a.pdf/../../otro',
+    'a.p/d\f',
+    'a.p..f',
+    'a.%2e%2e%2f',
+    'a.' + '../'.repeat(20),
+  ]
+  for (const n of hostiles) {
+    const ext = extDeNombre(n)
+    assert.match(ext, /^[a-z0-9]{1,8}$/, `"${n}" dio "${ext}"`)
+  }
+})
+
+test('extDeNombre no revienta con nombres raros', () => {
+  assert.strictEqual(extDeNombre(''), 'bin')
+  assert.strictEqual(extDeNombre(null), 'bin')
+  assert.strictEqual(extDeNombre('sinpunto'), 'bin')
+  assert.strictEqual(extDeNombre('termina.'), 'bin')
+  assert.strictEqual(extDeNombre('.oculto'), 'oculto')
+})
+
+test('extDeNombre corta las extensiones absurdamente largas', () => {
+  assert.strictEqual(extDeNombre('x.' + 'a'.repeat(100)).length, 8)
 })

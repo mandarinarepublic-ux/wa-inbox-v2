@@ -152,6 +152,36 @@ function construir(body) {
     }
   }
 
+  // DOCUMENTO por link (pdf, docx, xlsx, dwg, zip... — WhatsApp acepta cualquiera).
+  //
+  // `filename` NO es opcional en la practica: es el nombre que ve el cliente en su
+  // WhatsApp. Sin el, Meta muestra el ultimo tramo de la URL, que es un uuid — el
+  // cliente recibe "a3f9c1e2-....pdf" en vez de "PROFORMA-5601.pdf".
+  //
+  // A diferencia del audio, el documento SI acepta caption, asi que el texto que
+  // el vendedor escribio viaja pegado y sale UN solo mensaje en vez de dos.
+  if (body.DocURL) {
+    const nombre = String(body.DocNombre || '').trim() || 'documento'
+    const caption = String(body.DocCaption || '').trim()
+    return {
+      tipo: 'documento',
+      // El hilo muestra el nombre del archivo: un documento sin texto no puede
+      // quedar como una burbuja vacia (es la trampa que ya escondio clientes).
+      contenido: caption || nombre,
+      mediaUrl: body.DocURL, mediaId: '',
+      payload: {
+        messaging_product: 'whatsapp',
+        to,
+        type: 'document',
+        document: {
+          link: body.DocURL,
+          filename: nombre,
+          ...(caption ? { caption } : {}),
+        },
+      },
+    }
+  }
+
   // Audio por MediaID (subido antes a Meta), mismo criterio que el de video.
   if (body.AudioMediaId) {
     return {
@@ -226,7 +256,7 @@ export async function POST(req) {
     // escrito, y dejarlo entrar acá es abrir la puerta a que un envío de archivo
     // se convierta en un cobro por un parecido de cadena.
     if (!body.TipoMensaje && !body.ImagenURL && !body.VideoMediaId && !body.VideoURL
-        && !body.AudioURL && !body.AudioMediaId) {
+        && !body.AudioURL && !body.AudioMediaId && !body.DocURL) {
       const monto = parseLinkpago(body.Mensaje)
       if (monto) {
         try {

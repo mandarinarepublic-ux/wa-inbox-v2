@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSupabase, CUENTA } from '@/lib/supabase'
+import { extDeNombre } from '@/lib/adjuntos'
 
 // Genera una SIGNED UPLOAD URL de Supabase Storage para que el navegador suba el
 // archivo DIRECTO a Supabase, sin pasar por esta función de Vercel.
@@ -26,20 +27,39 @@ const EXT = {
   'audio/amr': 'amr', 'audio/3gpp': '3gp',
 }
 
+// Los DOCUMENTOS no tienen mapa de tipos a proposito: WhatsApp acepta cualquiera
+// (pdf, docx, xlsx, dwg, zip...) y una lista blanca solo serviria para rechazar
+// en silencio lo que nadie previo. Su extension sale del NOMBRE del archivo.
+//
+// El tope no lo pone WhatsApp (permite 100 MB) sino el bucket inbox-media, que
+// corta en 25 MB. Se valida aca para que el aviso salga del inbox con un texto
+// entendible, y no como un error crudo de Supabase a mitad de la subida.
+const MAX_BYTES_DOC = 25 * 1024 * 1024
+
+// extDeNombre vive en lib/adjuntos.js: es una decision sobre archivos, como el
+// resto, y ahi se puede probar. Un route.js solo deberia exportar sus handlers.
+
 export async function POST(req) {
   try {
-    const { contentType = '', size = 0 } = await req.json().catch(() => ({}))
+    const { contentType = '', size = 0, filename = '' } = await req.json().catch(() => ({}))
     const ct = String(contentType).split(';')[0].trim().toLowerCase()
 
-    if (!ct.startsWith('video/') && !ct.startsWith('image/') && !ct.startsWith('audio/')) {
-      return NextResponse.json({ error: 'Tipo de archivo no permitido' }, { status: 400 })
-    }
-    if (size && Number(size) > MAX_BYTES) {
-      return NextResponse.json({ error: 'El archivo supera el límite de 16 MB de WhatsApp' }, { status: 413 })
+    // Todo lo que no es foto/video/audio es un DOCUMENTO — mismo criterio que
+    // lib/adjuntos.js. Ya no hay tipo rechazado: WhatsApp los acepta todos.
+    const esMedia = ct.startsWith('video/') || ct.startsWith('image/') || ct.startsWith('audio/')
+    const esDoc = !esMedia
+
+    const tope = esDoc ? MAX_BYTES_DOC : MAX_BYTES
+    if (size && Number(size) > tope) {
+      const mb = Math.round(tope / (1024 * 1024))
+      return NextResponse.json({ error: `El archivo supera el límite de ${mb} MB` }, { status: 413 })
     }
 
-    const ext  = EXT[ct] || (ct.startsWith('video/') ? 'mp4' : ct.startsWith('audio/') ? 'ogg' : 'jpg')
-    const kind = ct.startsWith('video/') ? 'videos' : ct.startsWith('audio/') ? 'audios' : 'fotos'
+    const ext  = esDoc
+      ? extDeNombre(filename)
+      : (EXT[ct] || (ct.startsWith('video/') ? 'mp4' : ct.startsWith('audio/') ? 'ogg' : 'jpg'))
+    const kind = esDoc ? 'documentos'
+      : ct.startsWith('video/') ? 'videos' : ct.startsWith('audio/') ? 'audios' : 'fotos'
     const path = `${kind}/${CUENTA}/${crypto.randomUUID()}.${ext}`
 
     const sb = getSupabase()
