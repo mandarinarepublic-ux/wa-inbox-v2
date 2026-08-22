@@ -280,8 +280,70 @@ export function QuickReplies({ onSelect }) {
   )
 }
 
+// ── VISOR DE FOTO ────────────────────────────────────────────────
+/**
+ * Ver una foto del chat en grande, SIN salir del inbox.
+ *
+ * Antes la foto era un <a target="_blank">: cada una abría una pestaña nueva y
+ * había que cerrarla con la X del navegador y volver al chat. Con 25 chats al
+ * día eso son 25 pestañas y 50 clics.
+ *
+ * Cierra con CUALQUIER clic —incluido sobre la propia foto— y con Escape. Es
+ * deliberado: acá no hay zoom ni nada que hacer sobre la imagen, así que pedir
+ * puntería sobre el fondo o sobre una X sería fricción sin motivo.
+ */
+function VisorFoto({ src, onCerrar }) {
+  useEffect(() => {
+    const alTeclear = (e) => { if (e.key === 'Escape') onCerrar() }
+    window.addEventListener('keydown', alTeclear)
+    return () => window.removeEventListener('keydown', alTeclear)
+  }, [onCerrar])
+
+  return (
+    <div
+      onClick={onCerrar}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Foto ampliada — toca en cualquier lado para cerrar"
+      style={{
+        position: 'fixed', inset: 0, zIndex: 10000,
+        background: 'rgba(0,0,0,.92)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 24, cursor: 'zoom-out', animation: 'up .15s ease',
+      }}
+    >
+      <img src={src} alt="Foto ampliada" style={{
+        maxWidth: '92vw', maxHeight: '90vh',
+        objectFit: 'contain', borderRadius: 6, display: 'block',
+      }} />
+
+      {/* La X no hace falta para cerrar (cualquier clic cierra), pero se deja
+          visible: sin ninguna señal, una pantalla negra no se ve "cerrable". */}
+      <button onClick={onCerrar} aria-label="Cerrar" style={{
+        position: 'fixed', top: 16, right: 20,
+        background: 'rgba(255,255,255,.1)', border: 'none', borderRadius: 8,
+        color: '#fff', fontSize: 18, lineHeight: 1, cursor: 'pointer',
+        padding: '8px 12px', fontFamily: 'inherit',
+      }}>✕</button>
+
+      {/* Abrir aparte sigue disponible para descargar o ver al 100%. Frena el
+          clic para que el enlace no se coma su propio cierre. */}
+      <a href={src} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
+        style={{
+          position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)',
+          background: 'rgba(255,255,255,.1)', borderRadius: 8,
+          color: '#fff', fontSize: 12, textDecoration: 'none',
+          padding: '8px 14px', fontWeight: 600,
+        }}>Abrir en pestaña ↗</a>
+    </div>
+  )
+}
+
 // ── MEDIA CONTENT ────────────────────────────────────────────────
 function MediaContent({ tipo, mediaUrl, mediaId }) {
+  // Va ANTES de cualquier return condicional: los hooks no pueden quedar
+  // detrás de un if.
+  const [verFoto, setVerFoto] = useState(false)
   const url = mediaUrl || ''
   const t   = String(tipo || '').toLowerCase()
   const has = !!(url || mediaId) // entrante directo de Meta trae solo mediaId (sin url)
@@ -302,18 +364,25 @@ function MediaContent({ tipo, mediaUrl, mediaId }) {
   const isDocument = ['document', 'documento'].includes(t) || !!url.match(/\.(pdf|doc|docx|xls|xlsx)(\?|$)/i)
 
   if (has && isImage) return (
-    <a href={src} target="_blank" rel="noreferrer" style={{ display: 'block', marginBottom: 6 }}>
+    <>
+      {/* La foto ya no es un enlace: abre el visor de acá al lado, sin sacar a
+          nadie del inbox. `img` sigue estando en la lista que ignora `alTocar`
+          de la burbuja, así que tocarla no dispara "responder". */}
       <img
         src={src}
-        alt="imagen"
+        alt="Foto — toca para verla en grande"
+        title="Toca para ver en grande"
+        onClick={() => setVerFoto(true)}
         style={{
           maxWidth: '100%', maxHeight: 260, borderRadius: 10,
-          display: 'block', objectFit: 'cover',
+          display: 'block', objectFit: 'cover', marginBottom: 6,
           border: '1px solid rgba(255,255,255,.06)',
+          cursor: 'zoom-in',
         }}
         onError={e => { e.currentTarget.style.display = 'none' }}
       />
-    </a>
+      {verFoto && <VisorFoto src={src} onCerrar={() => setVerFoto(false)} />}
+    </>
   )
 
   if (has && isAudio) {
