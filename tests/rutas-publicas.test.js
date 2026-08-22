@@ -84,9 +84,20 @@ test('y el matcher del middleware también los excluye', () => {
   // el middleware corre igual y redirige antes de que nadie mire la lista.
   const mw = readFileSync(new URL('../middleware.js', import.meta.url), 'utf8')
   const vercel = JSON.parse(readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'))
+
+  // ⚠️ Se mira SOLO el patrón del matcher, no el archivo entero. Un `includes`
+  // sobre todo el archivo pasa por cualquier COMENTARIO que nombre la ruta — y
+  // este archivo está lleno de comentarios que las nombran. Una prueba que no se
+  // cae cuando el bug está presente es peor que no tener prueba: da permiso para
+  // no mirar. Verificado quitando la ruta del matcher a propósito.
+  const desde = mw.indexOf("(?!")
+  const hasta = mw.indexOf(")", desde)
+  assert.ok(desde > 0 && hasta > desde, "no se pudo leer el patrón del matcher de middleware.js")
+  const excluidasDelMatcher = mw.slice(desde + 3, hasta).split("|").map(s => s.trim())
+
   for (const ruta of (vercel.crons || []).map(c => c.path)) {
-    const sinBarra = ruta.replace(/^\//, '')
-    assert.ok(mw.includes(sinBarra),
-      `${ruta} no aparece en el matcher de middleware.js: el cron se va a redirigir al login y no correrá nunca`)
+    const sinBarra = ruta.slice(1)
+    assert.ok(excluidasDelMatcher.includes(sinBarra),
+      `${ruta} no está excluido en el matcher de middleware.js: el cron se va a redirigir al login y no correrá nunca`)
   }
 })
