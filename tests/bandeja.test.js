@@ -9,7 +9,7 @@
 // eso esta familia de bugs llegó a producción cinco veces.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { canalDeEnvio, ventanaAbierta, patchesDeMensaje, canalParaEscribir, opcionesDeCanal, VENTANA_MS } from '../lib/bandeja.js'
+import { canalDeEnvio, ventanaAbierta, patchesDeMensaje, canalParaEscribir, opcionesDeCanal, reabrePorEntregaFallida, VENTANA_MS } from '../lib/bandeja.js'
 
 const MANDI    = '1024077200794372'
 const REPUBLIC = '118582961194601'
@@ -231,4 +231,58 @@ test('si no escribió por NINGUNO, no hay preseleccionado', () => {
 
 test('sin canales configurados devuelve lista vacía, no inventa uno', () => {
   assert.deepEqual(opcionesDeCanal([{ phone_id: MANDI, ultimo_entrante_at: '2026-08-19T16:20:35Z' }], [], Date.now()), [])
+})
+
+// ── La red de seguridad: un fallo devuelve el chat a PENDIENTE ────────────────
+// Meta contesta 200 con wamid al enviar, así que el inbox marca el chat ATENDIDO
+// y lo saca de la bandeja. El rechazo llega DESPUÉS, por webhook, y hasta hoy
+// solo escribía `estado_entrega='failed'` en la fila del mensaje: nadie movía el
+// chat. El cliente que no recibió nada quedaba en la columna de "ya contesté".
+//
+// Rompe la regla que sostiene toda la bandeja:
+//   "si esa bandeja está vacía, contesté a todos"
+//
+// En IND esto dejó 26 clientes en ATENDIDO sin haber recibido un solo mensaje, y
+// nadie lo notó en 5 días. Acá la ruta es la misma; solo que dispara menos.
+
+test('un failed devuelve el chat a PENDIENTE', () => {
+  assert.equal(reabrePorEntregaFallida('failed', 'ATENDIDO'), true)
+})
+
+test('un failed reabre venga del estado que venga', () => {
+  // Mismo criterio que un entrante: no hay "estado deliberado" que sobreviva a un
+  // cliente que no recibió su mensaje.
+  for (const estado of ['ATENDIDO', 'SOPORTE', 'VENTA', 'ARCHIVADO']) {
+    assert.equal(reabrePorEntregaFallida('failed', estado), true, `desde ${estado}`)
+  }
+})
+
+test('un failed sobre un chat YA pendiente no escribe de más', () => {
+  assert.equal(reabrePorEntregaFallida('failed', 'PENDIENTE'), false)
+  assert.equal(reabrePorEntregaFallida('failed', 'pendiente'), false)
+})
+
+test('sent, delivered y read NO tocan la bandeja', () => {
+  // Son casi todos los statuses. Si alguno reabriera, la bandeja se llenaría sola
+  // y dejaría de significar nada.
+  for (const bueno of ['sent', 'delivered', 'read']) {
+    assert.equal(reabrePorEntregaFallida(bueno, 'ATENDIDO'), false, bueno)
+  }
+})
+
+test('un estado desconocido NO reabre', () => {
+  assert.equal(reabrePorEntregaFallida('', 'ATENDIDO'), false)
+  assert.equal(reabrePorEntregaFallida(null, 'ATENDIDO'), false)
+  assert.equal(reabrePorEntregaFallida('inventado', 'ATENDIDO'), false)
+})
+
+test('si no se sabe en qué estado está el chat, un failed lo reabre igual', () => {
+  // Ante la duda, que se vea. Un chat de más en Pendientes cuesta una mirada; uno
+  // de menos es un cliente que nadie vuelve a abrir.
+  assert.equal(reabrePorEntregaFallida('failed', null), true)
+  assert.equal(reabrePorEntregaFallida('failed', ''), true)
+})
+
+test('FAILED en mayúsculas se trata igual', () => {
+  assert.equal(reabrePorEntregaFallida('FAILED', 'ATENDIDO'), true)
 })
