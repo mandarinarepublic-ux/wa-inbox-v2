@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getContactos } from '@/lib/contactos'
 import { getBandejasPorTelefonoSupabase } from '@/lib/inbox-supabase'
-import { canalParaEscribir } from '@/lib/bandeja'
+import { canalParaEscribir, opcionesDeCanal } from '@/lib/bandeja'
+import { CANALES } from '@/lib/canales'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -27,8 +28,12 @@ export async function GET() {
     const lista = (contactos || [])
       .filter((c) => soloDigitos(c.telefono).length >= 9)
       .map((c) => {
-        const { canal, dentro24h, ultimoEntranteAt } =
-          canalParaEscribir(bandejas.get(c.telefono), now)
+        const filas = bandejas.get(c.telefono)
+        const { canal, dentro24h, ultimoEntranteAt } = canalParaEscribir(filas, now)
+        // Los DOS numeros con su estado real, el mas fresco primero y
+        // preseleccionado. El vendedor elige; el sistema no adivina.
+        // OJO: CANALES no trae GENERAL — GENERAL es una pestana, no un numero.
+        const canales = opcionesDeCanal(filas, CANALES, now)
         return {
           telefono: c.telefono,
           nombre: c.nombre || '',
@@ -39,6 +44,10 @@ export async function GET() {
           // El numero por el que ESTA persona escribio mas reciente. Vacio = no
           // escribio por ninguno; entonces no hay a donde mandarle texto libre.
           canal,
+          // Para el selector: [{ phoneId, etiqueta, dentro24h, ultimoEntranteAt,
+          // preseleccionado }]. Sin ninguno preseleccionado = no sabemos por
+          // donde escribio, y entonces hay que elegir a proposito.
+          canales,
           // Se conserva el de la persona para la columna "hace X" de la lista,
           // pero YA NO decide nada: `ultimoEntranteDelCanal` es el que manda.
           ultimoEntranteAt: c.ultimoEntranteAt || null,

@@ -152,13 +152,31 @@ function PanelContacto({ contacto: c, onClose, onOpenChat, flash }) {
   const [texto,   setTexto]   = useState('')
   const [sending, setSending] = useState(false)
 
+  // ── Por cuál número sale ────────────────────────────────────────────────
+  // El sistema NO adivina: muestra los dos con su estado y deja elegir, con el
+  // más fresco preseleccionado. Elegir solo fallaba en un caso muy real — el
+  // cliente escribe por REPUBLIC por un pedido y por MANDI por otra cosa: el
+  // vendedor contesta el hilo de REPUBLIC y el mensaje sale por MANDI, en
+  // silencio. Es el 19-ago otra vez, pero por la puerta de CONTACTOS.
+  //
+  // Si `canales` no viene (respuesta vieja del API, o un navegador con el JS
+  // anterior), se arma una opción con lo que haya: mejor eso que un panel roto.
+  const opciones = (c.canales && c.canales.length)
+    ? c.canales
+    : (c.canal ? [{ phoneId: c.canal, etiqueta: c.canal, dentro24h: !!c.dentro24h, ultimoEntranteAt: c.ultimoEntranteDelCanal || null, preseleccionado: true }] : [])
+  const [canalSel, setCanalSel] = useState(() => (opciones.find(o => o.preseleccionado) || {}).phoneId || '')
+  const elegido = opciones.find(o => o.phoneId === canalSel) || null
+  // ⚠️ La ventana es la DEL CANAL ELEGIDO, no la de la persona. Ese era el bug:
+  // pintaba verde porque el cliente había escrito al OTRO número.
+  const abierta = Boolean(elegido && elegido.dentro24h)
+
   const enviarLibre = async () => {
-    if (!texto.trim()) return
+    if (!texto.trim() || !canalSel) return
     setSending(true)
     // El canal del CLIENTE (por donde escribio el), no el de la pestana. Sin
     // esto, escribirle desde la agenda salia por la bandeja en la que estabas
     // parado y Meta lo rechazaba con 131047.
-    const r = await sendReply(c.telefono, c.nombre || '', texto.trim(), '', c.canal || '')
+    const r = await sendReply(c.telefono, c.nombre || '', texto.trim(), '', canalSel)
     setSending(false)
     if (r?.ok) { flash('✅ Mensaje enviado'); onClose() }
     else flash('❌ No se pudo enviar')
@@ -188,7 +206,37 @@ function PanelContacto({ contacto: c, onClose, onOpenChat, flash }) {
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#475569', cursor: 'pointer', fontSize: 20 }}>✕</button>
         </div>
 
-        <div style={{ marginBottom: 14 }}><Badge24h on={c.dentro24h} /></div>
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: '#64748b', marginBottom: 8 }}>¿Por cuál número le escribes?</div>
+          {opciones.length === 0 && (
+            <div style={{ fontSize: 12.5, color: '#475569', padding: '10px 12px', borderRadius: 10, border: '1px dashed #1e2d3d' }}>
+              No hay números configurados.
+            </div>
+          )}
+          {opciones.map((o) => {
+            const sel = o.phoneId === canalSel
+            return (
+              <button key={o.phoneId} onClick={() => setCanalSel(o.phoneId)} style={{
+                width: '100%', display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left',
+                padding: '10px 12px', marginBottom: 6, borderRadius: 11, cursor: 'pointer',
+                background: sel ? '#0d1828' : 'transparent',
+                border: `1px solid ${sel ? '#e2e8f0' : '#1e2d3d'}`,
+                color: '#e2e8f0', fontFamily: 'Outfit,sans-serif',
+              }}>
+                <span style={{ fontSize: 13, opacity: sel ? 1 : .45 }}>{sel ? '◉' : '○'}</span>
+                <span style={{ fontSize: 13.5, fontWeight: 800, flex: 1 }}>{o.etiqueta}</span>
+                <Badge24h on={o.dentro24h} />
+              </button>
+            )
+          })}
+          {opciones.length > 0 && !canalSel && (
+            // Sin preseleccionado = no sabemos por dónde escribió. Que elija a
+            // propósito es justo lo que impide un envío que muere en Meta.
+            <div style={{ fontSize: 11.5, color: ORANGE, marginTop: 6 }}>
+              Este contacto no ha escrito por ninguno de los dos. Elige uno para escribirle por plantilla.
+            </div>
+          )}
+        </div>
 
         {/* Ir al chat */}
         <button
@@ -198,7 +246,7 @@ function PanelContacto({ contacto: c, onClose, onOpenChat, flash }) {
             background: '#0d1828', color: '#e2e8f0', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', fontFamily: 'Outfit,sans-serif',
           }}>💬 Abrir la conversación</button>
 
-        {c.dentro24h ? (
+        {abierta ? (
           // ── Dentro de 24h → texto libre ──
           <div>
             <div style={{ fontSize: 12, fontWeight: 800, color: '#94a3b8', marginBottom: 8 }}>Enviar mensaje (texto libre)</div>
@@ -208,7 +256,7 @@ function PanelContacto({ contacto: c, onClose, onOpenChat, flash }) {
                 color: '#e2e8f0', fontSize: 13, padding: '10px 12px', fontFamily: 'Outfit,sans-serif',
                 resize: 'vertical', outline: 'none', boxSizing: 'border-box', marginBottom: 10,
               }} />
-            <button onClick={enviarLibre} disabled={!texto.trim() || sending}
+            <button onClick={enviarLibre} disabled={!texto.trim() || sending || !canalSel}
               style={{
                 width: '100%', padding: '11px', borderRadius: 11, border: 'none',
                 background: texto.trim() ? `linear-gradient(135deg,${ORANGE},#f97316)` : '#1e2d3d',
@@ -218,7 +266,8 @@ function PanelContacto({ contacto: c, onClose, onOpenChat, flash }) {
           </div>
         ) : (
           // ── Fuera de 24h → plantilla ──
-          <SelectorPlantilla contacto={c} flash={flash} onClose={onClose} />
+          // La plantilla sale por el MISMO número elegido arriba.
+          <SelectorPlantilla contacto={{ ...c, canal: canalSel }} flash={flash} onClose={onClose} />
         )}
       </div>
     </>

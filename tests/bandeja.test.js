@@ -9,7 +9,7 @@
 // eso esta familia de bugs llegó a producción cinco veces.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { canalDeEnvio, ventanaAbierta, patchesDeMensaje, canalParaEscribir, VENTANA_MS } from '../lib/bandeja.js'
+import { canalDeEnvio, ventanaAbierta, patchesDeMensaje, canalParaEscribir, opcionesDeCanal, VENTANA_MS } from '../lib/bandeja.js'
 
 const MANDI    = '1024077200794372'
 const REPUBLIC = '118582961194601'
@@ -169,4 +169,66 @@ test('una fecha corrupta no puede ganar el canal', () => {
   ], ahora)
   assert.equal(r.canal, REPUBLIC)
   assert.equal(r.dentro24h, true)
+})
+
+// ── Las opciones que ve el vendedor al escribir ──────────────────────────────
+// El sistema NO adivina por dónde mandar: muestra los dos números con su estado
+// real y deja elegir, con el más fresco preseleccionado.
+//
+// `canalParaEscribir` toma el último entrante, y eso falla en un caso muy real:
+// el cliente escribe por REPUBLIC por un pedido a las 10 y por MANDI por otra
+// cosa a las 11. El vendedor contesta el hilo de REPUBLIC y el mensaje sale por
+// MANDI, EN SILENCIO. Acá `canalParaEscribir` pasa de decidir a PRESELECCIONAR.
+//
+// ⚠️ `CANALES` NO incluye GENERAL: GENERAL es una pestaña, no un número. Meter
+// una opción "GENERAL" acá mandaría por un phone_id que no existe.
+
+const CANALES_MANDI = [
+  { phoneId: MANDI,    etiqueta: 'MANDI' },
+  { phoneId: REPUBLIC, etiqueta: 'REPUBLIC' },
+]
+
+test('muestra TODOS los números, no solo por los que escribió', () => {
+  // Un número al que nunca escribió sigue siendo alcanzable POR PLANTILLA.
+  const ops = opcionesDeCanal([{ phone_id: REPUBLIC, ultimo_entrante_at: '2026-08-19T16:20:35Z' }],
+                              CANALES_MANDI, Date.parse('2026-08-19T16:40:00Z'))
+  assert.equal(ops.length, 2)
+})
+
+test('el más fresco va primero y viene preseleccionado', () => {
+  const ops = opcionesDeCanal([
+    { phone_id: MANDI,    ultimo_entrante_at: '2026-08-19T10:00:00Z' },
+    { phone_id: REPUBLIC, ultimo_entrante_at: '2026-08-19T16:20:35Z' },
+  ], CANALES_MANDI, Date.parse('2026-08-19T16:40:00Z'))
+  assert.equal(ops[0].etiqueta, 'REPUBLIC')
+  assert.equal(ops[0].preseleccionado, true)
+  assert.equal(ops[1].preseleccionado, false)
+})
+
+test('dice por cuál se escribe libre y por cuál toca plantilla', () => {
+  // El caso exacto del 19-ago: REPUBLIC hace 20 minutos, MANDI hace 35 días.
+  const ops = opcionesDeCanal([
+    { phone_id: REPUBLIC, ultimo_entrante_at: '2026-08-19T16:20:35Z' },
+    { phone_id: MANDI,    ultimo_entrante_at: '2026-07-15T19:08:58Z' },
+  ], CANALES_MANDI, Date.parse('2026-08-19T16:40:00Z'))
+  assert.equal(ops.find(o => o.etiqueta === 'REPUBLIC').dentro24h, true)
+  assert.equal(ops.find(o => o.etiqueta === 'MANDI').dentro24h, false)
+})
+
+test('un número al que nunca escribió va como cerrado (el caso del 16-ago)', () => {
+  const ops = opcionesDeCanal([{ phone_id: REPUBLIC, ultimo_entrante_at: '2026-08-19T16:20:35Z' }],
+                              CANALES_MANDI, Date.parse('2026-08-19T16:40:00Z'))
+  const n = ops.find(o => o.etiqueta === 'MANDI')
+  assert.equal(n.dentro24h, false)
+  assert.equal(n.ultimoEntranteAt, null)
+})
+
+test('si no escribió por NINGUNO, no hay preseleccionado', () => {
+  // Sin preselección la pantalla no puede mandar sola: hay que elegir a propósito.
+  const ops = opcionesDeCanal([], CANALES_MANDI, Date.now())
+  assert.equal(ops.some(o => o.preseleccionado), false)
+})
+
+test('sin canales configurados devuelve lista vacía, no inventa uno', () => {
+  assert.deepEqual(opcionesDeCanal([{ phone_id: MANDI, ultimo_entrante_at: '2026-08-19T16:20:35Z' }], [], Date.now()), [])
 })
