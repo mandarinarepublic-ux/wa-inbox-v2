@@ -155,7 +155,10 @@ function PanelContacto({ contacto: c, onClose, onOpenChat, flash }) {
   const enviarLibre = async () => {
     if (!texto.trim()) return
     setSending(true)
-    const r = await sendReply(c.telefono, c.nombre || '', texto.trim())
+    // El canal del CLIENTE (por donde escribio el), no el de la pestana. Sin
+    // esto, escribirle desde la agenda salia por la bandeja en la que estabas
+    // parado y Meta lo rechazaba con 131047.
+    const r = await sendReply(c.telefono, c.nombre || '', texto.trim(), '', c.canal || '')
     setSending(false)
     if (r?.ok) { flash('✅ Mensaje enviado'); onClose() }
     else flash('❌ No se pudo enviar')
@@ -278,11 +281,14 @@ function SelectorPlantilla({ contacto: c, flash, onClose }) {
 
   const enviar = async () => {
     setSending(true)
+    // Este modal lo comparte el CHAT, donde `c` no trae `canal`: ahi cae a la
+    // pestana, que es el comportamiento de siempre y el correcto (la lista del
+    // chat ya viene por numero).
     const r = await sendTemplate(c.telefono, c.nombre || '', {
       name: chosen.name, language: chosen.language,
       bodyParams: bodyP, headerParams: headP, headerImage: headImg,
       preview: preview || `📋 Plantilla: ${chosen.name}`,
-    })
+    }, c.canal || '')
     setSending(false)
     if (r?.ok) { flash('✅ Plantilla enviada'); onClose() }
     else flash('❌ ' + (r?.error || 'Meta rechazó el envío'))

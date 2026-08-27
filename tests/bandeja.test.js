@@ -9,7 +9,7 @@
 // eso esta familia de bugs llegó a producción cinco veces.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { canalDeEnvio, ventanaAbierta, patchesDeMensaje, VENTANA_MS } from '../lib/bandeja.js'
+import { canalDeEnvio, ventanaAbierta, patchesDeMensaje, canalParaEscribir, VENTANA_MS } from '../lib/bandeja.js'
 
 const MANDI    = '1024077200794372'
 const REPUBLIC = '118582961194601'
@@ -105,4 +105,68 @@ test('la dirección en minúsculas se trata igual que en MAYÚSCULAS', () => {
   // entrante no reabra la bandeja y el cliente desaparezca de Pendientes.
   const { bandeja } = patchesDeMensaje({ direccion: 'entrante', phone_id: MANDI, fecha: '2026-08-19T16:11:31Z' })
   assert.equal(bandeja.estado, 'PENDIENTE')
+})
+
+// ── A qué número se le escribe desde CONTACTOS ───────────────────────────────
+// `/api/directorio` es la AGENDA: una fila por persona, sin canal. El arreglo del
+// 19-ago NO tocó esta ruta. Sigue calculando `dentro24h` con el último entrante
+// de la PERSONA —mezclando los dos números— y mandando con el canal de la
+// PESTAÑA. Las dos cosas a la vez: pinta la ventana en verde porque el cliente
+// escribió al OTRO número, y después manda por el que está abierto en pantalla.
+//
+// Medido el 26-ago sobre 30 días: 19 mensajes de MANDI muertos con 131047, y en
+// 18 de los 19 el OTRO número tenía la ventana abierta. Lleva 7 días en cero
+// porque no le ha disparado, no porque esté cubierto.
+//
+// En IND el mismo hueco se llevó 79 mensajes.
+
+test('elige el canal donde el cliente escribió, no el de la pestaña', () => {
+  const ahora = Date.parse('2026-08-19T16:40:00Z')
+  const r = canalParaEscribir([
+    { phone_id: REPUBLIC, ultimo_entrante_at: '2026-08-19T16:20:35Z' },
+    { phone_id: MANDI,    ultimo_entrante_at: null },
+  ], ahora)
+  assert.equal(r.canal, REPUBLIC)
+  assert.equal(r.dentro24h, true)
+})
+
+test('con los dos abiertos gana el más reciente', () => {
+  const ahora = Date.parse('2026-08-19T16:40:00Z')
+  const r = canalParaEscribir([
+    { phone_id: MANDI,    ultimo_entrante_at: '2026-08-19T10:00:00Z' },
+    { phone_id: REPUBLIC, ultimo_entrante_at: '2026-08-19T16:20:35Z' },
+  ], ahora)
+  assert.equal(r.canal, REPUBLIC, 'el último entrante manda')
+})
+
+test('un canal SIN entrante nunca gana (el caso del 16-ago)', () => {
+  // Seis mensajes a alguien que NUNCA había escrito a ese número. Sin entrante
+  // no hay ventana: nunca se abrió.
+  const r = canalParaEscribir([{ phone_id: MANDI, ultimo_entrante_at: null }], Date.now())
+  assert.equal(r.canal, '')
+  assert.equal(r.dentro24h, false)
+})
+
+test('sin ninguna fila no inventa un canal', () => {
+  assert.deepEqual(canalParaEscribir([], Date.now()), { canal: '', dentro24h: false, ultimoEntranteAt: null })
+  assert.deepEqual(canalParaEscribir(null, Date.now()), { canal: '', dentro24h: false, ultimoEntranteAt: null })
+})
+
+test('la ventana se mide contra EL CANAL ELEGIDO, no contra la persona', () => {
+  const ahora = Date.parse('2026-08-19T16:40:00Z')
+  const r = canalParaEscribir([
+    { phone_id: MANDI, ultimo_entrante_at: '2026-08-18T09:00:00Z' },  // 31 h
+  ], ahora)
+  assert.equal(r.canal, MANDI)
+  assert.equal(r.dentro24h, false, 'cerrada: 31 h en ESE número')
+})
+
+test('una fecha corrupta no puede ganar el canal', () => {
+  const ahora = Date.parse('2026-08-19T16:40:00Z')
+  const r = canalParaEscribir([
+    { phone_id: MANDI,    ultimo_entrante_at: 'no-es-fecha' },
+    { phone_id: REPUBLIC, ultimo_entrante_at: '2026-08-19T16:20:35Z' },
+  ], ahora)
+  assert.equal(r.canal, REPUBLIC)
+  assert.equal(r.dentro24h, true)
 })
