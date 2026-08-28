@@ -226,3 +226,71 @@ test('extraer no guarda un texto realmente vacio en blanco (bug real de MANDI)',
   assert.equal(r.tipo, 'texto')
   assert.ok(String(r.contenido).trim(), 'un texto vacio de verdad tiene que producir etiqueta, no ""')
 })
+
+// ── A QUÉ mensaje reaccionó el cliente ───────────────────────────────────────
+// "A veces me reaccionan con un corazón y no sé a qué mensaje." — Rodrigo, 28-ago.
+//
+// La reacción SÍ se guardaba (con su emoji), pero llegaba huérfana: se veía
+// "❤️ Reaccionó a un mensaje" sin decir a cuál.
+//
+// ☠️ La causa es una sutileza del webhook: en una respuesta citada Meta manda el
+// wamid en `context.id`, pero en una REACCIÓN lo manda en `reaction.message_id`.
+// `extraer` solo miraba `context.id`, asi que la referencia se perdia — no por
+// falta de dato, sino por mirar el campo equivocado.
+//
+// Poniendolo en `contextoId` (el MISMO campo que usa una cita), la reaccion se
+// pinta con la interfaz de citas que ya existe desde julio. Cero UI nueva.
+
+test('una reaccion dice A QUE mensaje reacciono', () => {
+  const r = extraer({
+    type: 'reaction',
+    reaction: { message_id: 'wamid.HBgMNTkz', emoji: '❤️' },
+  })
+  assert.equal(r.contextoId, 'wamid.HBgMNTkz')
+})
+
+test('la reaccion conserva su emoji ademas de la referencia', () => {
+  // Las dos cosas, no una a costa de la otra.
+  const r = extraer({
+    type: 'reaction',
+    reaction: { message_id: 'wamid.ABC', emoji: '👍' },
+  })
+  assert.equal(r.tipo, 'reaction')
+  assert.ok(r.contenido.includes('👍'), 'el emoji real de Meta, nunca uno inventado')
+  assert.equal(r.contextoId, 'wamid.ABC')
+})
+
+test('quitar una reaccion tambien dice de que mensaje era', () => {
+  // Al quitar el corazon, Meta manda la misma forma con `emoji` vacio. Sigue
+  // siendo un evento sobre UN mensaje concreto.
+  const r = extraer({
+    type: 'reaction',
+    reaction: { message_id: 'wamid.XYZ', emoji: '' },
+  })
+  assert.equal(r.contextoId, 'wamid.XYZ')
+})
+
+test('una cita normal sigue saliendo de context.id', () => {
+  // La reaccion no puede haber roto el camino de siempre.
+  const r = extraer({
+    type: 'text', text: { body: 'si, ese' },
+    context: { id: 'wamid.CITADO' },
+  })
+  assert.equal(r.contextoId, 'wamid.CITADO')
+})
+
+test('si vinieran los dos, manda context.id', () => {
+  // No deberia pasar, pero si pasa: `context` es el campo canonico de "a que
+  // respondo"; `reaction.message_id` es el atajo del tipo reaction.
+  const r = extraer({
+    type: 'reaction',
+    context: { id: 'wamid.CONTEXT' },
+    reaction: { message_id: 'wamid.REACTION', emoji: '❤️' },
+  })
+  assert.equal(r.contextoId, 'wamid.CONTEXT')
+})
+
+test('una reaccion sin message_id no inventa una referencia', () => {
+  const r = extraer({ type: 'reaction', reaction: { emoji: '❤️' } })
+  assert.equal(r.contextoId, '')
+})

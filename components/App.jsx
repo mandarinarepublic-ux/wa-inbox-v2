@@ -19,6 +19,7 @@ import { decidirArrastre } from '@/lib/arrastre'
 import { ventanaAbierta } from '@/lib/bandeja'
 import { avisoDeFormato } from '@/lib/audio-nota-voz'
 import { adjuntosDeRespuesta } from '@/lib/adjuntos-respuesta'
+import { citaUnaVez } from '@/lib/cita'
 import { ordenarBandeja } from '@/lib/orden-bandeja'
 import { decidirPegado, decidirAdjuntos, TOPE_FOTOS } from '@/lib/adjuntos'
 
@@ -1834,14 +1835,15 @@ export default function App() {
   // `canal` viaja congelado igual que `telefono`: esta función corre DENTRO de la
   // tarea encolada, o sea cuando le toca salir, y para entonces el canal activo
   // del módulo puede ser el del chat que el vendedor abrió mientras tanto.
-  const enviarTextoSuelto = async (telefono, nombre, texto, canal = '') => {
+  const enviarTextoSuelto = async (telefono, nombre, texto, canal = '', contextoId = '') => {
     const tmpMsg = {
       id: 'tmp_' + Date.now(), telefono, nombre, mensaje: texto,
       direccion: 'SALIENTE', timestamp: new Date().toISOString(), estado: 'enviado',
+      contextoId,
     }
     setConvs(prev => prev.map(c => c.telefono === telefono ? { ...c, msgs: [...c.msgs, tmpMsg], last: tmpMsg } : c))
     pendingRef.current[telefono] = [...(pendingRef.current[telefono] || []), tmpMsg]
-    return sendReply(telefono, nombre, texto, '', canal)
+    return sendReply(telefono, nombre, texto, contextoId, canal)
   }
 
   // ── Quick reply con imagen ────────────────────────────────────
@@ -1859,6 +1861,18 @@ export default function App() {
     const nombre   = activeConv.nombre
     const canal    = canalDeEnvio()
     const estadoDestino = estadoAlResponder(currentStatus)
+
+    // La cita se toma ANTES de limpiarla y se congela acá, por lo mismo que el
+    // canal: si el envío espera turno en la fila, la barra ya no está en pantalla
+    // pero el wamid citado tiene que viajar igual.
+    //
+    // `citaUnaVez` la entrega a la PRIMERA pieza que salga y a ninguna más: una
+    // respuesta rápida puede ser un texto y cinco fotos, y WhatsApp manda cada una
+    // como mensaje aparte — citar en todas le mostraría al cliente su propia
+    // pregunta siete veces. Ver lib/cita.js.
+    const citaOriginal = citando?.id || ''
+    const tomarCita = citaUnaVez(citaOriginal)
+    setCitando(null)
 
     // EN ORDEN, mezclando fotos y audios como los cargó el vendedor. WhatsApp
     // entrega cada uno como un mensaje aparte, así que este orden es el que ve el
@@ -1892,13 +1906,13 @@ export default function App() {
       // El servidor guarda SOLO el cuerpo en `mensaje`; los botones van aparte en `botones`.
       // Así el texto optimista coincide con el guardado y la reconciliación descarta el
       // temporal (sin duplicar), mientras la burbuja pinta los botones desde `botones`.
-      const tmpMsg = { id: 'tmp_' + Date.now(), telefono, nombre, mensaje: reply.text, botones: validBtns, direccion: 'SALIENTE', timestamp: new Date().toISOString(), estado: 'enviado' }
+      const tmpMsg = { id: 'tmp_' + Date.now(), telefono, nombre, mensaje: reply.text, botones: validBtns, direccion: 'SALIENTE', timestamp: new Date().toISOString(), estado: 'enviado', contextoId: citaOriginal }
       setConvs(prev => prev.map(c => c.telefono === telefono ? { ...c, msgs: [...c.msgs, tmpMsg], last: tmpMsg } : c))
       pendingRef.current[telefono] = [ ...(pendingRef.current[telefono] || []), tmpMsg ]
-      await sendInteractiveButtons(telefono, nombre, reply.text, validBtns, canal)
+      await sendInteractiveButtons(telefono, nombre, reply.text, validBtns, canal, tomarCita())
       avanzar()
     } else if (reply.text) {
-      await enviarTextoSuelto(telefono, nombre, reply.text, canal)
+      await enviarTextoSuelto(telefono, nombre, reply.text, canal, tomarCita())
       avanzar()
     }
 
@@ -1912,14 +1926,14 @@ export default function App() {
         // ⚠️ Esta rama va ANTES del `else` de imagen a proposito: sin ella el
         // documento caeria ahi y se mandaria como FOTO. Meta lo rechazaria y el
         // vendedor no se enteraria.
-        await enviarDocumentoUrl(telefono, nombre, a.url, a.nombre, canal)
+        await enviarDocumentoUrl(telefono, nombre, a.url, a.nombre, canal, tomarCita())
       } else if (a.tipo === 'audio') {
         // El audio de una respuesta rápida YA está en OGG/Opus: se convirtió una
         // sola vez, al guardar la respuesta. Acá solo se manda el link, así que
         // sale tan rápido como una foto cacheada.
-        await enviarAudioUrl(telefono, nombre, a.url, canal)
+        await enviarAudioUrl(telefono, nombre, a.url, canal, tomarCita())
       } else {
-        await sendImageUrl(telefono, nombre, a.url, ids[a.url] || '', canal)
+        await sendImageUrl(telefono, nombre, a.url, ids[a.url] || '', canal, tomarCita())
       }
       avanzar()
       if (i < adjuntos.length - 1) await new Promise(r => setTimeout(r, 150))

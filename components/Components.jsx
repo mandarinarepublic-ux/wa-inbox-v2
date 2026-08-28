@@ -511,7 +511,7 @@ function ReferralCard({ referral }) {
 }
 
 // ── QUOTED MESSAGE (cita) ────────────────────────────────────────
-function QuotedMessage({ contextoId, allMsgs }) {
+function QuotedMessage({ contextoId, allMsgs, esReaccion = false }) {
   const [fetched, setFetched] = useState(null)
   const valid    = !!contextoId && contextoId.startsWith('wamid.')
   const inWindow = valid && allMsgs ? allMsgs.find(m => hashWamid(m.id) === hashWamid(contextoId)) : null
@@ -533,6 +533,11 @@ function QuotedMessage({ contextoId, allMsgs }) {
 
   // Fallback mientras resuelve, o si el mensaje citado ya no existe
   if (!cited) {
+    // Una REACCIÓN cuyo mensaje no tenemos guardado no pinta nada: la burbuja ya
+    // dice "❤️ Reaccionó a un mensaje", y encima de eso un "Respondió a un
+    // mensaje anterior" sería redundante Y con el verbo equivocado. Pasa sobre
+    // todo con reacciones a mensajes anteriores a nuestro historial.
+    if (esReaccion) return null
     return (
       <div style={{
         borderLeft: '3px solid rgba(37,211,102,.5)',
@@ -630,7 +635,7 @@ export function MessageBubble({ msg, allMsgs, onResponder }) {
         {msg.referral && <ReferralCard referral={msg.referral} />}
 
         {msg.contextoId && (
-          <QuotedMessage contextoId={msg.contextoId} allMsgs={allMsgs} />
+          <QuotedMessage contextoId={msg.contextoId} allMsgs={allMsgs} esReaccion={msg.tipo === 'reaction'} />
         )}
 
         {hasMedia && (
