@@ -276,6 +276,18 @@ export default function App() {
 
   // Mensaje que se está citando al responder (null = ninguno).
   const [citando, setCitando] = useState(null)
+
+  // ── Cuántas filas se DIBUJAN de la lista ────────────────────────────────
+  // ⚠️ Es un tope de DIBUJADO, no de carga. Los datos siguen completos: el
+  // buscador encuentra a todos y los contadores cuentan sobre el total.
+  // Esconder conversaciones es el bug que más ha vuelto en estos inbox;
+  // recortar lo que React tiene que pintar no esconde nada.
+  //
+  // Medido el 28-ago: ATENDIDOS tiene 1.563 conversaciones en MANDI y 4.011 en
+  // IND, contra 3 y 43 de PENDIENTES. Sin tope, CADA LETRA escrita en la caja
+  // volvía a construir todas esas filas —el texto vive en el estado de este
+  // componente— y las letras aparecían con retraso. No era la red.
+  const [tope, setTope] = useState(100)
   const [refreshKey, setRefreshKey] = useState(0)
   const localStatusRef = useRef({}) // { telefono: { estado, expiresAt } }
   const localTempRef   = useRef({}) // { telefono: { temperatura, expiresAt } } — override optimista Eje 2
@@ -1290,6 +1302,10 @@ export default function App() {
   // Filtros: bandeja (estado), temperatura (Eje 2), o venta (idVenta). Un solo filtro
   // activo a la vez. Al BUSCAR mostramos TODOS los resultados sin importar el filtro.
   const esTemp = (key) => TEMP_META[key] !== undefined
+  // El tope vuelve a 100 al cambiar de bandeja, de línea o al buscar: cada
+  // lista empieza de cero y nadie hereda el "ver más" de otra.
+  useEffect(() => { setTope(100) }, [filter, search, linea])
+
   const filtered = ordenarBandeja(
     isSearching
       ? searched
@@ -2367,7 +2383,7 @@ export default function App() {
                   {filtered.length} {searchingMsgs ? (filtered.length===1?'CHAT CON':'CHATS CON') : `RESULTADO${filtered.length===1?'':'S'}`}{searchingMsgs ? ' ESE MENSAJE' : ' · TODAS LAS BANDEJAS'}
                 </div>
               )}
-              {filtered.map(conv => (
+              {filtered.slice(0, tope).map(conv => (
                 <ContactRow
                   // La clave lleva el canal: en GENERAL el mismo cliente tiene DOS
                   // filas y con la clave vieja React las trataba como la misma —
@@ -2409,6 +2425,19 @@ export default function App() {
                   etiquetaCanal={linea === CANAL_GENERAL ? etiquetaDePhoneId(conv.phoneId) : ''}
                 />
               ))}
+              {filtered.length > tope && (
+                // Se dice CUÁNTAS faltan y se puede seguir bajando. Un tope mudo
+                // se ve idéntico a "no hay más", y ahí es donde un chat parece
+                // desaparecido.
+                <button onClick={() => setTope(t => t + 200)} style={{
+                  width:'100%', padding:'12px 16px', background:'transparent',
+                  border:'none', borderTop:'1px solid #111c2a',
+                  color:'#64748b', fontSize:11.5, fontWeight:700, cursor:'pointer',
+                  fontFamily:'Outfit,sans-serif',
+                }}>
+                  Mostrando {tope} de {filtered.length} · ver 200 más
+                </button>
+              )}
             </>)}
           </div>
 
