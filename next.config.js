@@ -1,5 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // ☠️ EL LINT NO CORRE EN VERCEL A PROPÓSITO. `next build` lintea solo si
+  // encuentra un `eslint.config.mjs`, y desde que existe uno eso alargaría
+  // CADA despliegue — Build CPU llegó a ser el 29% de la factura y justo se
+  // está bajando. El revisor corre con `npm test`, en la compu, gratis.
+  // ⚠️ Esto NO lo desactiva: si alguien sube sin correr `npm test`, no hay red.
+  eslint: { ignoreDuringBuilds: true },
   // Las PÁGINAS del host viejo se mandan al dominio nuevo, porque la cookie de
   // sesión solo viaja a *.apps.mandarinaec.com y ahí nunca llegaría. Si alguien
   // se quedara en el host viejo cuando el candado bloquee, caería en un bucle de

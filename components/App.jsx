@@ -1548,14 +1548,16 @@ export default function App() {
       // `contacts`, el aviso diría "no se pudo" y la fila seguiría mostrando el
       // estado nuevo — la pantalla mintiendo, que es el patrón que este proyecto
       // viene a cerrar.
-      if (canalFila) {
-        setBandeja(prev => {
-          const m = new Map(prev)
-          const k = claveBandeja(telefono, canalFila)
-          m.set(k, { ...(m.get(k) || { telefono, phoneId: canalFila }), estado: estadoActual })
-          return m
-        })
-      }
+      // ☠️ Acá vivia un bloque que llamaba a `setBandeja` y `claveBandeja`, que
+      // NO EXISTEN en este archivo — lo cazo ESLint al instalarlo (30-ago). O
+      // sea: cuando el guardado fallaba, en vez de revertir se lanzaba un
+      // ReferenceError, y como reventaba ANTES del `setToast` de abajo, el
+      // vendedor no veia ni el error. La fila se quedaba pintada con el estado
+      // nuevo: exactamente la pantalla mintiendo que este bloque venia a evitar.
+      //
+      // Se revierte con el mismo `pintar` del camino optimista, que es donde el
+      // estado de bandeja vive de verdad (pegado a la fila del ultimo mensaje).
+      pintar(estadoActual)
       setToast({ ok: false, msg: '✗ No se pudo cambiar el estado — reintenta' })
       setTimeout(() => setToast(null), 4000)
     }
