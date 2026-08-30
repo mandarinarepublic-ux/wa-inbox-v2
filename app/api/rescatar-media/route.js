@@ -98,9 +98,23 @@ export async function GET(req) {
     }
 
     // Más viejo primero: es el que está por vencerse.
-    // Más viejo primero DENTRO de la ventana: ahí sí es el que está por vencerse.
+    // ☠️ MÁS NUEVO PRIMERO. Es la SEGUNDA corrección al mismo criterio y la
+    // evidencia mandó las dos veces.
+    //
+    // Empecé por los más viejos razonando "son los que están por vencerse". Suena
+    // bien y es falso: los más viejos ya están vencidos. Medido en producción —
+    // 100 intentos, 100 fallos, todos de archivos de entre 27 y 28 días. Meta ya
+    // no los tiene, así que ordenar por urgencia teórica solo garantizaba
+    // gastar cada lote en los que NUNCA iban a volver.
+    //
+    // Lo que sí se puede rescatar son los más nuevos, y en IND hay documentos de
+    // hace 3 días esperando al final de la fila. Más nuevo primero rescata lo
+    // rescatable; si algo se queda sin intentar, es lo que menos chance tenía.
+    //
+    // `?orden=viejo` fuerza el orden anterior, por si alguna vez hace falta.
+    const masViejoPrimero = url.searchParams.get('orden') === 'viejo'
     const { data, count, error } = await base
-      .order('fecha', { ascending: true })
+      .order('fecha', { ascending: masViejoPrimero })
       .range(saltar, saltar + limite - 1)
     if (error) throw error
 
