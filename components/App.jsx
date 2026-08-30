@@ -20,6 +20,7 @@ import { ventanaAbierta } from '@/lib/bandeja'
 import { avisoDeFormato } from '@/lib/audio-nota-voz'
 import { adjuntosDeRespuesta } from '@/lib/adjuntos-respuesta'
 import { citaUnaVez } from '@/lib/cita'
+import { pestanaGuardada } from '@/lib/pestana'
 import { ordenarBandeja } from '@/lib/orden-bandeja'
 import { decidirPegado, decidirAdjuntos, TOPE_FOTOS } from '@/lib/adjuntos'
 
@@ -935,6 +936,40 @@ export default function App() {
     setLinea(id)
     return true
   }
+
+  // ── Recordar en qué pestaña quedaste ─────────────────────────────────────
+  // Antes arrancaba SIEMPRE en MANDI: estaba fijo en el código y no se guardaba
+  // en ningún lado. "No entiendo por qué cada vez que recargo siempre regresa a
+  // MANDI y no a GENERAL" — Rodrigo, 30-ago.
+  //
+  // ⚠️ Se recuerdan solo las pestañas de CHAT (los números y GENERAL), no
+  // SOCIAL / CONTACTOS / AUTO. Volver siempre a los chats es lo correcto: nadie
+  // quiere abrir el inbox y aterrizar en Automatizaciones.
+  const LINEA_KEY = 'mandi_linea'
+  const LINEAS_RECORDABLES = [CANAL_GENERAL, ...CANALES.map((c) => c.id)]
+  useEffect(() => {
+    if (!LINEAS_RECORDABLES.includes(linea)) return
+    try { localStorage.setItem(LINEA_KEY, linea) } catch { /* modo privado */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linea])
+
+  // ☠️ La restauración pasa por `cambiarLinea`, NUNCA por `setLinea` a mano.
+  // Esa función es la que mueve el canal del módulo de envíos y la que trata a
+  // GENERAL aparte (GENERAL no es un número: entrar ahí CONSERVA el canal
+  // armado en vez de pisarlo). Pintar la pestaña sin eso dejaría la pantalla en
+  // GENERAL con los envíos apuntando a la nada — el bug del número equivocado,
+  // que ya llegó a producción cinco veces.
+  //
+  // Y lo guardado se valida contra las pestañas que existen: un id viejo o
+  // basura en el navegador se descarta y arranca como siempre (lib/pestana.js).
+  useEffect(() => {
+    let guardado = ''
+    try { guardado = localStorage.getItem(LINEA_KEY) || '' } catch { /* modo privado */ }
+    const valido = pestanaGuardada(guardado, LINEAS_RECORDABLES)
+    if (valido && valido !== linea) cambiarLinea(valido)
+    // Solo al montar: después manda el vendedor.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   /**
    * Número por el que habla este contacto.
