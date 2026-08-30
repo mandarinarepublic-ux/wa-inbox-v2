@@ -972,6 +972,11 @@ export default function App() {
 
     try {
       const previos = await fetchHilo(tel, 800, canalHilo, masViejo)
+      // ☠️ null = la petición FALLÓ (no es "no hay más"). Distinguirlo importa:
+      // si se confunden, un 500 pasajero apaga la carga infinita de ese chat
+      // PARA SIEMPRE, hasta que alguien recargue la página. Y nadie recarga
+      // porque nada se ve roto: simplemente el historial se acaba antes.
+      if (previos === null) return
       const fusion = fusionarHilo(previos, actuales)
       // Si no creció, no queda historial: se deja de preguntar. Sin esto, cada
       // scroll hasta arriba dispararía una llamada que nunca trae nada.
