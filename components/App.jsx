@@ -21,6 +21,7 @@ import { avisoDeFormato } from '@/lib/audio-nota-voz'
 import { adjuntosDeRespuesta } from '@/lib/adjuntos-respuesta'
 import { citaUnaVez } from '@/lib/cita'
 import { pestanaGuardada } from '@/lib/pestana'
+import { fusionarHilo } from '@/lib/hilo-historico'
 import { ordenarBandeja } from '@/lib/orden-bandeja'
 import { decidirPegado, decidirAdjuntos, TOPE_FOTOS } from '@/lib/adjuntos'
 
@@ -277,6 +278,7 @@ export default function App() {
 
   // Mensaje que se está citando al responder (null = ninguno).
   const [citando, setCitando] = useState(null)
+  const [cargandoMas, setCargandoMas] = useState(false)
 
   // ── Cuántas filas se DIBUJAN de la lista ────────────────────────────────
   // ⚠️ Es un tope de DIBUJADO, no de carga. Los datos siguen completos: el
@@ -500,7 +502,9 @@ export default function App() {
     const newLen = activeConv.msgs.length
     const hadNewMsg = newLen > prevMsgLen.current
     prevMsgLen.current = newLen
-    if (autoScroll.current || hadNewMsg) {
+    // `anclaScrollRef` puesta = el hilo creció porque se agregó historial ARRIBA.
+    // Eso no es un mensaje nuevo y no debe mandar al vendedor al final.
+    if (!anclaScrollRef.current && (autoScroll.current || hadNewMsg)) {
       endRef.current?.scrollIntoView({ behavior: hadNewMsg ? 'smooth' : 'instant' })
     }
   }, [active, convs])
@@ -509,6 +513,9 @@ export default function App() {
     const el = msgsRef.current
     if (!el) return
     autoScroll.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60
+    // Cerca del tope: traer el tramo anterior. 120px de margen para que llegue
+    // antes de que el vendedor choque con el borde.
+    if (el.scrollTop < 120) cargarMasHistorial()
   }
 
   // ── Panel derecho redimensionable ─────────────────────────────
@@ -936,6 +943,69 @@ export default function App() {
     setLinea(id)
     return true
   }
+
+  // ── Traer más historial al subir, como WhatsApp Web ──────────────────────
+  // El hilo abre con los últimos 800. Al llegar arriba se piden los 800
+  // anteriores, y así sucesivamente hasta el primer mensaje del cliente.
+  const cargandoMasRef = useRef(false)
+  const sinMasRef      = useRef({})   // clave → ya no queda historial
+  const anclaScrollRef = useRef(null) // para no saltar al agregar arriba
+
+  const cargarMasHistorial = useCallback(async () => {
+    const tel = activeRef.current
+    if (!tel || cargandoMasRef.current) return
+    const canalHilo = activeCanalRef.current || ''
+    const clave = `${tel}|${canalHilo}`
+    if (sinMasRef.current[clave]) return
+
+    const actuales = (hilosRef.current[clave] || [])
+    if (!actuales.length) return
+    const masViejo = actuales[0]?.timestamp
+    if (!masViejo) return
+
+    cargandoMasRef.current = true
+    setCargandoMas(true)
+    // ⚠️ El ancla se toma ANTES de pedir: si se tomara después del render, la
+    // altura ya cambió y la pantalla habría saltado.
+    const el = msgsRef.current
+    anclaScrollRef.current = el ? { alto: el.scrollHeight, top: el.scrollTop } : null
+
+    try {
+      const previos = await fetchHilo(tel, 800, canalHilo, masViejo)
+      const fusion = fusionarHilo(previos, actuales)
+      // Si no creció, no queda historial: se deja de preguntar. Sin esto, cada
+      // scroll hasta arriba dispararía una llamada que nunca trae nada.
+      if (fusion.length <= actuales.length) {
+        sinMasRef.current[clave] = true
+      } else {
+        hilosRef.current[clave] = fusion
+        setConvs(prev => prev.map(c => {
+          if (c.telefono !== tel) return c
+          if (c.phoneId && canalHilo && c.phoneId !== canalHilo) return c
+          const armado = buildConvs(fusion)[0]
+          return armado ? { ...c, msgs: armado.msgs, last: armado.last } : c
+        }))
+      }
+    } catch { /* se reintenta al siguiente scroll */ }
+    finally {
+      cargandoMasRef.current = false
+      setCargandoMas(false)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // ☠️ Restaurar la posición DESPUÉS de pintar los mensajes viejos. Sin esto, el
+  // efecto de "scroll inteligente" ve que el hilo creció, lo toma por un mensaje
+  // nuevo y manda al vendedor al final del chat — justo cuando estaba leyendo
+  // hacia arriba.
+  useEffect(() => {
+    const ancla = anclaScrollRef.current
+    if (!ancla) return
+    anclaScrollRef.current = null
+    const el = msgsRef.current
+    if (!el) return
+    el.scrollTop = el.scrollHeight - ancla.alto + ancla.top
+  }, [convs])
 
   // ── Recordar en qué pestaña quedaste ─────────────────────────────────────
   // Antes arrancaba SIEMPRE en MANDI: estaba fijo en el código y no se guardaba
@@ -2625,6 +2695,13 @@ export default function App() {
             )}
 
             <div ref={msgsRef} className="msgs-scroll" onScroll={handleMsgsScroll} style={{ background:'radial-gradient(ellipse at 20% 10%, rgba(37,211,102,.015) 0%, transparent 60%)' }}>
+              {/* ⚠️ Que se VEA que está trayendo historial. Sin aviso, subir en un
+                  chat largo se siente como que la pantalla se trabó. */}
+              {cargandoMas && (
+                <div style={{ textAlign:'center', padding:'10px 0', fontSize:11, color:'#64748b' }}>
+                  Trayendo mensajes anteriores…
+                </div>
+              )}
               {activeConv.msgs.map((msg, idx) => {
                 const showDate = idx===0 || parseDate(msg.timestamp).toDateString() !== parseDate(activeConv.msgs[idx-1].timestamp).toDateString()
                 return (

@@ -14,7 +14,11 @@ export async function GET(req) {
     const limite = Math.min(parseInt(searchParams.get('limite') || '800', 10) || 800, 3000)
     if (!phone) return NextResponse.json({ error: 'falta phone' }, { status: 400 })
     const canal = searchParams.get('canal') || undefined
-    const mensajes = await getHilo(phone, limite, canal)
+    // `antesDe` = fecha del mensaje MÁS VIEJO que el navegador ya tiene. Con eso
+    // se pide el tramo anterior al subir en el chat, como WhatsApp Web. Sin el
+    // parámetro se comporta igual que siempre: los últimos `limite`.
+    const antesDe = searchParams.get('antesDe') || ''
+    const mensajes = await getHilo(phone, limite, canal, antesDe)
     return NextResponse.json(mensajes, {
       headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' },
     })
