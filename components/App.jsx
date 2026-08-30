@@ -947,7 +947,26 @@ export default function App() {
   // quiere abrir el inbox y aterrizar en Automatizaciones.
   const LINEA_KEY = 'mandi_linea'
   const LINEAS_RECORDABLES = [CANAL_GENERAL, ...CANALES.map((c) => c.id)]
+  // ☠️ LO GUARDADO SE LEE EN EL PRIMER RENDER, no dentro de un efecto.
+  //
+  // La primera versión leía dentro del efecto de restaurar, y NO FUNCIONABA: los
+  // dos efectos corren al montar, el de guardar está declarado antes, y escribía
+  // el valor por defecto ANTES de que el de restaurar alcanzara a leer. Se
+  // pisaba a sí mismo, así que siempre volvía al número principal.
+  //
+  // Leerlo acá lo pone a salvo de ese orden y de cualquier reordenamiento futuro.
+  const guardadoRef = useRef(undefined)
+  if (guardadoRef.current === undefined) {
+    let g = ''
+    try { g = localStorage.getItem(LINEA_KEY) || '' } catch { /* SSR o modo privado */ }
+    guardadoRef.current = g
+  }
+
+  // Y el efecto de guardar SALTA su primera corrida: si no, escribiría el valor
+  // por defecto encima de lo guardado cuando no hay nada que restaurar.
+  const yaGuardeUnaVez = useRef(false)
   useEffect(() => {
+    if (!yaGuardeUnaVez.current) { yaGuardeUnaVez.current = true; return }
     if (!LINEAS_RECORDABLES.includes(linea)) return
     try { localStorage.setItem(LINEA_KEY, linea) } catch { /* modo privado */ }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -963,9 +982,7 @@ export default function App() {
   // Y lo guardado se valida contra las pestañas que existen: un id viejo o
   // basura en el navegador se descarta y arranca como siempre (lib/pestana.js).
   useEffect(() => {
-    let guardado = ''
-    try { guardado = localStorage.getItem(LINEA_KEY) || '' } catch { /* modo privado */ }
-    const valido = pestanaGuardada(guardado, LINEAS_RECORDABLES)
+    const valido = pestanaGuardada(guardadoRef.current, LINEAS_RECORDABLES)
     if (valido && valido !== linea) cambiarLinea(valido)
     // Solo al montar: después manda el vendedor.
     // eslint-disable-next-line react-hooks/exhaustive-deps
