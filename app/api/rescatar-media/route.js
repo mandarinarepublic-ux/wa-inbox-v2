@@ -37,13 +37,51 @@ export async function GET(req) {
     // `?ver=1` solo cuenta, no toca nada. Para mirar cuánto queda sin gastar
     // llamadas a Meta.
     const soloVer = url.searchParams.get('ver') === '1'
+    // Cuántos saltar. Sirve para avanzar cuando un tramo entero está muerto y
+    // bloquea la fila (ver el comentario de `dias` abajo).
+    const saltar = Math.max(parseInt(url.searchParams.get('saltar') || '0', 10) || 0, 0)
+    // Ventana en días. 28 por defecto: ver abajo.
+    const dias = Math.min(Math.max(parseInt(url.searchParams.get('dias') || '28', 10) || 28, 1), 60)
+
+    // ── CONTROL: ¿el 400 de Meta significa "ya no existe" o "pedido mal hecho"? ──
+    // `?control=1` toma el media_id de un mensaje RECIENTE que SÍ se archivó bien
+    // —o sea, uno que sabemos que existía— y le hace el mismo lookup. Si ese
+    // también da 400, el problema es el token o la petición, y seguir corriendo
+    // el rescate es perder el tiempo. Si da 200, entonces 400 = caducado.
+    if (url.searchParams.get('control') === '1') {
+      const sbC = getSupabase()
+      const { data: reciente } = await sbC.from('mensajes')
+        .select('media_id, fecha').eq('cuenta', CUENTA).eq('direccion', 'ENTRANTE')
+        .not('media_id', 'is', null).not('media_url', 'is', null)
+        .order('fecha', { ascending: false }).limit(1).maybeSingle()
+      if (!reciente?.media_id) return NextResponse.json({ ok: false, error: 'sin media reciente para controlar' })
+      const r = await fetch(`https://graph.facebook.com/v19.0/${reciente.media_id}`, {
+        headers: { Authorization: `Bearer ${process.env.META_TOKEN || ''}` },
+      })
+      return NextResponse.json({
+        ok: true,
+        control: 'lookup de una media RECIENTE que sí se archivó',
+        fecha_de_esa_media: reciente.fecha,
+        status: r.status,
+        veredicto: r.ok
+          ? 'La petición y el token están BIEN → el 400 de las otras significa que Meta ya las borró'
+          : 'También falla con una media reciente → el problema NO es que hayan caducado',
+      })
+    }
 
     const sb = getSupabase()
-    // Meta borra a los ~30 días, pero el límite es aproximado. Se piden 31 a
-    // propósito: la asimetría manda. Intentar uno que ya no está cuesta una
-    // llamada y devuelve "no estaba"; NO intentar uno que sí estaba pierde una
-    // nota de voz de un cliente para siempre.
-    const desde = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString()
+    // ⚠️ 28 días por defecto, NO 31 — y el motivo es un error que ya cometí.
+    //
+    // La primera versión pedía 31 días "por si acaso", razonando que intentar uno
+    // vencido cuesta poco. Pero la fila se ordena de más viejo a más nuevo, así
+    // que los 50 primeros eran SIEMPRE los de julio, todos muertos. Cinco
+    // corridas seguidas reintentaron exactamente los mismos 50 y nunca llegaron a
+    // los de agosto, que sí estaban vivos. Los muertos TAPABAN a los vivos.
+    //
+    // La lección: una ventana generosa no es gratis cuando hay una fila ordenada
+    // detrás. Ahora la ventana solo trae candidatos plausibles, y `?dias=` y
+    // `?saltar=` quedan para forzar a mano si hace falta.
+    const desde = new Date(Date.now() - dias * 24 * 60 * 60 * 1000).toISOString()
 
     const base = sb.from('mensajes')
       .select('wa_message_id, media_id, tipo, fecha', { count: 'exact' })
@@ -60,7 +98,10 @@ export async function GET(req) {
     }
 
     // Más viejo primero: es el que está por vencerse.
-    const { data, count, error } = await base.order('fecha', { ascending: true }).limit(limite)
+    // Más viejo primero DENTRO de la ventana: ahí sí es el que está por vencerse.
+    const { data, count, error } = await base
+      .order('fecha', { ascending: true })
+      .range(saltar, saltar + limite - 1)
     if (error) throw error
 
     const filas = data || []
@@ -91,6 +132,8 @@ export async function GET(req) {
       // no es un error del rescate, es que llegamos tarde a esos.
       no_estaban_en_meta: fallidos.length,
       quedan: Math.max(0, (count ?? filas.length) - rescatados),
+      ventana_dias: dias,
+      saltados: saltar,
       detalle_fallidos: fallidos.slice(0, 10),
     })
   } catch (err) {
