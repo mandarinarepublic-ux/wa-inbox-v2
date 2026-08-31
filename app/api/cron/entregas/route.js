@@ -1,3 +1,4 @@
+import { getSupabase } from '@/lib/supabase'
 import { NextResponse } from 'next/server'
 import { enviarTelegram, telegramConfigurado } from '@/lib/telegram'
 import {
@@ -48,6 +49,29 @@ function autorizado(req) {
   return req.headers.get('x-vercel-cron') != null
 }
 
+/**
+ * Mantiene al día `conversaciones.bsuid`: el identificador con el que Meta va a
+ * reemplazar al número de teléfono cuando la gente use nombre de usuario.
+ *
+ * ☠️ VA ACÁ, EN UN CRON, Y NO EN EL WEBHOOK, A PROPÓSITO. La restricción es que
+ * no se toca ni recibir ni enviar. El BSUID viaja dentro de `mensajes.raw`, que
+ * se guarda sin límite de retención, así que rellenarlo media hora después queda
+ * EXACTAMENTE igual de completo que hacerlo al vuelo — sin poner código nuevo en
+ * el camino por donde entran los mensajes de los clientes.
+ *
+ * Nunca puede tumbar este cron: va aparte y su fallo solo se registra.
+ */
+async function rellenarBsuid() {
+  try {
+    const { data, error } = await getSupabase().rpc('rellenar_bsuid', { p_dias: 3 })
+    if (error) throw error
+    return { ok: true, filas: data ?? 0 }
+  } catch (err) {
+    console.error('[cron/entregas] rellenarBsuid:', err.message)
+    return { ok: false, motivo: err.message }
+  }
+}
+
 export async function GET(req) {
   if (!autorizado(req)) {
     // Un cron que empieza a dar 401 en silencio es un cron muerto que parece vivo.
@@ -56,6 +80,11 @@ export async function GET(req) {
   }
 
   try {
+    // Va PRIMERO y fuera del camino del aviso: este cron tiene dos salidas
+    // (con fallidos y sin fallidos) y colgarlo de una sola lo dejaría corriendo
+    // la mitad de las veces, sin que nadie lo note.
+    const bsuid = await rellenarBsuid()
+
     const marca = await getMarcaAvisoFallidosSupabase()
     const desde = marca || new Date(Date.now() - VENTANA_INICIAL_MIN * 60000).toISOString()
 
@@ -75,7 +104,7 @@ export async function GET(req) {
       // Nada que avisar. NO se manda un "todo bien" periódico: un aviso vacío que
       // llega cada media hora entrena a ignorarlos justo el día que trae algo.
       await setMarcaAvisoFallidosSupabase(ultima)
-      return NextResponse.json({ ok: true, fallidos: 0, desde })
+      return NextResponse.json({ ok: true, fallidos: 0, desde, bsuid })
     }
 
     const envio = await enviarTelegram(texto)
@@ -96,6 +125,7 @@ export async function GET(req) {
       motivo: envio.ok ? undefined : envio.motivo,
       telegram: telegramConfigurado(),
       desde,
+      bsuid,
     })
   } catch (err) {
     console.error('[cron/entregas]', err)
