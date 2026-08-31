@@ -72,6 +72,30 @@ async function rellenarBsuid() {
   }
 }
 
+/**
+ * Sostiene la invariante que hace que el CONTADOR de cada botón pueda leerse de
+ * `inbox.bandeja` —14 ms en vez de 1.627— sin dejar de coincidir con la lista:
+ * toda conversación con mensajes en un canal tiene su fila en `bandeja`.
+ *
+ * ⚠️ Si alguna faltara, la lista la mostraría PENDIENTE (por el COALESCE de
+ * `lista_bandeja`) y el contador NO la contaría. Un chat sin contestar que no
+ * sale en el contador es justo lo que rompe la garantía de Rodrigo: "si esa
+ * bandeja está vacía, contesté a todos". Por eso se garantiza y no se confía.
+ *
+ * Hoy no falta ninguna: el webhook ya crea la fila de cada mensaje nuevo. Esto
+ * es la red, no el mecanismo.
+ */
+async function completarBandeja() {
+  try {
+    const { data, error } = await getSupabase().rpc('completar_bandeja')
+    if (error) throw error
+    return { ok: true, creadas: data ?? 0 }
+  } catch (err) {
+    console.error('[cron/entregas] completarBandeja:', err.message)
+    return { ok: false, motivo: err.message }
+  }
+}
+
 export async function GET(req) {
   if (!autorizado(req)) {
     // Un cron que empieza a dar 401 en silencio es un cron muerto que parece vivo.
@@ -84,6 +108,7 @@ export async function GET(req) {
     // (con fallidos y sin fallidos) y colgarlo de una sola lo dejaría corriendo
     // la mitad de las veces, sin que nadie lo note.
     const bsuid = await rellenarBsuid()
+    const bandeja = await completarBandeja()
 
     const marca = await getMarcaAvisoFallidosSupabase()
     const desde = marca || new Date(Date.now() - VENTANA_INICIAL_MIN * 60000).toISOString()
@@ -104,7 +129,7 @@ export async function GET(req) {
       // Nada que avisar. NO se manda un "todo bien" periódico: un aviso vacío que
       // llega cada media hora entrena a ignorarlos justo el día que trae algo.
       await setMarcaAvisoFallidosSupabase(ultima)
-      return NextResponse.json({ ok: true, fallidos: 0, desde, bsuid })
+      return NextResponse.json({ ok: true, fallidos: 0, desde, bsuid, bandeja })
     }
 
     const envio = await enviarTelegram(texto)
@@ -126,6 +151,7 @@ export async function GET(req) {
       telegram: telegramConfigurado(),
       desde,
       bsuid,
+      bandeja,
     })
   } catch (err) {
     console.error('[cron/entregas]', err)
