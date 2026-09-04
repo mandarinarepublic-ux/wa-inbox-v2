@@ -292,6 +292,7 @@ export default function App() {
   // componente— y las letras aparecían con retraso. No era la red.
   const [tope, setTope] = useState(100)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [refrescando, setRefrescando] = useState(false)
   const localStatusRef = useRef({}) // { telefono: { estado, expiresAt } }
   const localTempRef   = useRef({}) // { telefono: { temperatura, expiresAt } } — override optimista Eje 2
   const alertadosRef   = useRef(new Set()) // claves `${tel}:${ultimoEntranteAt}` ya avisadas (1 alerta/ventana)
@@ -469,9 +470,19 @@ export default function App() {
     setLoading(false)
   }, [])
 
+  // Refresco SUAVE: vuelve a pedir /api/inbox-sync sin recargar la página, así
+  // el chat abierto no se pierde ni se vuelve a descargar el bundle. Esta función
+  // existía desde hacía meses y NO la usaba nadie: el único botón de refrescar
+  // (el ↻ del pie del sidebar) hace `window.location.reload()`, una recarga dura.
+  //
+  // ☠️ Y ese ↻ vive al fondo del SIDEBAR, que en móvil es un cajón oculto: estando
+  // dentro de un chat no se ve, y la única salida era cerrar y reabrir la app.
+  // De ahí el botón `mob-refresh` de la cabecera del chat.
   const manualRefresh = async () => {
+    if (refrescando) return          // dos toques seguidos no disparan dos cargas
+    setRefrescando(true)
     setRefreshKey(k => k + 1)
-    await load()
+    try { await load() } finally { setRefrescando(false) }
   }
 
   useEffect(() => {
@@ -2276,6 +2287,7 @@ export default function App() {
         .msg-bubble { max-width:68%; }
         .order-btn-mob{ display:none !important; }
         .mob-ham    { display:none !important; }
+        .mob-refresh{ display:none !important; }
         .hide-mobile{ display:inline !important; }
         .show-mobile{ display:none !important; }
         .overlay    { display:none; }
@@ -2288,6 +2300,7 @@ export default function App() {
           .right-col{ position:fixed !important; right:0; top:calc(38px + env(safe-area-inset-top, 0px)); bottom:0; z-index:100; width:88% !important; max-width:300px; box-shadow:-4px 0 32px rgba(0,0,0,.6); animation:slideR .25s ease; }
           .desktop-right{ display:none !important; }
           .mob-ham{ display:flex !important; }
+          .mob-refresh{ display:flex !important; }
           .hide-mobile{ display:none !important; }
           .show-mobile{ display:inline !important; }
           .overlay{ display:block; position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:90; }
@@ -2618,6 +2631,21 @@ export default function App() {
                 </button>
               </div>
               <div className="chat-actions">
+                {/* Refrescar, SOLO en móvil. El ↻ de siempre vive al fondo del
+                    sidebar, que acá es un cajón oculto: dentro de un chat no se
+                    veía y tocaba cerrar y reabrir la app. Va PRIMERO porque esta
+                    tira scrollea en horizontal — al final habría que arrastrar
+                    para encontrarlo. */}
+                <button className="mob-refresh" onClick={manualRefresh} disabled={refrescando}
+                  title="Refrescar" aria-label="Refrescar" style={{
+                    padding:'4px 8px', flexShrink:0, borderRadius:7,
+                    background:'rgba(37,211,102,.1)', border:'1px solid rgba(37,211,102,.3)',
+                    color:'#25d366', fontSize:14, cursor: refrescando ? 'default' : 'pointer',
+                    fontFamily:'inherit', alignItems:'center', justifyContent:'center',
+                    opacity: refrescando ? .5 : 1,
+                    animation: refrescando ? 'spin .8s linear infinite' : 'none',
+                  }}>↻</button>
+
                 {/* ── Eje 1: BANDEJA (estado de conversación) ── */}
                 {[
                   { s:'pendiente', icon:'🔴', label:'Pendiente', shortLabel:'🔴', activeColor:'#f87171' },
