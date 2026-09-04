@@ -154,3 +154,44 @@ test('paginarLimite respeta el tope aunque haya mas filas disponibles', async ()
   assert.equal(filas.length, 1500)
   assert.equal(llamadas, 2)
 })
+
+// ── UBICACIONES ──────────────────────────────────────────────────
+// toMensaje deriva `ubicacion` al leer, para que la burbuja pinte una tarjeta
+// con enlace a Google Maps en vez de las coordenadas pelonas. El cliente NO
+// recibe `raw` (medio mega de jsonb por poll), solo este objetito.
+
+test('toMensaje expone la ubicacion con la direccion que viene en raw', () => {
+  const m = toMensaje({
+    wa_message_id: 'WA1', telefono: '593999', tipo: 'texto',
+    texto: '📍 -0.1754,-78.4776 Ind Store', direccion: 'ENTRANTE',
+    raw: { location: { latitude: -0.1754, longitude: -78.4776, name: 'Ind Store', address: 'Av. Amazonas' } },
+  })
+  assert.equal(m.ubicacion.nombre, 'Ind Store')
+  assert.equal(m.ubicacion.direccion, 'Av. Amazonas')
+  assert.equal(m.ubicacion.url, 'https://www.google.com/maps/search/?api=1&query=-0.1754,-78.4776')
+})
+
+test('toMensaje expone la ubicacion de una fila sin raw, leyendola del texto', () => {
+  const m = toMensaje({
+    wa_message_id: 'WA2', telefono: '593999', tipo: 'texto',
+    texto: '📍 -0.18640510737896,-78.49340057373', direccion: 'ENTRANTE',
+  })
+  assert.equal(m.ubicacion.lat, '-0.18640510737896')
+  assert.equal(m.ubicacion.nombre, '')
+})
+
+test('toMensaje deja ubicacion en null en un mensaje normal', () => {
+  const m = toMensaje({ wa_message_id: 'WA3', telefono: '593999', tipo: 'texto', texto: 'hola', direccion: 'ENTRANTE' })
+  assert.equal(m.ubicacion, null)
+})
+
+// El saludo de la tienda empieza con 📍 y NO es una ubicacion: si esto falla,
+// 173 mensajes se pintarian como un mapa a coordenadas inventadas.
+test('toMensaje no convierte el saludo de la tienda en ubicacion', () => {
+  const m = toMensaje({
+    wa_message_id: 'WA4', telefono: '593999', tipo: 'texto', direccion: 'SALIENTE',
+    texto: '📍 Estamos en Quito:\nAv. 6 de Diciembre y Mercurio.\n\nTe dejo el mapa 👇\nhttps://maps.app.goo.gl/qRJjcgEuA4aRKgdX9',
+  })
+  assert.equal(m.ubicacion, null)
+  assert.ok(m.mensaje.startsWith('📍 Estamos en Quito'), 'el saludo se sigue viendo tal cual')
+})

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert'
-import { extraer, normalizarReferral, formatearPedido, contenidoTipoEspecial } from '../lib/wa-mensaje.js'
+import { extraer, normalizarReferral, formatearPedido, contenidoTipoEspecial, parseUbicacion } from '../lib/wa-mensaje.js'
 
 test('extraer lee un texto', () => {
   const r = extraer({ type: 'text', text: { body: 'hola' } })
@@ -293,4 +293,62 @@ test('si vinieran los dos, manda context.id', () => {
 test('una reaccion sin message_id no inventa una referencia', () => {
   const r = extraer({ type: 'reaction', reaction: { emoji: '❤️' } })
   assert.equal(r.contextoId, '')
+})
+
+// ── UBICACIONES ──────────────────────────────────────────────────
+// La ubicación se guarda como `tipo: 'texto'` con el contenido
+// "📍 lat,lon nombre" (ver extraer). parseUbicacion la reconoce al LEER, para
+// pintarla como tarjeta con enlace a Google Maps en vez de coordenadas pelonas.
+
+test('parseUbicacion prefiere raw.location, que trae la direccion completa', () => {
+  const u = parseUbicacion('📍 -0.1754,-78.4776 Ind Store', {
+    location: { latitude: -0.1754, longitude: -78.4776, name: 'Ind Store', address: 'Av. Amazonas y Naciones Unidas' },
+  })
+  assert.equal(u.lat, '-0.1754')
+  assert.equal(u.lon, '-78.4776')
+  assert.equal(u.nombre, 'Ind Store')
+  assert.equal(u.direccion, 'Av. Amazonas y Naciones Unidas')
+})
+
+test('parseUbicacion cae al texto cuando la fila no tiene raw', () => {
+  const u = parseUbicacion('📍 -0.18640510737896,-78.49340057373', null)
+  assert.equal(u.lat, '-0.18640510737896')
+  assert.equal(u.lon, '-78.49340057373')
+  assert.equal(u.nombre, '')
+  assert.equal(u.direccion, '')
+})
+
+test('parseUbicacion lee del texto un nombre con espacios', () => {
+  const u = parseUbicacion('📍 -0.1754,-78.4776 Ind Store', null)
+  assert.equal(u.nombre, 'Ind Store')
+})
+
+test('parseUbicacion devuelve null cuando no hay ubicacion', () => {
+  assert.equal(parseUbicacion('hola, quiero una talla M', null), null)
+  assert.equal(parseUbicacion('', null), null)
+  assert.equal(parseUbicacion(null, null), null)
+})
+
+// ── LA prueba que protege los 173 saludos ────────────────────────
+// El saludo automático de MANDI empieza con 📍 y NO es una ubicación. Si
+// alguien "simplifica" el patrón a `texto.startsWith('📍')`, este mensaje se
+// pintaría como un mapa con coordenadas inventadas. El ancla son las
+// COORDENADAS pegadas al emoji, nunca el emoji solo.
+
+test('parseUbicacion NO confunde el saludo de la tienda con una ubicacion', () => {
+  const saludo = '📍 Estamos en Quito:\nAv. 6 de Diciembre y Mercurio (frente al teatro del Colegio 24 de Mayo).\n\nTe dejo el mapa 👇\nhttps://maps.app.goo.gl/qRJjcgEuA4aRKgdX9'
+  assert.equal(parseUbicacion(saludo, null), null)
+})
+
+test('parseUbicacion arma el enlace de Google Maps con las coordenadas', () => {
+  const u = parseUbicacion('📍 -0.1754,-78.4776 Ind Store', null)
+  assert.equal(u.url, 'https://www.google.com/maps/search/?api=1&query=-0.1754,-78.4776')
+})
+// Caso salido de PRODUCCIÓN, no inventado: 71 filas de julio quedaron con el
+// texto "📍 ," — y NO son ubicaciones, son fotos/audios/stickers/pedidos de un
+// bug de ingestión ya muerto (nada desde el 11-jul-2026). Sin coordenadas no
+// hay tarjeta: se siguen pintando como hasta hoy, con su media.
+test('parseUbicacion ignora el "📍 ," de las filas rotas de julio', () => {
+  assert.equal(parseUbicacion('📍 ,', null), null)
+  assert.equal(parseUbicacion('📍 -0.17,', null), null)
 })
