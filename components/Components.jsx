@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { colorFor, initialsFor, fmtTime, parseDate, hashWamid } from '@/lib/utils'
 import { partirEnlaces } from '@/lib/enlaces'
+import { resumenDeLista } from '@/lib/resumen-lista'
 
 // ── SPINNER ──────────────────────────────────────────────────────
 export function Spinner({ size = 24 }) {
@@ -206,9 +207,17 @@ export function ContactRow({ conv, isActive, onClick, search = '', estado, modoI
                     ocupaba la fila entera sin decir nada. La vista de la lista no
                     trae `raw`, pero parseUbicacion igual saca el nombre del texto
                     cuando el cliente escogió un sitio guardado. */}
-                {conv.last?.ubicacion
-                  ? `📍 ${conv.last.ubicacion.nombre || 'Ubicación'}`
-                  : conv.last?.mensaje}
+                {/* 816 conversaciones al mes arrancan con EXACTAMENTE el mismo texto
+                    ("¡Hola! Quiero más información.", el que arma Meta al tocar un
+                    anuncio) y en la lista se veían todas iguales. `resumenDeLista`
+                    saca de qué anuncio o de qué producto viene. Solo en ENTRANTES:
+                    al contestar vuelve a mandar el último mensaje. */}
+                {(() => {
+                  const r = resumenDeLista(conv.last)
+                  if (r) return `${r.icono} ${r.texto}`
+                  if (conv.last?.ubicacion) return `📍 ${conv.last.ubicacion.nombre || 'Ubicación'}`
+                  return conv.last?.mensaje
+                })()}
               </span>
               {conv.unread > 0 && (
                 <span style={{
