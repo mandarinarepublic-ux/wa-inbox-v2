@@ -24,3 +24,9 @@ Screenshot*.png
 *.mp3.mpeg
 *.wav
 *.ogg
+
+# Claude Code: estado LOCAL de cada maquina (permisos aceptados, etc.), no del
+# proyecto. Lo que si va al repo es .claude/skills/, que viaja con el codigo
+# para que la skill del inbox exista tambien desde el celular o desde otra
+# maquina.
+.claude/settings.local.json
