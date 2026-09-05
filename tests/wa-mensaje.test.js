@@ -124,10 +124,15 @@ test('extraer etiqueta un unsupported sin motivo (sin errors)', () => {
 
 // ── system (aviso de WhatsApp, no una persona escribiendo) ──────────────────
 
-test('extraer etiqueta un system como aviso de WhatsApp', () => {
+// Antes esto esperaba la etiqueta genérica "ℹ️ Aviso de WhatsApp" aunque Meta
+// hubiera dicho qué pasó. Se cambió a propósito el 4-sep-2026: lo que Meta manda
+// es más útil que una etiqueta fija, y estos avisos se quedan en la bandeja como
+// si un cliente esperara respuesta. Lo que NO cambia es que nunca queda vacío.
+test('extraer etiqueta un system con lo que Meta dijo', () => {
   const r = extraer({ type: 'system', system: { body: 'El numero cambio', type: 'user_changed_number' } })
   assert.equal(r.tipo, 'system')
-  assert.equal(r.contenido, 'ℹ️ Aviso de WhatsApp')
+  assert.match(r.contenido, /El numero cambio/)
+  assert.ok(r.contenido.trim().length > 0)
 })
 
 // ── contenidoTipoEspecial: la misma función que usa extraer(), pero llamada
@@ -351,4 +356,35 @@ test('parseUbicacion arma el enlace de Google Maps con las coordenadas', () => {
 test('parseUbicacion ignora el "📍 ," de las filas rotas de julio', () => {
   assert.equal(parseUbicacion('📍 ,', null), null)
   assert.equal(parseUbicacion('📍 -0.17,', null), null)
+})
+
+// ── AVISOS DE WHATSAPP ───────────────────────────────────────────
+// Meta avisa por `system` cuando un cliente CAMBIA DE NÚMERO. El inbox lo
+// mostraba como "ℹ️ Aviso de WhatsApp": no decía qué pasó, ni a qué número se
+// fue la persona, y esa fila se quedaba en la bandeja como si alguien esperara
+// respuesta. Medido el 4-sep: 38 cambios, 31 en el último mes (35 en IND).
+
+test('un cambio de numero dice de cual a cual', () => {
+  const etiqueta = contenidoTipoEspecial('system', {
+    system: { type: 'user_changed_number', body: 'User A changed from 593963642922 to 593979191677', wa_id: '593979191677' },
+  })
+  assert.match(etiqueta, /593963642922/)
+  assert.match(etiqueta, /593979191677/)
+})
+
+// Si Meta no manda el número nuevo, se usa lo que sí venga; nunca se inventa.
+test('sin wa_id cae al texto que mando Meta', () => {
+  const etiqueta = contenidoTipoEspecial('system', {
+    system: { type: 'user_changed_number', body: 'User A changed from 1 to 2' },
+  })
+  assert.match(etiqueta, /User A changed from 1 to 2/)
+})
+
+// ☠️ Un `system` de un tipo que WhatsApp invente mañana NO puede quedar vacío:
+// si es el último mensaje del chat, la conversación desaparece de la lista.
+// Es la misma regla que el resto del archivo — la regla, no la lista.
+test('un system desconocido sigue teniendo etiqueta', () => {
+  const etiqueta = contenidoTipoEspecial('system', { system: { type: 'algo_que_no_existe' } })
+  assert.ok(etiqueta.trim().length > 0, 'no puede quedar vacío')
+  assert.equal(contenidoTipoEspecial('system', null), 'ℹ️ Aviso de WhatsApp')
 })
