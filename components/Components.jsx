@@ -121,6 +121,23 @@ export function ContactRow({ conv, isActive, onClick, search = '', estado, modoI
   const [hovered, setHovered] = useState(false)
   const searching = String(search || '').trim().length > 0
   const info = ESTADO_INFO[estado] || null
+  // ── DE QUÉ ANUNCIO VINO ────────────────────────────────────────
+  // ☠️ Al principio esta línea vivía SOLO en la rama de la lista normal, y
+  // buscando un contacto NUNCA aparecía — que es justo como se probó. La fila
+  // tiene TRES ramas (búsqueda por mensaje, búsqueda por contacto, lista) y el
+  // origen tiene que salir en las tres.
+  //
+  // En la lista normal se pide además que el chat ESPERE respuesta, para no
+  // subirle el alto a toda la bandeja. Buscando eso no aplica: son pocas filas y
+  // lo que se quiere es justamente saber de dónde salió esa persona.
+  const mostrarOrigen = !!conv.origenAnuncio &&
+    (searching || msgSnippet != null || conv.last?.direccion === 'ENTRANTE')
+  const LineaOrigen = () => (
+    <div style={{
+      fontSize: 11, color: '#25d366', marginTop: 3,
+      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 190,
+    }} title={conv.origenAnuncio}>🎯 {conv.origenAnuncio}</div>
+  )
   return (
     <div>
       <div
@@ -177,12 +194,15 @@ export function ContactRow({ conv, isActive, onClick, search = '', estado, modoI
                   </span>
                 )}
               </div>
+              {mostrarOrigen && <LineaOrigen />}
               <div style={{ fontSize: 12, color: '#cbd5e1', marginTop: 3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: 1.4 }}>
                 💬 {highlight(msgSnippet, search)}
               </div>
             </div>
           ) : searching ? (
             // Al BUSCAR contacto: mostrar el número (grande, resaltado) + en qué bandeja está
+            <>
+            {mostrarOrigen && <LineaOrigen />}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
               <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'monospace', color: '#cbd5e1', whiteSpace: 'nowrap' }}>
                 📱 {highlight('+' + conv.telefono, search)}
@@ -193,6 +213,7 @@ export function ContactRow({ conv, isActive, onClick, search = '', estado, modoI
                 </span>
               )}
             </div>
+            </>
           ) : (
             <>
             {/* ── DE QUÉ ANUNCIO VINO ─────────────────────────────────
@@ -210,13 +231,7 @@ export function ContactRow({ conv, isActive, onClick, search = '', estado, modoI
                 vuelve a dos líneas y la bandeja no crece de alto por gusto.
                 Y sin origen NO se pinta nada: un cliente del que no sabemos de
                 dónde vino tiene que NOTARSE, no disfrazarse. */}
-            {conv.origenAnuncio && conv.last?.direccion === 'ENTRANTE' && (
-              <div style={{
-                fontSize: 11, color: '#25d366', marginTop: 3,
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                maxWidth: 190,
-              }} title={conv.origenAnuncio}>🎯 {conv.origenAnuncio}</div>
-            )}
+            {mostrarOrigen && <LineaOrigen />}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 3 }}>
               <span style={{
                 fontSize: 12,
