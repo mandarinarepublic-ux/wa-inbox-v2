@@ -194,6 +194,29 @@ export function ContactRow({ conv, isActive, onClick, search = '', estado, modoI
               )}
             </div>
           ) : (
+            <>
+            {/* ── DE QUÉ ANUNCIO VINO ─────────────────────────────────
+                816 conversaciones al mes arrancan con el mismo texto y en la
+                bandeja se ven todas iguales. Esta línea dice de qué vino la
+                persona; la de abajo, qué acaba de decir. Las dos hacen falta:
+                una para saber de qué te habla, otra para saber qué contestar.
+
+                ⚠️ Sale de la CONVERSACIÓN (conv.origenAnuncio), no del último
+                mensaje. Cuando un chat espera respuesta el último suele ser un
+                seguimiento y el anuncio quedó en el primero — medido: el
+                referral del último se dispara en 0 de 20 pendientes de MANDI.
+
+                Solo mientras el chat ESPERA respuesta: contestado, la fila
+                vuelve a dos líneas y la bandeja no crece de alto por gusto.
+                Y sin origen NO se pinta nada: un cliente del que no sabemos de
+                dónde vino tiene que NOTARSE, no disfrazarse. */}
+            {conv.origenAnuncio && conv.last?.direccion === 'ENTRANTE' && (
+              <div style={{
+                fontSize: 11, color: '#25d366', marginTop: 3,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                maxWidth: 190,
+              }} title={conv.origenAnuncio}>🎯 {conv.origenAnuncio}</div>
+            )}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 3 }}>
               <span style={{
                 fontSize: 12,
@@ -227,6 +250,7 @@ export function ContactRow({ conv, isActive, onClick, search = '', estado, modoI
                 }}>{conv.unread}</span>
               )}
             </div>
+            </>
           )}
         </div>
       </div>

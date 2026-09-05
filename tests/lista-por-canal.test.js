@@ -159,3 +159,36 @@ test('cada canal conserva SU propia ventana', () => {
   assert.equal(porCanal[MANDI],    '2026-07-15T19:08:58Z')
   assert.equal(porCanal[REPUBLIC], '2026-08-19T16:20:35Z')
 })
+
+// ── DE QUÉ ANUNCIO VINO LA CONVERSACIÓN ──────────────────────────
+// Mismo patrón y misma trampa que el estado de bandeja de arriba: el origen solo
+// lo trae `lista_bandeja`, y `rows` (la ventana de mensajes recientes) va PRIMERO
+// y no lo trae. Si viviera en el último mensaje se perdería justo en los chats
+// recientes —los pendientes, los que importan— y habría funcionado solo en los
+// viejos: invisible al probar.
+
+test('el origen del anuncio sobrevive aunque el ultimo mensaje no lo traiga', () => {
+  const convs = buildConvs([
+    msg('a', MANDI, '¡Hola! Quiero más información.', '2026-09-04T17:21:00Z'),
+    msg('a', MANDI, '¡Hola! Quiero más información.', '2026-09-04T17:21:00Z', { origenAnuncio: '🔥 Chaqueta Varsity Dragon Ball Z' }),
+  ], true)
+  assert.equal(convs.length, 1)
+  assert.equal(convs[0].origenAnuncio, '🔥 Chaqueta Varsity Dragon Ball Z')
+})
+
+test('un seguimiento posterior no borra el origen de la conversacion', () => {
+  // El caso real: el cliente llega por el anuncio y después escribe "y en talla
+  // M?". Ese seguimiento pasa a ser el último mensaje y NO trae el origen.
+  const convs = buildConvs([
+    msg('a', MANDI, '¡Hola! Quiero más información.', '2026-09-04T17:21:00Z', { origenAnuncio: '🔥 Chaqueta Varsity Dragon Ball Z' }),
+    msg('z', MANDI, 'y en talla M tienen?', '2026-09-04T18:02:00Z'),
+  ], true)
+  assert.equal(convs[0].origenAnuncio, '🔥 Chaqueta Varsity Dragon Ball Z')
+  assert.equal(convs[0].last.mensaje, 'y en talla M tienen?')
+})
+
+// Un cliente sin rastro tiene que NOTARSE, no disfrazarse con el origen de otro.
+test('una conversacion sin anuncio se queda sin origen', () => {
+  const convs = buildConvs([msg('a', MANDI, 'hola', '2026-09-04T17:21:00Z')], true)
+  assert.equal(convs[0].origenAnuncio, '')
+})
