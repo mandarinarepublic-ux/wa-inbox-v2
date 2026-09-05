@@ -806,7 +806,7 @@ function UbicacionCard({ u }) {
   )
 }
 
-export function MessageBubble({ msg, allMsgs, onResponder }) {
+export function MessageBubble({ msg, allMsgs, onResponder, onAbrirChat }) {
   const [accion, setAccion] = useState(false)
   const isMe     = msg.direccion === 'SALIENTE'
 
@@ -861,6 +861,24 @@ export function MessageBubble({ msg, allMsgs, onResponder }) {
             margin: 0, fontSize: 14, color: '#e2e8f0',
             lineHeight: 1.55, wordBreak: 'break-word', whiteSpace: 'pre-wrap',
           }}><TextoConEnlaces texto={msg.mensaje} /></p>
+        )}
+
+
+        {/* ── IR AL CHAT DEL NÚMERO ANTERIOR ────────────────────
+            Cuando un cliente se muda de teléfono, su historial queda partido en
+            dos chats. Este botón es el puente: lleva al de antes sin recargar la
+            página (no es un <a>, es un cambio de conversación en el momento).
+            ⚠️ Solo se pinta si onAbrirChat llegó: en cualquier otro lugar donde
+            se reuse la burbuja, el mensaje se ve igual pero sin botón muerto. */}
+        {msg.numeroAnterior && onAbrirChat && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onAbrirChat(msg.numeroAnterior) }}
+            style={{
+              marginTop: 7, padding: '5px 11px', borderRadius: 14,
+              background: 'rgba(37,211,102,.12)', border: `1px solid ${'rgba(37,211,102,.45)'}`,
+              color: '#25d366', fontSize: 11, fontWeight: 700,
+              cursor: 'pointer', fontFamily: 'inherit',
+            }}>↗ Revisar conversación en el número anterior</button>
         )}
 
         {/* Botones interactivos enviados por nosotros */}
