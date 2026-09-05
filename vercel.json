@@ -4,6 +4,7 @@
   "crons": [
     { "path": "/api/cron/seguimientos", "schedule": "0 * * * *" },
     { "path": "/api/cron/pendientes", "schedule": "*/5 * * * *" },
-    { "path": "/api/cron/entregas", "schedule": "*/30 * * * *" }
+    { "path": "/api/cron/entregas", "schedule": "*/30 * * * *" },
+    { "path": "/api/cron/pagos", "schedule": "0 13 * * *" }
   ]
 }

@@ -110,6 +110,6 @@ export const config = {
     // fuera porque lo carga un Worker, y un Worker que recibe el HTML del login
     // en vez del JS falla con un error que no se parece en nada a "te falta
     // sesión".
-    '/((?!api/webhook|api/social/webhook|api/cron/seguimientos|api/cron/pendientes|api/cron/entregas|api/pago-dlocal|_next/static|_next/image|opus/|favicon.ico|sw.js|icon-|manifest.webmanifest).*)',
+    '/((?!api/webhook|api/social/webhook|api/cron/seguimientos|api/cron/pendientes|api/cron/entregas|api/cron/pagos|api/pago-dlocal|_next/static|_next/image|opus/|favicon.ico|sw.js|icon-|manifest.webmanifest).*)',
   ],
 }
