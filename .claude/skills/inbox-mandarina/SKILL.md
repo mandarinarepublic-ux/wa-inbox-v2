@@ -100,6 +100,58 @@ pisando el bueno) — ese camino existe: en IND el real llegó primero en 20 de 
 ☠️ Y un parche de reentrega **nunca** toca `telefono`, `conversacion_id`, `fecha`
 ni `direccion`: arrastrarlos mueve el mensaje de chat o de bandeja.
 
+### 6. La bandeja se arma de TRES fuentes y una no pasa por el backend (sep-2026)
+
+En la pestaña de REPUBLIC aparecía el chat de una clienta que **solo había
+escrito a MANDI**. Cero mensajes suyos por ese número, en `mensajes`, en
+`bandeja` y en `lista_bandeja`. Y el backend filtra bien: `.eq('phone_id', canal)`.
+
+`load()` mezcla **`rows` + `hilos` + `lista`**. El backend filtra `rows` y
+`lista` por `phone_id`; **`hilos` —el caché de historiales— vive en el navegador
+y no pasa por ningún filtro.** `buildConvs` crea fila para CUALQUIER teléfono que
+reciba, así que un hilo viejo se convertía en una conversación de pleno derecho
+en la pestaña equivocada.
+
+> ☠️ **El pintado NO filtra por canal en ninguna parte.** `filtered` solo filtra
+> por estado, temperatura o venta: confía en que el backend ya filtró. Si metes
+> una fuente que el backend no vio, **el filtro sencillamente no existe**.
+
+Y no se veía rara: la fila colada no trae `estadoBandeja` (eso solo lo da
+`lista_bandeja`), así que `estadoFila` cae al estado **POR PERSONA** —que viaja
+sin filtro de canal a propósito— y la conversación se sienta en una bandeja como
+una más.
+
+**El discriminador que ahorra horas:**
+
+| Lo que ves | Dónde está |
+|---|---|
+| **UNA** conversación colada | el caché de hilos (guarda 5) |
+| La columna **ENTERA** del otro número | el canal (`CANAL_ACTIVO`, la pestaña) |
+
+La primera sesión persiguió `CANAL_ACTIVO` y no encontró disparador, porque no
+era ahí: un canal equivocado te trae la lista completa del otro número, no una fila.
+
+**Arreglado en el punto donde el dato SE USA**, no tapando rutas: el canal viaja
+**pegado a la respuesta** del sync (`canalPedido`) en vez de releer `CANAL_ACTIVO`
+después del `await`, que pudo moverse. Tapar rutas no servía — el caché se
+limpiaba en UNA de las cuatro ramas de `cambiarLinea`, y además `cargarHilo`
+escribe **después** de su `await`, así que un hilo en vuelo repuebla el caché ya
+estando en la otra pestaña.
+
+⚠️ **Y acá el parche NO es el mismo en los dos repos** (el ejemplo vivo de por qué
+nunca se copia):
+
+- **MANDI** — clave `${telefono}|${phoneId}` → se filtra por clave (`lib/hilos.js`).
+- **IND** — clave **solo el teléfono** → `lib/hilos.js` no aplica; va guardia de
+  canal en `cargarHilo` y `cargarMasHistorial`. Su `cambiarCanal` es una sola
+  rama y siempre limpia, así que allá solo existía la carrera.
+
+⚠️ **Por qué acá SÍ se puede filtrar fuerte, al revés que en `esPintable`:**
+dejar un hilo afuera **nunca esconde una conversación**, porque `lista` trae todas
+las del canal sobre todo el historial; lo único que se pierde es el historial ya
+descargado, que se vuelve a bajar al abrir el chat. La pregunta de siempre —
+**cuál es el default seguro en ESTA dirección**— acá se responde al revés.
+
 ---
 
 ## Reglas que ya se pagaron
