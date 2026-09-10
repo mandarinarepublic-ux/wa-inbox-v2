@@ -7,6 +7,7 @@ import RightPanel from '@/components/RightPanel'
 import SetupModal from '@/components/SetupModal'
 import GuideModal from '@/components/GuideModal'
 import { CANALES, CANAL_GENERAL, CANAL_POR_DEFECTO, colorDeCanal, canalDePhoneId, phoneIdDeCanal, etiquetaDePhoneId } from '@/lib/canales'
+import { hilosDelCanal } from '@/lib/hilos'
 
 import SocialInbox from '@/components/SocialInbox'
 import Contactos, { PlantillaModal } from '@/components/Contactos'
@@ -401,7 +402,13 @@ export default function App() {
     //  · hilos → historiales completos ya descargados al abrir cada chat.
     // null = ERROR (no "vacío"): conservamos lo previo para no parpadear a blanco.
     if (Array.isArray(lista) || Array.isArray(rows)) {
-      const hilos = Object.values(hilosRef.current).flat()
+      // ☠️ El caché de hilos es la ÚNICA de las tres fuentes que NO pasa por el
+      // backend, y por ahí se colaba una conversación del OTRO número en la
+      // pestaña (el chat de una clienta de MANDI apareciendo en REPUBLIC,
+      // 9-sep). Se filtra con el canal que trae la propia respuesta, no con
+      // `CANAL_ACTIVO`, que puede haberse movido durante el `await`. Ver
+      // `lib/hilos.js` para por qué acá filtrar fuerte SÍ es seguro.
+      const hilos = hilosDelCanal(hilosRef.current, sync?.canalPedido || '')
       // ORDEN IMPORTANTE: buildConvs deduplica por id y se queda con el PRIMERO que
       // ve. `lista` es la fuente más pobre (sale de una vista con menos columnas), así
       // que va al FINAL: si un mensaje viene por dos lados, gana la versión completa.
