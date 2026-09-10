@@ -6,7 +6,7 @@
 // quiere contar.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { adjuntosDeRespuesta, guardarAdjuntos, urlEsAudio, tipoDeUrl, TOPE_ADJUNTOS } from '../lib/adjuntos-respuesta.js'
+import { adjuntosDeRespuesta, guardarAdjuntos, moverAdjunto, urlEsAudio, tipoDeUrl, TOPE_ADJUNTOS } from '../lib/adjuntos-respuesta.js'
 
 const FOTO1 = 'https://x.supabase.co/storage/v1/object/public/inbox-media/fotos/MANDI/a.jpg'
 const FOTO2 = 'https://x.supabase.co/storage/v1/object/public/inbox-media/fotos/MANDI/b.jpg'
@@ -142,4 +142,72 @@ test('tipoDeUrl reconoce los tres por carpeta y extension', () => {
 test('una respuesta VIEJA con un pdf colado en imagenes no se manda como foto', () => {
   const leido = adjuntosDeRespuesta({ imagenes: [FOTO1, DOC] })
   assert.deepEqual(leido.map(a => a.tipo), ['imagen', 'documento'])
+})
+
+// ── moverAdjunto: corregir el orden sin borrar y volver a subir ───
+//
+// El orden es del vendedor, pero hasta ahora solo se podía FIJAR al cargar: para
+// mover una foto había que borrarla y subirla de nuevo. Esto lo corrige.
+//
+// ⚠️ Devuelve una lista NUEVA y nunca lanza: el editor la llama desde un updater
+// de React, donde un índice viejo (de un render anterior, mientras otra foto está
+// subiendo) es perfectamente posible. Ahí lo seguro es no hacer nada.
+const TRES = () => [
+  { tipo: 'imagen', url: FOTO1 },
+  { tipo: 'audio',  url: AUDIO },
+  { tipo: 'imagen', url: FOTO2 },
+]
+
+test('mover a la derecha intercambia con el vecino', () => {
+  const r = moverAdjunto(TRES(), 0, +1)
+  assert.deepEqual(r.map(a => a.url), [AUDIO, FOTO1, FOTO2])
+})
+
+test('mover a la izquierda intercambia con el vecino', () => {
+  const r = moverAdjunto(TRES(), 2, -1)
+  assert.deepEqual(r.map(a => a.url), [FOTO1, FOTO2, AUDIO])
+})
+
+test('el PRIMERO no se puede mover a la izquierda', () => {
+  assert.deepEqual(moverAdjunto(TRES(), 0, -1).map(a => a.url), [FOTO1, AUDIO, FOTO2])
+})
+
+test('el ULTIMO no se puede mover a la derecha', () => {
+  assert.deepEqual(moverAdjunto(TRES(), 2, +1).map(a => a.url), [FOTO1, AUDIO, FOTO2])
+})
+
+// ☠️ Si el nombre se perdiera al mover, el cliente recibiría el uuid del bucket
+// como nombre del archivo. Se ve recién en el WhatsApp del cliente.
+test('mover un documento conserva su nombre', () => {
+  const lista = [{ tipo: 'imagen', url: FOTO1 }, { tipo: 'documento', url: DOC, nombre: 'Catálogo 2026.pdf' }]
+  const r = moverAdjunto(lista, 1, -1)
+  assert.strictEqual(r[0].tipo, 'documento')
+  assert.strictEqual(r[0].nombre, 'Catálogo 2026.pdf')
+  assert.strictEqual(r[0].url, DOC)
+})
+
+// El editor llama esto desde un updater: el índice puede venir de un render
+// viejo. Perder un adjunto acá no daría ningún error, solo faltaría uno.
+test('un índice fuera de rango devuelve la lista IGUAL, sin perder nada', () => {
+  for (const idx of [-1, 3, 99, null, undefined, NaN, '1']) {
+    const r = moverAdjunto(TRES(), idx, +1)
+    assert.strictEqual(r.length, 3, `idx ${String(idx)} perdió un adjunto`)
+  }
+})
+
+test('un delta que no es ±1 no mueve nada', () => {
+  assert.deepEqual(moverAdjunto(TRES(), 1, 0).map(a => a.url), [FOTO1, AUDIO, FOTO2])
+  assert.deepEqual(moverAdjunto(TRES(), 0, +2).map(a => a.url), [FOTO1, AUDIO, FOTO2])
+})
+
+test('no muta la lista original', () => {
+  const original = TRES()
+  moverAdjunto(original, 0, +1)
+  assert.deepEqual(original.map(a => a.url), [FOTO1, AUDIO, FOTO2])
+})
+
+test('una lista vacía o inválida no revienta', () => {
+  assert.deepEqual(moverAdjunto([], 0, +1), [])
+  assert.deepEqual(moverAdjunto(undefined, 0, +1), [])
+  assert.deepEqual(moverAdjunto(null, 0, -1), [])
 })
