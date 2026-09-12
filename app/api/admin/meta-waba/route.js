@@ -71,9 +71,15 @@ export async function GET(req) {
     const tok = env('META_TOKEN')
     const debug = await graph(`/debug_token?input_token=${encodeURIComponent(tok)}`)
     const appId = debug?.data?.app_id
+    // /subscriptions exige el token DE LA APP (app_id|app_secret), no el del usuario del sistema.
+    const secreto = env('META_APP_SECRET')
+    const tokenApp = appId && secreto ? `${appId}|${secreto}` : ''
     const [app, subs] = await Promise.all([
-      appId ? graph(`/${appId}?fields=id,name,category,link,app_type,business,privacy_policy_url,website_url`) : null,
-      appId ? graph(`/${appId}/subscriptions`) : null,
+      appId ? graph(`/${appId}?fields=id,name,category,link,app_type,privacy_policy_url,website_url`) : null,
+      tokenApp
+        ? fetch(`${GRAPH}/${appId}/subscriptions?access_token=${encodeURIComponent(tokenApp)}`, { cache: 'no-store' })
+            .then((r) => r.json()).catch((e) => ({ error: e.message }))
+        : { error: 'sin META_APP_SECRET' },
     ])
     return Response.json({ token: debug?.data || debug, app, webhooks: subs?.data || subs })
   }
