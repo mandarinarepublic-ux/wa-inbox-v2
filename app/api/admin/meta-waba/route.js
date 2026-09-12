@@ -30,15 +30,37 @@ async function graph(ruta) {
   }
 }
 
+/**
+ * GET ?accion=listar → TODAS las WABAs del negocio dueño de la WABA del canal, con
+ * sus números. Sirve para descubrir si un reenganche de coexistencia creó el
+ * número con OTRO phone_id o en OTRA WABA: en ese caso el inbox sigue apuntando
+ * al viejo y no ve nada, aunque Meta diga "conectado".
+ */
+async function listar(canal) {
+  const dueno = await graph(`/${canal.wabaId}?fields=owner_business_info`)
+  const businessId = dueno?.owner_business_info?.id
+  if (!businessId) return { error: 'No se pudo leer el negocio dueño', dueno }
+  const campos = 'id,name,status,phone_numbers{id,display_phone_number,platform_type,status,is_on_biz_app,throughput,last_onboarded_time}'
+  const [propias, clientes] = await Promise.all([
+    graph(`/${businessId}/owned_whatsapp_business_accounts?fields=${campos}&limit=50`),
+    graph(`/${businessId}/client_whatsapp_business_accounts?fields=${campos}&limit=50`),
+  ])
+  return { businessId, propias: propias?.data || propias, clientes: clientes?.data || clientes }
+}
+
 /** GET ?canal=REPUBLIC (por defecto) | MANDI → estado de la WABA y del número. */
 export async function GET(req) {
-  const canalId = new URL(req.url).searchParams.get('canal') || 'REPUBLIC'
+  const url = new URL(req.url)
+  const canalId = url.searchParams.get('canal') || 'REPUBLIC'
   const canal = CANALES.find((c) => c.id === canalId)
   if (!canal) {
     return Response.json({ error: `Canal desconocido: ${canalId}`, canales: CANALES.map((c) => c.id) }, { status: 400 })
   }
   if (!env('META_TOKEN')) {
     return Response.json({ error: 'META_TOKEN no está configurado en este entorno' }, { status: 500 })
+  }
+  if (url.searchParams.get('accion') === 'listar') {
+    return Response.json({ canal: canal.id, ...(await listar(canal)) })
   }
 
   const [waba, apps, numero, plantillas] = await Promise.all([
