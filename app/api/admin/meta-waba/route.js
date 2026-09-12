@@ -64,6 +64,20 @@ export async function GET(req) {
     return Response.json({ canal: canal.id, ...(await listar(canal)) })
   }
 
+  // ?accion=app → qué es el token y qué puede la app (solo lectura): identidad de la
+  // app, permisos del token (debug_token), campos de webhook suscritos y modo de la
+  // app. Sirve para saber qué falta para el registro integrado (Embedded Signup).
+  if (url.searchParams.get('accion') === 'app') {
+    const tok = env('META_TOKEN')
+    const debug = await graph(`/debug_token?input_token=${encodeURIComponent(tok)}`)
+    const appId = debug?.data?.app_id
+    const [app, subs] = await Promise.all([
+      appId ? graph(`/${appId}?fields=id,name,category,link,app_type,business,privacy_policy_url,website_url`) : null,
+      appId ? graph(`/${appId}/subscriptions`) : null,
+    ])
+    return Response.json({ token: debug?.data || debug, app, webhooks: subs?.data || subs })
+  }
+
   // ?accion=borrar-numero&confirmar=<phoneId> → DELETE /{phoneId} en la Graph API.
   // Quita el registro del número en la WABA (el celular NO se toca: en coexistencia
   // el teléfono es el dueño del número). Solo procede si `confirmar` coincide con
