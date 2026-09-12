@@ -17,10 +17,11 @@ export const dynamic = 'force-dynamic'
 
 const GRAPH = 'https://graph.facebook.com/v21.0'
 
-async function graph(ruta) {
+async function graph(ruta, metodo = 'GET') {
   const sep = ruta.includes('?') ? '&' : '?'
   try {
     const r = await fetch(`${GRAPH}${ruta}${sep}access_token=${encodeURIComponent(env('META_TOKEN'))}`, {
+      method: metodo,
       cache: 'no-store',
     })
     const cuerpo = await r.json().catch(() => ({}))
@@ -61,6 +62,26 @@ export async function GET(req) {
   }
   if (url.searchParams.get('accion') === 'listar') {
     return Response.json({ canal: canal.id, ...(await listar(canal)) })
+  }
+
+  // ?accion=borrar-numero&confirmar=<phoneId> → DELETE /{phoneId} en la Graph API.
+  // Quita el registro del número en la WABA (el celular NO se toca: en coexistencia
+  // el teléfono es el dueño del número). Solo procede si `confirmar` coincide con
+  // el phoneId del canal Y el número sigue DISCONNECTED/ON_PREMISE: nunca borra un
+  // número que esté funcionando. Relee después para no fiarse del 200.
+  // Autorizado por Rodrigo el 12-sep-2026 para REPUBLIC.
+  if (url.searchParams.get('accion') === 'borrar-numero') {
+    const confirmar = url.searchParams.get('confirmar') || ''
+    if (confirmar !== canal.phoneId) {
+      return Response.json({ error: 'confirmar no coincide con el phoneId del canal', phoneId: canal.phoneId }, { status: 400 })
+    }
+    const antes = await graph(`/${canal.phoneId}?fields=id,display_phone_number,platform_type,status,is_on_biz_app`)
+    if (antes?.platform_type === 'CLOUD_API' || antes?.status === 'CONNECTED') {
+      return Response.json({ error: 'El número está funcionando, no se borra', antes }, { status: 409 })
+    }
+    const borrado = await graph(`/${canal.phoneId}`, 'DELETE')
+    const despues = await graph(`/${canal.wabaId}/phone_numbers?fields=id,display_phone_number,platform_type,status`)
+    return Response.json({ canal: canal.id, antes, borrado, despues })
   }
 
   const [waba, apps, numero, plantillas] = await Promise.all([
