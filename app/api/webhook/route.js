@@ -10,6 +10,8 @@ import { enviarPush, avisoDeEntrante } from '@/lib/push'
 import { decidirIA } from '@/lib/ia-canal'
 import { extraer } from '@/lib/wa-mensaje'
 import { extraerEchoes } from '@/lib/echoes'
+import { extraerHistorial, extraerContactosSync } from '@/lib/coexistencia'
+import { ponerNombreSiFaltaSupabase } from '@/lib/inbox-supabase'
 import { observarFirmaMeta } from '@/lib/firma-meta'
 import { enviarSaliente, responderConIA } from '@/lib/responder-ia'
 import { capturarCtwaClid, revisarLeadAutomatico, revisarVentaEnProceso } from '@/lib/capi'
@@ -323,6 +325,39 @@ async function procesarEchoes(echoes) {
   }
 }
 
+// Historial del celular (coexistencia). Se guarda para poder LEERLO en el chat;
+// no mueve bandejas ni ventanas (`historial: true` corta en guardarMensaje).
+// La conversación se asegura como ATENDIDA si no existía, igual que un eco:
+// nadie escribió hoy, no hay nada que contestar.
+async function procesarHistorial(filas) {
+  let guardados = 0
+  for (const h of filas) {
+    try {
+      if (await existeWamidSupabase(h.wamid).catch(() => false)) continue
+      await asegurarConversacionSalienteSupabase(h.telefono)
+      await guardarMensajeSupabase({
+        id: h.wamid, telefono: h.telefono, nombre: '', tipo: h.tipo,
+        mensaje: h.contenido, mediaUrl: '', timestamp: h.fecha,
+        direccion: h.direccion, mediaId: h.mediaId, contextoId: h.contextoId,
+        raw: h.raw, phoneId: h.phoneId, historial: true,
+      })
+      guardados++
+      if (h.mediaId) await archivarMedia({ mediaId: h.mediaId, wamid: h.wamid }).catch(() => {})
+    } catch (err) {
+      console.error('[/api/webhook historial]', h.wamid, err.message)
+    }
+  }
+  console.log(`[/api/webhook historial] ${guardados}/${filas.length} guardados`)
+}
+
+// Agenda del celular (coexistencia): solo completa nombres que faltan.
+async function procesarAgenda(contactos) {
+  for (const c of contactos) {
+    try { await ponerNombreSiFaltaSupabase(c.telefono, c.nombre) }
+    catch (err) { console.error('[/api/webhook agenda]', c.telefono, err.message) }
+  }
+}
+
 // ── Recepción de mensajes (POST) — responde 200 YA, procesa en background ──────
 export async function POST(req) {
   try {
@@ -354,6 +389,8 @@ export async function POST(req) {
     const nuevos = []
     const statuses = [] // read receipts: {wamid, estado}
     const echoes = []
+    const historial = [] // coexistencia: mensajes viejos del celular
+    const agenda = []    // coexistencia: nombres de la agenda del celular
     for (const entry of entries) {
       for (const change of entry?.changes || []) {
         const value    = change?.value || {}
@@ -365,6 +402,21 @@ export async function POST(req) {
           for (const fila of extraerEchoes(value)) {
             if (marcarNuevo(fila.wamid)) echoes.push(fila)
           }
+          continue
+        }
+
+        // Coexistencia: al enganchar un número, Meta manda el HISTORIAL del
+        // celular (`history`, en tandas) y su AGENDA (`smb_app_state_sync`).
+        // Carriles aparte, como los ecos: no pasan por el camino de los entrantes
+        // (ni saludos, ni IA, ni bandeja). Ver lib/coexistencia.js.
+        if (change?.field === 'history') {
+          for (const fila of extraerHistorial(value)) {
+            if (marcarNuevo(fila.wamid)) historial.push(fila)
+          }
+          continue
+        }
+        if (change?.field === 'smb_app_state_sync') {
+          agenda.push(...extraerContactosSync(value))
           continue
         }
 
@@ -401,6 +453,8 @@ export async function POST(req) {
     if (nuevos.length) waitUntil(procesar(nuevos, origin))
     if (statuses.length) waitUntil(procesarStatuses(statuses))
     if (echoes.length && usaSupabaseLectura()) waitUntil(procesarEchoes(echoes))
+    if (historial.length && usaSupabaseLectura()) waitUntil(procesarHistorial(historial))
+    if (agenda.length && usaSupabaseLectura()) waitUntil(procesarAgenda(agenda))
     return NextResponse.json({ ok: true })
   } catch (err) {
     console.error('[/api/webhook]', err)
