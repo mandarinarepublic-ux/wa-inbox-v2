@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getContactos, marcarSeguimiento } from '@/lib/contactos'
 import { getAutomatizaciones } from '@/lib/automatizaciones'
 import { caminoDeSeguimiento } from '@/lib/camino-seguimiento'
-import { responderConIA } from '@/lib/responder-ia'
+import { responderConIA, enviarSaliente } from '@/lib/responder-ia'
 
 // Cron de SEGUIMIENTOS automáticos por temperatura del lead (Eje 2).
 // Lo llama Vercel Cron (ver vercel.json). Dispara según las horas de SILENCIO del cliente
@@ -84,6 +84,7 @@ export async function GET(req) {
     evaluados++
     try {
       let ok = false
+      let status = null
       if (camino === 'despertar') {
         // El bot está activo: que retome él la conversación. `responderConIA` ya
         // manda lo que el agente devuelva (texto y fotos) por el canal correcto,
@@ -91,23 +92,30 @@ export async function GET(req) {
         // vacia cuentan como false, para no marcar el seguimiento en falso).
         ok = await responderConIA(origin, c.telefono, c.alias || c.nombre || '', '', c.phoneId, 'seguimiento')
       } else {
-        const r = await fetch(`${origin}/api/saliente`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            Telefono: c.telefono,
-            Nombre: c.alias || c.nombre || '',
-            Mensaje: regla.texto.trim(),
-            Canal: c.phoneId,
-          }),
+        // ☠️ Hasta el 13-sep-2026 esto era un `fetch` pelado, SIN la credencial de
+        // máquina. `/api/saliente` no es ruta pública, así que desde que se
+        // prendió el candado (7-ago) devolvía 401 y el cron respondía 200 igual:
+        // "seguimientos" llevaba prendido desde agosto y NUNCA mandó uno
+        // (`ultimo_seguimiento_at` vacío en las 2.210 conversaciones). Misma
+        // familia que LINKPAGO. `enviarSaliente` lleva el token, marca `auto` y
+        // mira `res.ok`, que es justo lo que faltaba.
+        const r = await enviarSaliente(origin, {
+          Telefono: c.telefono,
+          Nombre: c.alias || c.nombre || '',
+          Mensaje: regla.texto.trim(),
+          Canal: c.phoneId,
         })
-        ok = r.ok
+        ok = Boolean(r?.ok)
+        if (!ok) status = r?.status ?? 'red'
       }
       if (ok) {
         await marcarSeguimiento(c.telefono).catch(() => {})
         enviados.push({ telefono: c.telefono, temp, camino })
       } else {
-        errores.push({ telefono: c.telefono, camino })
+        // El código va a la respuesta Y al log: un 401 es el candado, un 4xx de
+        // Meta es la ventana o el número. Callarlo es lo que tuvo esto muerto.
+        errores.push({ telefono: c.telefono, camino, status })
+        console.error('[cron seguimientos] no salió', c.telefono, camino, status)
       }
     } catch (e) {
       errores.push({ telefono: c.telefono, camino, error: e.message })

@@ -152,6 +152,24 @@ las del canal sobre todo el historial; lo único que se pierde es el historial y
 descargado, que se vuelve a bajar al abrir el chat. La pregunta de siempre —
 **cuál es el default seguro en ESTA dirección**— acá se responde al revés.
 
+
+### 7. Todo chat nuevo nacía con la IA PRENDIDA (sep-2026)
+
+La regla "la IA arranca apagada" vivía en `registrarContactoEntrante`
+(`modo_ia:'HUMANO'`)… pero el webhook **guarda el mensaje ANTES de registrar el
+contacto**, y `getConvId` crea la fila solo con `cuenta + telefono`. La fila nacía
+con el **default de la columna** (`'IA'`) y el registro posterior ya no la tocaba.
+Medido en 14 días: MANDI 406/406, IND 1.048/1.055 nacidos en IA.
+
+Arreglado con **migración** (default `'HUMANO'`), no en el webhook. Tres caminos
+crean conversaciones (`getConvId`, `registrarContactoEntrante`,
+`asegurarConversacionSaliente`): **el que gana es el primero que corre**, y ese
+solo pone cuenta y teléfono. Cualquier regla de "cómo nace un chat" tiene que
+estar en el default de la tabla o en `getConvId`, no en un paso posterior.
+
+> Corolario para el cron de seguimientos: decidir por el **cortafuegos del
+> NÚMERO + el chat** (`decidirIA`), nunca solo por `modoIA` del chat.
+
 ---
 
 ## Reglas que ya se pagaron
@@ -216,6 +234,9 @@ los wamids en una tabla de trabajo y usa `cross join lateral` con
 `e.wamids @> array[wamid]` — así el planificador usa el índice GIN
 `webhook_eventos_wamids_idx`. Con el array armado en un CTE (`&& (select
 array_agg(...))`) **no lo usa**.
+
+☠️ `inbox.mensajes.direccion` va en **MAYÚSCULAS** (`ENTRANTE`/`SALIENTE`): una
+consulta con minúsculas devuelve ceros sin quejarse.
 
 **Otros dos controles que ya sirvieron:**
 
