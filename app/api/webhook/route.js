@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server'
 import { waitUntil } from '@vercel/functions'
-import { registrarContactoEntrante, getContactos, updateEstado, updateModoIA, marcarPush, marcarReceta, registrarAnuncioVisto, reclamarAvisoAnuncio, liberarAvisoAnuncio } from '@/lib/contactos'
+import { registrarContactoEntrante, getContactos, updateEstado, updateModoIA, marcarPush, marcarReceta, registrarAnuncioVisto, reclamarAvisoAnuncio, liberarAvisoAnuncio, updateTemperatura } from '@/lib/contactos'
 import { decidirReceta, piezasDeReceta, textoAvisoAnuncioNuevo, esc } from '@/lib/recetas'
+import { elegirFlujo, caminoLineal, piezasDeNodos, temperaturaAlPasar } from '@/lib/flujo'
 import { getRespuestas } from '@/lib/respuestas'
 import { enviarTelegram } from '@/lib/telegram'
 import { usaSupabaseLectura, CUENTA } from '@/lib/supabase'
-import { guardarMensajeSupabase, existeWamidSupabase, guardarEventoCrudoSupabase, actualizarEstadoEntregaSupabase, asegurarConversacionSalienteSupabase } from '@/lib/inbox-supabase'
+import { guardarMensajeSupabase, existeWamidSupabase, guardarEventoCrudoSupabase, actualizarEstadoEntregaSupabase, asegurarConversacionSalienteSupabase, getFlujosPublicadosSupabase } from '@/lib/inbox-supabase'
 import { archivarMedia } from '@/lib/media-archive'
 import { parseLinkpago, crearLinkPago, mensajeLinkPago } from '@/lib/dlocal'
 import { getAutomatizaciones } from '@/lib/automatizaciones'
@@ -274,6 +275,90 @@ async function procesar(nuevos, origin) {
     return true
   }
 
+  // ── Flujos (creador visual de nodos, Fase A) ───────────────────────────────
+  // Ver lib/flujo.js y docs/superpowers/specs/2026-09-15-flujos-lienzo-design.md.
+  // Corre ANTES que recetaSiCorresponde (§8 de la spec: "dos motores a la vez"),
+  // que se retira en la Fase B — mientras tanto comparte el candado `marcarReceta`
+  // (misma ventana de 24h) para que un cliente no reciba receta Y flujo a la vez.
+  // Por eso esta función duplica a propósito la forma de recetaSiCorresponde en
+  // vez de compartir código con ella: el controlador de la Fase A aceptó la
+  // duplicación porque el camino de recetas se retira entero en la Fase B.
+  //
+  // Los flujos publicados se leen UNA vez por ciclo (como respuestasRapidas) y
+  // solo cuando el mensaje puede de verdad disparar uno: trae referral, es de un
+  // contacto nuevo, o trae texto (m.tipo==='texto') — así ni una imagen ni un
+  // audio de un contacto ya conocido gastan la lectura.
+  let flujosCache = null
+  const flujosPublicados = async () => {
+    if (!flujosCache) {
+      const filas = await getFlujosPublicadosSupabase().catch(() => [])
+      // getFlujosPublicadosSupabase ya filtra publicado=true en la consulta, pero
+      // solo trae flujo_id/nombre/grafo_vivo (no la columna `publicado`): sin este
+      // map, elegirFlujo() los descartaría TODOS porque filtra por `f.publicado`.
+      flujosCache = filas.map(f => ({ ...f, publicado: true }))
+    }
+    return flujosCache
+  }
+  async function flujoSiCorresponde(m) {
+    const tieneReferral = Boolean(m.referral?.source_id)
+    const esNuevo = esNuevoDe(m.telefono)
+    if (!tieneReferral && !esNuevo && m.tipo !== 'texto') return false
+    const flujos = await flujosPublicados()
+    const sourceId = String(m.referral?.source_id || '').trim()
+    const flujo = elegirFlujo({ flujos, sourceId, esNuevo, texto: m.contenido })
+    if (!flujo) return false
+    if (modoIAde(m.telefono, m.phoneId)) return false
+    const t = tail9(m.telefono)
+    if (recetados.has(t)) return false
+    const camino = caminoLineal(flujo.grafo_vivo)
+    if (camino.motivo !== 'fin') {
+      console.log('[/api/webhook] flujo', flujo.nombre, 'se detuvo en', camino.motivo, camino.detenidoEn, '(Fase B)')
+    }
+    const contacto = contactos.find(c => tail9(c.telefono) === t) || null
+    const piezas = piezasDeNodos({
+      nodos: camino.mensajes, respuestas: await respuestasRapidas(),
+      contacto: { telefono: m.telefono, nombre: m.nombre, alias: contacto?.alias || '', phoneId: m.phoneId },
+      // La primera pieza cita el mensaje del cliente, como "Responder" a mano.
+      citaId: m.wamid,
+    })
+    if (!piezas.length) {
+      console.warn('[/api/webhook] flujo', flujo.nombre, 'sin piezas que mandar (camino vacío o nodos huérfanos), no se marca', m.telefono)
+      return false
+    }
+    const { marcado } = await marcarReceta(m.telefono).catch(e => { console.error('[/api/webhook] marcar flujo:', e.message); return { marcado: false } })
+    if (!marcado) return false
+    recetados.add(t)
+    saludados.add(t)
+    const temp = temperaturaAlPasar(camino.mensajes)
+    if (temp) await updateTemperatura(m.telefono, temp).catch(e => console.error('[/api/webhook] temperatura de flujo:', e.message))
+    waitUntil((async () => {
+      try {
+        let salieron = 0
+        for (const p of piezas) {
+          const r = await enviarSaliente(origin, p)
+          if (r?.ok) salieron++
+          else console.error('[/api/webhook] flujo', flujo.nombre, 'pieza rechazada', r?.status ?? 'red', m.telefono)
+        }
+        console.log('[/api/webhook] flujo', flujo.nombre, 'a', m.telefono, `${salieron}/${piezas.length} piezas`)
+        // Si NINGUNA pieza salió, el cliente quedó marcado (marcarReceta ya corrió)
+        // pero sin recibir nada por 24h: nadie más lo va a intentar. Sin este aviso
+        // el chat se pierde en silencio.
+        if (salieron === 0 && piezas.length > 0) {
+          await enviarTelegram(
+            `⚠️ <b>Flujo sin enviar en ${esc(CUENTA)}</b>\n` +
+            `flujo ${esc(flujo.nombre)} a ${esc(m.telefono)}: 0/${piezas.length} piezas salieron. ` +
+            `El chat quedó marcado 24 h. Revisa /api/saliente en los logs de Vercel.`
+          ).catch(() => {})
+        }
+      } catch (e) {
+        // Nunca relanzar: esto corre desenganchado del loop principal (waitUntil),
+        // y una excepción acá no tiene a quién contarle nada más que al log.
+        console.error('[/api/webhook] flujo tarea falló:', e.message)
+      }
+    })())
+    return true
+  }
+
   // Anuncio que el inbox ve por PRIMERA vez → un aviso por Telegram, una sola vez.
   // La compuerta es `avisado_at is null`, NO "la fila se creó ahora" (`nuevo`):
   // un anuncio pudo registrarse sin que el aviso saliera (Telegram caído, deploy a
@@ -382,9 +467,15 @@ async function procesar(nuevos, origin) {
     waitUntil(anuncioVistoSiCorresponde(m)
       .catch(e => console.error('[/api/webhook] anuncio visto:', e.message)))
 
-    // Receta de bienvenida por anuncio. Si salió, reemplaza al saludo automático.
-    const conReceta = await recetaSiCorresponde(m)
-      .catch(e => { console.error('[/api/webhook] receta:', e.message); return false })
+    // Flujo publicado (Fase A) primero; recetas de bienvenida solo mientras sigan
+    // activas (se retiran en la Fase B). Si alguno salió, reemplaza al saludo
+    // automático.
+    let conReceta = await flujoSiCorresponde(m)
+      .catch(e => { console.error('[/api/webhook] flujo:', e.message); return false })
+    if (!conReceta && auto?.recetas?.activo) {
+      conReceta = await recetaSiCorresponde(m)
+        .catch(e => { console.error('[/api/webhook] receta:', e.message); return false })
+    }
 
     // Saludo automático (bienvenida a nuevo / "hola de vuelta" al reactivarse).
     // Va antes de LINKPAGO/IA y solo dispara con la IA apagada.
