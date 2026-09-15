@@ -21,6 +21,10 @@ import { capturarCtwaClid, revisarLeadAutomatico, revisarVentaEnProceso } from '
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
+// Recetas de bienvenida: /api/saliente declara su propio maxDuration=60 porque
+// subir fotos/voz es lento. Este valor le da a `procesar()` (donde vive el
+// envío de la receta, dentro de un waitUntil) el mismo margen para terminar.
+export const maxDuration = 60
 
 // ── Webhook de Meta/WhatsApp — RECEPCIÓN directa (reemplaza a Make) ────────────
 // CLAVE: le respondemos 200 a Meta AL INSTANTE y hacemos el trabajo pesado
@@ -187,16 +191,29 @@ async function procesar(nuevos, origin) {
   }
 
   // ── Recetas de bienvenida por anuncio ──────────────────────────────────────
-  // Ver lib/recetas.js. Devuelve true si SALIÓ una receta (entonces el saludo
-  // automático no se manda: la receta ya saludó).
+  // Ver lib/recetas.js. Devuelve true si la receta QUEDÓ CONFIRMADA (entonces el
+  // saludo automático no se manda: la receta ya saluda ella sola).
   //
   // Orden que importa:
-  //   1. marcarReceta ANTES de enviar, con guardia → una reentrega de Meta no
+  //   1. Se arman las piezas ANTES de marcar: una receta sin ninguna pieza
+  //      (pasos huérfanos y sin pregunta) no debe quemar el marcado — dejaría
+  //      al cliente 24h sin poder recibir ninguna receta por nada.
+  //   2. marcarReceta ANTES de enviar, con guardia → una reentrega de Meta no
   //      duplica el paquete (el segundo proceso ve `marcado:false` y se va).
-  //   2. Las piezas salen UNA a UNA con await: el cliente las ve en el orden
-  //      que Rodrigo cargó (texto → fotos → voz → pregunta).
-  //   3. Una pieza rechazada se registra con su código y se sigue: mejor un
-  //      paquete incompleto que uno mudo.
+  //   3. `recetados` Y `saludados` se marcan juntos, apenas se confirma el
+  //      envío: si no, el mensaje 2 del mismo lote corta por `recetados` pero
+  //      el saludo automático de abajo no sabe que ya hubo receta y saluda
+  //      IGUAL — el cliente recibe la receta Y el "bienvenido".
+  //   4. El envío de las piezas se DESENGANCHA del loop con waitUntil: manda a
+  //      /api/saliente (que declara su propio maxDuration=60 porque las fotos
+  //      y la voz tardan) y ese mismo loop todavía tiene que guardar y
+  //      procesar los demás mensajes del lote (m+1..n). Si esperáramos acá
+  //      adentro, una función matada a mitad de una receta larga (texto + 3
+  //      fotos + voz + pregunta = 6 llamadas) dejaría esos mensajes siguientes
+  //      SIN GUARDAR. Las piezas siguen saliendo UNA a UNA con await, en el
+  //      orden que Rodrigo cargó (texto → fotos → voz → pregunta), y una pieza
+  //      rechazada se registra con su código y se sigue: mejor un paquete
+  //      incompleto que uno mudo.
   let respuestasCache = null
   const respuestasRapidas = async () => {
     if (!respuestasCache) respuestasCache = await getRespuestas().catch(() => [])
@@ -215,21 +232,28 @@ async function procesar(nuevos, origin) {
       botActivo: modoIAde(m.telefono, m.phoneId),
     })
     if (!receta) return false
-    recetados.add(t)
-    const { marcado } = await marcarReceta(m.telefono).catch(e => { console.error('[/api/webhook] marcar receta:', e.message); return { marcado: false } })
-    if (!marcado) return false
     const piezas = piezasDeReceta({
       receta, respuestas: await respuestasRapidas(),
       contacto: { telefono: m.telefono, nombre: m.nombre, alias: contacto?.alias || '', phoneId: m.phoneId },
     })
-    let salieron = 0
-    for (const p of piezas) {
-      const r = await enviarSaliente(origin, p)
-      if (r?.ok) salieron++
-      else console.error('[/api/webhook] receta', receta.id, 'pieza rechazada', r?.status ?? 'red', m.telefono)
+    if (!piezas.length) {
+      console.warn('[/api/webhook] receta', receta.id, 'sin piezas que mandar (pasos huérfanos y sin pregunta), no se marca', m.telefono)
+      return false
     }
-    console.log('[/api/webhook] receta', receta.id, 'a', m.telefono, `${salieron}/${piezas.length} piezas`)
-    return salieron > 0
+    const { marcado } = await marcarReceta(m.telefono).catch(e => { console.error('[/api/webhook] marcar receta:', e.message); return { marcado: false } })
+    if (!marcado) return false
+    recetados.add(t)
+    saludados.add(t)
+    waitUntil((async () => {
+      let salieron = 0
+      for (const p of piezas) {
+        const r = await enviarSaliente(origin, p)
+        if (r?.ok) salieron++
+        else console.error('[/api/webhook] receta', receta.id, 'pieza rechazada', r?.status ?? 'red', m.telefono)
+      }
+      console.log('[/api/webhook] receta', receta.id, 'a', m.telefono, `${salieron}/${piezas.length} piezas`)
+    })())
+    return true
   }
 
   // Anuncio que el inbox ve por PRIMERA vez → un aviso por Telegram, una sola vez.
@@ -316,9 +340,11 @@ async function procesar(nuevos, origin) {
         .catch(e => console.error('[/api/webhook] reabrir a PENDIENTE:', e.message))
     }
 
-    // Anuncio nuevo → aviso. Nunca lanza, nunca frena el resto.
-    await anuncioVistoSiCorresponde(m)
-      .catch(e => console.error('[/api/webhook] anuncio visto:', e.message))
+    // Anuncio nuevo → aviso. Fuera del camino de guardado (waitUntil): un
+    // Telegram lento no puede retrasar que se guarden los demás mensajes del
+    // lote. Nunca lanza, nunca frena el resto.
+    waitUntil(anuncioVistoSiCorresponde(m)
+      .catch(e => console.error('[/api/webhook] anuncio visto:', e.message)))
 
     // Receta de bienvenida por anuncio. Si salió, reemplaza al saludo automático.
     const conReceta = await recetaSiCorresponde(m)
