@@ -19,7 +19,7 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import {
-  getFlujos, saveFlujo, publicarFlujo, deleteFlujo, importarRecetas,
+  getFlujos, saveFlujo, publicarFlujo, deleteFlujo, importarRecetas, getPasosFlujo,
   fetchRepliesFromSheet, getAnuncios, getAutomatizaciones,
 } from '@/lib/api-client'
 import { nuevoGrafo, validarFlujo, nodoDisparador, puertosDe } from '@/lib/flujo'
@@ -123,6 +123,18 @@ function Lienzo({ active }) {
     relojToast.current = setTimeout(() => setToast(null), 3000)
   }, [])
   useEffect(() => () => clearTimeout(relojToast.current), [])
+
+  // Contadores por nodo (clientes distintos en 30 días) del flujo abierto. Se
+  // piden al abrir otro flujo; `vivo` evita pintar los de uno que ya se cerró.
+  const [pasos, setPasos] = useState({})
+  useEffect(() => {
+    let vivo = true
+    setPasos({})
+    if (actual?.flujo_id) {
+      getPasosFlujo(actual.flujo_id).then((r) => { if (vivo) setPasos(r?.porNodo || {}) })
+    }
+    return () => { vivo = false }
+  }, [actual?.flujo_id])
 
   // ── Carga ──────────────────────────────────────────────────────────────────
   const recargarLista = useCallback(async () => {
@@ -412,7 +424,7 @@ function Lienzo({ active }) {
     }
   }), [edges, erroresPorLinea])
 
-  const ctx = useMemo(() => ({ erroresPorNodo, respuestas, anuncios }), [erroresPorNodo, respuestas, anuncios])
+  const ctx = useMemo(() => ({ erroresPorNodo, respuestas, anuncios, pasos }), [erroresPorNodo, respuestas, anuncios, pasos])
 
   const nodoSel = seleccion?.tipo === 'nodo' ? nodes.find((n) => n.id === seleccion.id) : null
   const lineaSel = seleccion?.tipo === 'linea' ? edges.find((e) => e.id === seleccion.id) : null

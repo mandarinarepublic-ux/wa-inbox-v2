@@ -324,9 +324,6 @@ function EditorLinea({ esperaMin, onCambiar }) {
       <div style={{ fontSize: 10, color: '#64748b', marginTop: 6 }}>
         En blanco = sale de inmediato. Tope {MAX_ESPERA_MIN / 60} h: después de 24 h Meta cierra la ventana.
       </div>
-      <div style={{ marginTop: 6, fontSize: 9, fontWeight: 800, letterSpacing: '.5px', color: '#64748b', border: '1px dashed #334155', borderRadius: 6, padding: '2px 6px', display: 'inline-block' }}>
-        las esperas corren desde la Fase B
-      </div>
     </Bloque>
   )
 }

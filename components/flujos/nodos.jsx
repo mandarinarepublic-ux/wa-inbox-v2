@@ -18,7 +18,7 @@ import { adjuntosDeRespuesta } from '@/lib/adjuntos-respuesta'
 // de validación (para el borde rojo), las respuestas rápidas y los anuncios (para
 // el resumen). Va por contexto y NO por `data` a propósito: `data` es el `datos`
 // del grafo y todo lo que se meta ahí terminaría guardado en la base.
-export const CtxLienzo = createContext({ erroresPorNodo: {}, respuestas: [], anuncios: [] })
+export const CtxLienzo = createContext({ erroresPorNodo: {}, respuestas: [], anuncios: [], pasos: {} })
 
 export const COLORES = {
   disparador: '#f59e0b',
@@ -60,22 +60,13 @@ export function etiquetaDePuerto(nodo, puerto) {
   return puerto
 }
 
-/** La nota gris de Fase A: esto ya se dibuja y se valida, pero todavía no corre. */
-function EtiquetaFaseB() {
-  return (
-    <div style={{
-      marginTop: 6, fontSize: 8, fontWeight: 800, letterSpacing: '.5px', color: '#64748b',
-      border: '1px dashed #334155', borderRadius: 6, padding: '2px 6px', display: 'inline-block',
-    }}>corre desde la Fase B</div>
-  )
-}
-
 /**
  * El armazón común. `nodo` es el nodo del grafo reconstruido ({tipo, datos}) para
  * que los puertos salgan de la misma función que valida y ejecuta.
  */
-function Tarjeta({ id, nodo, selected, children, conEntrada = true, faseB = false }) {
-  const { erroresPorNodo } = useContext(CtxLienzo)
+function Tarjeta({ id, nodo, selected, children, conEntrada = true }) {
+  const { erroresPorNodo, pasos } = useContext(CtxLienzo)
+  const pasaron = Number(pasos?.[id]) || 0
   const tipo = nodo.tipo
   const color = COLORES[tipo] || '#94a3b8'
   const errores = erroresPorNodo?.[id] || []
@@ -98,11 +89,14 @@ function Tarjeta({ id, nodo, selected, children, conEntrada = true, faseB = fals
       }}>
         <span style={{ fontSize: 13 }}>{ICONOS[tipo]}</span>
         <span style={{ fontSize: 10, fontWeight: 900, letterSpacing: '1.2px', color }}>{(NOMBRES[tipo] || tipo).toUpperCase()}</span>
+        {pasaron > 0 && (
+          <span title="clientes distintos que pasaron por acá en los últimos 30 días"
+            style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 800, color: '#a78bfa' }}>👤 {pasaron}</span>
+        )}
       </div>
 
       <div style={{ padding: '8px 10px 10px', fontSize: 11, lineHeight: 1.45, color: '#cbd5e1' }}>
         {children}
-        {faseB && <EtiquetaFaseB />}
         {errores.length > 0 && (
           <div style={{ marginTop: 6, fontSize: 9, color: '#f87171', fontWeight: 700 }}>
             {errores.map((t, i) => <div key={i}>⚠️ {t}</div>)}
@@ -177,10 +171,6 @@ function NodoDisparador({ id, data, selected }) {
 function NodoMensaje({ id, data, selected }) {
   const { respuestas } = useContext(CtxLienzo)
   const nodo = { tipo: 'mensaje', datos: data }
-  const puertos = puertosDe(nodo)
-  // Fase A solo corre el camino lineal: en cuanto el Mensaje espera algo del
-  // cliente (un botón o texto), lo que sigue es Fase B.
-  const faseB = puertos.some((p) => p.startsWith('btn_')) || puertos.includes('respuesta')
 
   let texto = ''
   let nAdjuntos = 0
@@ -205,7 +195,7 @@ function NodoMensaje({ id, data, selected }) {
   if (data?.citarUltimaRespuesta) marcas.push('↩ cita')
 
   return (
-    <Tarjeta id={id} nodo={nodo} selected={selected} faseB={faseB}>
+    <Tarjeta id={id} nodo={nodo} selected={selected}>
       <div style={{ fontSize: 8, fontWeight: 800, letterSpacing: '.8px', color: '#475569', marginBottom: 2 }}>
         {data?.origen === 'respuesta' ? 'RESPUESTA RÁPIDA' : 'TEXTO PROPIO'}
       </div>
@@ -225,7 +215,7 @@ function NodoCondicion({ id, data, selected }) {
   const nodo = { tipo: 'condicion', datos: data }
   const campo = CAMPOS_CONDICION[data?.campo] || data?.campo || '(sin campo)'
   return (
-    <Tarjeta id={id} nodo={nodo} selected={selected} faseB>
+    <Tarjeta id={id} nodo={nodo} selected={selected}>
       <div style={{ fontWeight: 800, color: '#e2e8f0' }}>{campo}</div>
       <div style={{ color: data?.valor ? '#94a3b8' : '#64748b', marginTop: 2 }}>
         {data?.valor ? `= ${recortar(data.valor, 40)}` : '(sin valor)'}
