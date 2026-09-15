@@ -53,6 +53,7 @@ Hoy no corre nada nuevo en producción: con 0 flujos publicados el webhook ni le
   pausas ya pasarían los 60 s.
 - En el lienzo, la línea con pausa en segundos se ve **continua y morada** con "⏱ 3 s"; la de minutos, punteada.
 
+## Dónde vive cada cosa
 
 | pieza | archivo |
 |---|---|
@@ -94,6 +95,5 @@ Logs de Vercel: `[flujo] <nombre> a <tel> N/M piezas (motivo)` · `[/api/webhook
 
 - **Task 8 (retirar recetas):** solo cuando `recetas.activo=false` y haya flujos importados. Borra
   `recetaSiCorresponde` del webhook y el interruptor de recetas de AUTOS.
-- **Port a IND** (mismo código, plan aparte).
-- El webhook hace un `delete` por clave primaria por cada eco del celular aunque no haya flujos. Es barato, pero
-  si IND lo hereda, con su volumen conviene saltarlo cuando no hay flujos publicados.
+- ~~Port a IND~~ ✅ hecho el 15-sep: `ind-inbox-next/docs/HANDOFF-2026-09-15-flujos-ind.md`. Allá los ecos del celular
+  solo borran estado si hay flujos publicados; acá el `delete` por eco sigue siendo incondicional (volumen bajo).
