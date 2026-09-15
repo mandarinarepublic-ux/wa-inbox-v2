@@ -16,7 +16,7 @@ const PUBLICAS = [
 
 // Todo lo demás del inventario: son del navegador y van protegidas.
 const PROTEGIDAS = [
-  '/api/automatizaciones', '/api/buscar', '/api/capi/diag', '/api/cliente-pedidos',
+  '/api/anuncios', '/api/automatizaciones', '/api/buscar', '/api/capi/diag', '/api/cliente-pedidos',
   '/api/contactos', '/api/contactos/estado', '/api/conversacion', '/api/dashboard',
   '/api/directorio', '/api/hilo', '/api/inbox-sync', '/api/linkpago', '/api/lista', '/api/media',
   '/api/media/precache', '/api/media/upload', '/api/mensaje', '/api/mensajes',
