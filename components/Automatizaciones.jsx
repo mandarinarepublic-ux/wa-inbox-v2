@@ -1,6 +1,6 @@
 'use client'
 import React, { useState, useEffect, useCallback } from 'react'
-import { getAutomatizaciones, saveAutomatizaciones } from '@/lib/api-client'
+import { getAutomatizaciones, saveAutomatizaciones, getAnuncios, patchAnuncio, fetchRepliesFromSheet } from '@/lib/api-client'
 import { CANALES } from '@/lib/canales'
 
 // ── Pestaña AUTOMATIZACIONES ──────────────────────────────────────────────────
@@ -39,12 +39,17 @@ export default function Automatizaciones({ active }) {
   const [loading, setLoading] = useState(true)
   const [saving,  setSaving]  = useState(false)
   const [toast,   setToast]   = useState(null)
+  const [anuncios,   setAnuncios]   = useState([])
+  const [respuestas, setRespuestas] = useState([])
 
   const cargar = useCallback(async () => {
     setLoading(true)
     const r = await getAutomatizaciones()
     const c = r?.config || {}
     setConfig(c); setOrig(JSON.stringify(c)); setLoading(false)
+    const [a, r2] = await Promise.all([getAnuncios().catch(() => null), fetchRepliesFromSheet().catch(() => [])])
+    setAnuncios(a?.anuncios || [])
+    setRespuestas(Array.isArray(r2) ? r2 : [])
   }, [])
 
   // Recarga CADA VEZ que se entra a la pestaña (no solo la primera): si el
@@ -122,6 +127,48 @@ export default function Automatizaciones({ active }) {
     { seguimientos: { [key]: { ...actual, activo: valor } } },
     prev => ({ ...prev, seguimientos: { ...(prev?.seguimientos || {}),
       [key]: { ...((prev?.seguimientos || {})[key] || {}), activo: valor } } }))
+
+  // ── Recetas de bienvenida por anuncio ──────────────────────────────────────
+  // `lista` y `por_anuncio` se mandan COMPLETOS (merge de un nivel). Los
+  // interruptores van al instante; el resto con "Guardar cambios".
+  const rc = config?.recetas || { activo: false, lista: [], por_anuncio: {} }
+  const setRc = (patch) => setConfig(prev => ({ ...prev, recetas: { ...(prev?.recetas || {}), ...patch } }))
+  const togRcG = (valor) => guardarInterruptor(
+    { recetas: { activo: valor } },
+    prev => ({ ...prev, recetas: { ...(prev?.recetas || {}), activo: valor } }))
+  const togReceta = (id, valor) => {
+    const lista = (rc.lista || []).map(r => r.id === id ? { ...r, activa: valor } : r)
+    guardarInterruptor({ recetas: { lista } }, prev => ({ ...prev, recetas: { ...(prev?.recetas || {}), lista } }))
+  }
+  const nuevaReceta = () => setRc({ lista: [...(rc.lista || []), {
+    id: 'r_' + Math.random().toString(36).slice(2, 8), nombre: 'Nueva receta', activa: true, pasos: [], pregunta: null,
+  }] })
+  const editarReceta = (id, patch) => setRc({ lista: (rc.lista || []).map(r => r.id === id ? { ...r, ...patch } : r) })
+  const borrarReceta = (id) => {
+    const por_anuncio = Object.fromEntries(Object.entries(rc.por_anuncio || {}).filter(([, v]) => v !== id))
+    setRc({ lista: (rc.lista || []).filter(r => r.id !== id), por_anuncio })
+  }
+  const duplicarReceta = (r) => setRc({ lista: [...(rc.lista || []), { ...r, id: 'r_' + Math.random().toString(36).slice(2, 8), nombre: r.nombre + ' (copia)' }] })
+  const asignar = (sourceId, recetaId) => setRc({ por_anuncio: { ...(rc.por_anuncio || {}), [sourceId]: recetaId || null } })
+  const moverPaso = (r, i, d) => {
+    const pasos = [...r.pasos]; const j = i + d
+    if (j < 0 || j >= pasos.length) return
+    ;[pasos[i], pasos[j]] = [pasos[j], pasos[i]]
+    editarReceta(r.id, { pasos })
+  }
+  const respuestaDe = (id) => respuestas.find(x => String(x.id) === String(id))
+  const resumenRespuesta = (x) => {
+    const n = (Array.isArray(x?.adjuntos) && x.adjuntos.length) ? x.adjuntos.length
+      : [x?.imageUrl, x?.imageUrl2, x?.imageUrl3, x?.imageUrl4, x?.imageUrl5].filter(Boolean).length
+    return `${String(x?.text || '').slice(0, 60)}${n ? ` · ${n} adj.` : ''}`
+  }
+  const guardarEtiqueta = async (sourceId, etiqueta) => {
+    const r = await patchAnuncio(sourceId, etiqueta)
+    if (r?.ok) setAnuncios(prev => prev.map(a => a.source_id === sourceId ? { ...a, etiqueta } : a))
+    else { setToast('❌ No se guardó la etiqueta'); setTimeout(() => setToast(null), 2500) }
+  }
+  const btnChico = { background: 'transparent', border: '1px solid #1e2d3d', color: '#94a3b8', borderRadius: 8, padding: '4px 8px', cursor: 'pointer', fontSize: 11, fontFamily: 'Outfit,sans-serif' }
+  const selectStyle = { background: '#080d14', border: '1px solid #1e2d3d', borderRadius: 8, color: '#e2e8f0', fontSize: 12, padding: '6px 8px', fontFamily: 'Outfit,sans-serif', outline: 'none', maxWidth: '100%' }
 
   const guardar = async () => {
     setSaving(true)
@@ -317,6 +364,101 @@ export default function Automatizaciones({ active }) {
 
               <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, lineHeight: 1.5 }}>
                 ⚠️ Pasadas las 24h la ventana se cierra y ya no se envía gratis (reenganche por plantilla = próximamente). La temperatura la pones solo tú desde el chat.
+              </div>
+            </>)}
+          </Card>
+
+          {/* ── BIENVENIDA POR ANUNCIO (recetas) ── */}
+          <Card>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: rc.activo ? 14 : 0 }}>
+              <div style={{ fontSize: 26 }}>📣</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 15, fontWeight: 800, color: '#e2e8f0' }}>Bienvenida por anuncio</div>
+                <div style={{ fontSize: 12, color: '#64748b', marginTop: 3 }}>
+                  Cuando alguien llega de un anuncio, sale sola la <b style={{ color: '#94a3b8' }}>receta</b> que elijas: tus respuestas rápidas en orden y una pregunta con botones. Un anuncio sin receta no recibe nada automático. Una vez por cliente por ventana de 24h.
+                </div>
+              </div>
+              <Switch on={!!rc.activo} onClick={() => togRcG(!rc.activo)} />
+            </div>
+
+            {rc.activo && (<>
+              {/* Anuncios vistos */}
+              <div style={{ fontSize: 12, fontWeight: 800, color: '#94a3b8', margin: '6px 0 8px' }}>ANUNCIOS VISTOS · {anuncios.length}</div>
+              {[{ source_id: 'organico', etiqueta: 'Orgánico (sin anuncio)', titular: 'Contactos nuevos que escriben por su cuenta', chats_30d: null, fijo: true }, ...anuncios].map(a => {
+                const asignada = rc.por_anuncio?.[a.source_id] || ''
+                const nuevo = !a.fijo && !asignada
+                return (
+                  <div key={a.source_id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 10, marginBottom: 6, border: `1px solid ${nuevo ? '#f59e0b55' : '#1e2d3d'}`, background: nuevo ? '#f59e0b0c' : 'transparent' }}>
+                    {a.imagen_url ? <img src={a.imagen_url} alt="" style={{ width: 36, height: 36, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }} /> : <div style={{ width: 36, height: 36, borderRadius: 8, background: '#1e2d3d', flexShrink: 0 }} />}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      {a.fijo
+                        ? <div style={{ fontSize: 13, fontWeight: 800, color: '#e2e8f0' }}>{a.etiqueta}</div>
+                        : <input defaultValue={a.etiqueta || ''} placeholder="Etiqueta (ej. DBZ chaquetas)" maxLength={120}
+                            onBlur={e => e.target.value !== (a.etiqueta || '') && guardarEtiqueta(a.source_id, e.target.value)}
+                            style={{ ...selectStyle, width: '100%', fontWeight: 800, color: '#e2e8f0', padding: '4px 6px' }} />}
+                      <div style={{ fontSize: 11, color: '#64748b', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {nuevo && <b style={{ color: '#f59e0b', marginRight: 6 }}>NUEVO</b>}
+                        {a.titular || '(sin titular)'}{a.chats_30d != null ? ` · ${a.chats_30d} chats en 30 días` : ''}
+                      </div>
+                    </div>
+                    <select value={asignada} onChange={e => asignar(a.source_id, e.target.value)} style={selectStyle}>
+                      <option value="">— sin receta —</option>
+                      {(rc.lista || []).map(r => <option key={r.id} value={r.id}>{r.nombre}{r.activa === false ? ' (apagada)' : ''}</option>)}
+                    </select>
+                  </div>
+                )
+              })}
+
+              {/* Recetas */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '14px 0 8px' }}>
+                <div style={{ fontSize: 12, fontWeight: 800, color: '#94a3b8' }}>RECETAS · {(rc.lista || []).length}</div>
+                <button onClick={nuevaReceta} style={btnChico}>+ Nueva receta</button>
+              </div>
+              {(rc.lista || []).map(r => (
+                <div key={r.id} style={{ border: `1px solid ${r.activa !== false ? '#f59e0b44' : '#1e2d3d'}`, borderRadius: 12, padding: 12, marginBottom: 10, background: r.activa !== false ? '#f59e0b0a' : 'transparent' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <input value={r.nombre || ''} onChange={e => editarReceta(r.id, { nombre: e.target.value })} maxLength={60}
+                      style={{ ...selectStyle, flex: 1, fontWeight: 800, color: '#e2e8f0' }} />
+                    <button onClick={() => duplicarReceta(r)} style={btnChico} title="Duplicar">⧉</button>
+                    <button onClick={() => borrarReceta(r.id)} style={{ ...btnChico, color: '#ef4444' }} title="Eliminar">✕</button>
+                    <Switch on={r.activa !== false} onClick={() => togReceta(r.id, !(r.activa !== false))} />
+                  </div>
+
+                  <div style={{ fontSize: 11, color: '#64748b', margin: '10px 0 6px' }}>Pasos (salen en este orden):</div>
+                  {(r.pasos || []).map((p, i) => {
+                    const x = respuestaDe(p.respuestaId)
+                    return (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                        <span style={{ fontSize: 11, color: '#64748b', width: 16 }}>{i + 1}.</span>
+                        <div style={{ flex: 1, fontSize: 12, color: x ? '#e2e8f0' : '#ef4444', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {x ? resumenRespuesta(x) : `⚠️ respuesta rápida borrada (${p.respuestaId})`}
+                        </div>
+                        <button onClick={() => moverPaso(r, i, -1)} style={btnChico}>▲</button>
+                        <button onClick={() => moverPaso(r, i, +1)} style={btnChico}>▼</button>
+                        <button onClick={() => editarReceta(r.id, { pasos: r.pasos.filter((_, k) => k !== i) })} style={btnChico}>✕</button>
+                      </div>
+                    )
+                  })}
+                  <select value="" onChange={e => { if (e.target.value) editarReceta(r.id, { pasos: [...(r.pasos || []), { tipo: 'respuesta', respuestaId: e.target.value }] }) }} style={{ ...selectStyle, width: '100%', marginTop: 4 }}>
+                    <option value="">+ agregar respuesta rápida…</option>
+                    {respuestas.map(x => <option key={x.id} value={x.id}>{resumenRespuesta(x)}</option>)}
+                  </select>
+
+                  <div style={{ fontSize: 11, color: '#64748b', margin: '12px 0 6px' }}>Pregunta final con botones (opcional):</div>
+                  <textarea value={r.pregunta?.texto || ''} rows={2} placeholder="Ej. ¿Cuál te gustó?"
+                    onChange={e => editarReceta(r.id, { pregunta: { ...(r.pregunta || { botones: [] }), texto: e.target.value } })} style={inputTxt} />
+                  {[0, 1, 2].map(i => (
+                    <input key={i} value={r.pregunta?.botones?.[i]?.title || ''} maxLength={20} placeholder={`Botón ${i + 1} (máx 20)`}
+                      onChange={e => {
+                        const botones = [0, 1, 2].map(k => ({ title: k === i ? e.target.value.slice(0, 20) : (r.pregunta?.botones?.[k]?.title || '') }))
+                        editarReceta(r.id, { pregunta: { ...(r.pregunta || {}), texto: r.pregunta?.texto || '', botones } })
+                      }}
+                      style={{ ...selectStyle, width: 'calc(33% - 4px)', marginRight: i < 2 ? 6 : 0, marginTop: 6 }} />
+                  ))}
+                </div>
+              ))}
+              <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, lineHeight: 1.5 }}>
+                ⚠️ Lo que el cliente toque en un botón entra al chat como texto y lo pone en PENDIENTES; ningún botón hace nada solo. Si el bot está contestando ese chat, la receta no se mete. Cuando aparece un anuncio nuevo te llega un aviso por Telegram.
               </div>
             </>)}
           </Card>
