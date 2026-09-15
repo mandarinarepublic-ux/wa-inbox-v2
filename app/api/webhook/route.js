@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { waitUntil } from '@vercel/functions'
-import { registrarContactoEntrante, getContactos, updateEstado, updateModoIA, marcarPush, marcarReceta, registrarAnuncioVisto, marcarAvisoAnuncio } from '@/lib/contactos'
-import { decidirReceta, piezasDeReceta, textoAvisoAnuncioNuevo } from '@/lib/recetas'
+import { registrarContactoEntrante, getContactos, updateEstado, updateModoIA, marcarPush, marcarReceta, registrarAnuncioVisto, reclamarAvisoAnuncio, liberarAvisoAnuncio } from '@/lib/contactos'
+import { decidirReceta, piezasDeReceta, textoAvisoAnuncioNuevo, esc } from '@/lib/recetas'
 import { getRespuestas } from '@/lib/respuestas'
 import { enviarTelegram } from '@/lib/telegram'
 import { usaSupabaseLectura, CUENTA } from '@/lib/supabase'
@@ -258,8 +258,8 @@ async function procesar(nuevos, origin) {
         // el chat se pierde en silencio.
         if (salieron === 0 && piezas.length > 0) {
           await enviarTelegram(
-            `⚠️ <b>Receta sin enviar en ${CUENTA}</b>\n` +
-            `receta ${receta.id} a ${m.telefono}: 0/${piezas.length} piezas salieron. ` +
+            `⚠️ <b>Receta sin enviar en ${esc(CUENTA)}</b>\n` +
+            `receta ${esc(receta.id)} a ${esc(m.telefono)}: 0/${piezas.length} piezas salieron. ` +
             `El chat quedó marcado 24 h. Revisa /api/saliente en los logs de Vercel.`
           ).catch(() => {})
         }
@@ -276,11 +276,24 @@ async function procesar(nuevos, origin) {
   // La compuerta es `avisado_at is null`, NO "la fila se creó ahora" (`nuevo`):
   // un anuncio pudo registrarse sin que el aviso saliera (Telegram caído, deploy a
   // mitad de un envío) y esa fila sigue con `avisado_at` en null para siempre.
+  //
+  // RECLAMAR antes de mandar, igual que marcarReceta antes de enviar la receta:
+  // `avisado` de registrarAnuncioVisto es solo un chequeo BARATO para no reclamar
+  // en cada mensaje de un anuncio que ya se avisó hace rato. El candado real es
+  // reclamarAvisoAnuncio (UPDATE con WHERE avisado_at IS NULL): dos invocaciones
+  // de `procesar` corriendo a la vez para el mismo anuncio nuevo (dos webhooks
+  // concurrentes) pueden pasar las dos el chequeo barato, pero el reclamo solo
+  // lo gana una — la otra ve `reclamado:false` y se va sin mandar Telegram. Si
+  // el envío falla, se LIBERA el reclamo para que el siguiente referral del
+  // mismo anuncio pueda reintentarlo (si no, ese anuncio queda avisado_at
+  // puesto pero sin que nadie se haya enterado, para siempre).
   async function anuncioVistoSiCorresponde(m) {
     const sourceId = String(m.referral?.source_id || '').trim()
     if (!sourceId) return
     const { avisado } = await registrarAnuncioVisto({ sourceId, referral: m.referral })
     if (avisado !== false) return
+    const { reclamado } = await reclamarAvisoAnuncio(sourceId)
+    if (!reclamado) return // otro proceso ya se quedó con este aviso
     const texto = textoAvisoAnuncioNuevo({
       cuenta: CUENTA, titular: m.referral?.headline || '', sourceId,
       url: origin,
@@ -288,7 +301,7 @@ async function procesar(nuevos, origin) {
       tipo: m.referral?.source_type,
     })
     const r = await enviarTelegram(texto)
-    if (r?.ok) await marcarAvisoAnuncio(sourceId).catch(() => {})
+    if (!r?.ok) await liberarAvisoAnuncio(sourceId).catch(() => {})
   }
 
   // Archivado de fotos entrantes a Supabase Storage (URL estable en media_url).
