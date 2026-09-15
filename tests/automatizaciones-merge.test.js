@@ -33,3 +33,15 @@ test('por_anuncio se reemplaza ENTERO (merge de un nivel): la pantalla lo manda 
   assert.equal(nueva.recetas.por_anuncio['222'], 'r_b')
   assert.equal(nueva.recetas.activo, false) // lo que no se manda se conserva
 })
+
+test('los FLUJOS arrancan PRENDIDOS (el interruptor general es el de pánico, no el de encendido)', () => {
+  assert.equal(DEFAULTS.flujos.activo, true)
+})
+
+test('apagar los flujos NO toca las recetas (el camino de vuelta al motor viejo)', () => {
+  const nueva = merge(DEFAULTS, { flujos: { activo: false } })
+  assert.equal(nueva.flujos.activo, false)
+  assert.equal(nueva.recetas.activo, false)
+  assert.deepEqual(nueva.recetas.lista, [])
+  assert.deepEqual(nueva.recetas.por_anuncio, {})
+})

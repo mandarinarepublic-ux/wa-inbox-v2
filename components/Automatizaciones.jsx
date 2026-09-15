@@ -148,6 +148,14 @@ export default function Automatizaciones({ active }) {
   const togRcG = (valor) => guardarInterruptor(
     { recetas: { activo: valor } },
     prev => ({ ...prev, recetas: { ...(prev?.recetas || {}), activo: valor } }))
+
+  // INTERRUPTOR GENERAL de los flujos publicados (el botón de pánico del motor
+  // nuevo). `!== false` y no `!!`: el default es PRENDIDO, así que una config
+  // vieja sin el bloque `flujos` tiene que verse prendida, no apagada.
+  const flujosOn = config?.flujos?.activo !== false
+  const togFlujos = (valor) => guardarInterruptor(
+    { flujos: { activo: valor } },
+    prev => ({ ...prev, flujos: { ...(prev?.flujos || {}), activo: valor } }))
   const guardarEtiqueta = async (sourceId, etiqueta) => {
     const r = await patchAnuncio(sourceId, etiqueta)
     if (r?.ok) setAnuncios(prev => prev.map(a => a.source_id === sourceId ? { ...a, etiqueta } : a))
@@ -363,6 +371,28 @@ export default function Automatizaciones({ active }) {
                 <div style={{ fontSize: 12, color: '#64748b', marginTop: 3 }}>
                   Cada anuncio que el inbox vio, con el flujo que lo atiende. Los flujos se dibujan en la pestaña FLUJOS.
                 </div>
+              </div>
+            </div>
+
+            {/* Interruptor general de FLUJOS. Va ARRIBA de todo en esta tarjeta:
+                es el que de verdad decide si sale algo automático por anuncio,
+                palabra u orgánico. Ver DEFAULTS.flujos en lib/automatizaciones.js. */}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 10, marginBottom: 14,
+              background: flujosOn ? 'rgba(167,139,250,.08)' : 'rgba(239,68,68,.10)',
+              border: `1px solid ${flujosOn ? 'rgba(167,139,250,.30)' : 'rgba(239,68,68,.35)'}`,
+            }}>
+              <Switch on={flujosOn} onClick={() => togFlujos(!flujosOn)} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: '#e2e8f0' }}>🧭 Flujos</div>
+                <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>
+                  Interruptor general de los flujos publicados. Apagado, ningún flujo manda nada (no hace falta despublicarlos).
+                </div>
+                {!flujosOn && (
+                  <div style={{ fontSize: 11, fontWeight: 800, color: '#ef4444', marginTop: 3 }}>
+                    ⛔ APAGADOS — ningún flujo publicado está mandando nada
+                  </div>
+                )}
               </div>
             </div>
 

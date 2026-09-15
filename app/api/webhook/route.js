@@ -130,6 +130,25 @@ async function procesar(nuevos, origin) {
   // sirve el "creado" del registro: usamos el SNAPSHOT leído al inicio del ciclo —
   // si no está ahí, es su primer mensaje de la historia.
   const esNuevoDe = (phone) => !contactos.find(c => tail9(c.telefono) === tail9(phone))
+  // ¿Hay una PERSONA atendiendo este chat ahora mismo? Se mira el snapshot (que es
+  // de ANTES de este mensaje): si el último mensaje de la conversación fue NUESTRO
+  // y es de hace menos de 24 h, alguien está contestando — desde el inbox o desde
+  // el celular, da igual, la coexistencia guarda los dos. Solo sirve para callar
+  // los disparadores por PALABRA: un flujo no puede meterse a media conversación
+  // humana porque el cliente escribió "precio".
+  const VENTANA_HUMANO_MS = 24 * 3600 * 1000
+  const humanoAtendiendo = (phone) => {
+    const t = tail9(phone)
+    const c = contactos.find(c => tail9(c.telefono) === t)
+    if (!c?.ultimoMensajeAt) return false
+    const ultimo = Date.parse(c.ultimoMensajeAt)
+    if (!Number.isFinite(ultimo)) return false
+    const entrante = c.ultimoEntranteAt ? Date.parse(c.ultimoEntranteAt) : 0
+    // `>` y no `>=`: cuando el último mensaje del chat ES el último entrante, las
+    // dos marcas coinciden y eso significa que el que habló fue el CLIENTE.
+    if (!(ultimo > (Number.isFinite(entrante) ? entrante : 0))) return false
+    return Date.now() - ultimo < VENTANA_HUMANO_MS
+  }
   // Marca de tiempo del ÚLTIMO entrante ANTERIOR (del snapshot) → detecta reactivación.
   const ultimoEntranteAtDe = (phone) => {
     const t = tail9(phone)
@@ -291,21 +310,38 @@ async function procesar(nuevos, origin) {
   let flujosCache = null
   const flujosPublicados = async () => {
     if (!flujosCache) {
-      const filas = await getFlujosPublicadosSupabase().catch(() => [])
-      // getFlujosPublicadosSupabase ya filtra publicado=true en la consulta, pero
-      // solo trae flujo_id/nombre/grafo_vivo (no la columna `publicado`): sin este
-      // map, elegirFlujo() los descartaría TODOS porque filtra por `f.publicado`.
-      flujosCache = filas.map(f => ({ ...f, publicado: true }))
+      // La consulta ya trae la columna `publicado` (que es lo que mira
+      // `elegirFlujo`): acá no se remienda nada. Y si la lectura falla, se dice
+      // en el log — un `[]` mudo se ve idéntico a "no hay flujos publicados".
+      flujosCache = await getFlujosPublicadosSupabase().catch(e => {
+        console.error('[/api/webhook] no pude leer los flujos publicados:', e.message)
+        return []
+      })
     }
     return flujosCache
   }
   async function flujoSiCorresponde(m) {
+    // Interruptor general de FLUJOS (AUTOS). Va PRIMERO: apagado, ni se lee la
+    // tabla. Ver DEFAULTS.flujos en lib/automatizaciones.js.
+    if (!auto?.flujos?.activo) return false
     const tieneReferral = Boolean(m.referral?.source_id)
     const esNuevo = esNuevoDe(m.telefono)
     if (!tieneReferral && !esNuevo && m.tipo !== 'texto') return false
     const flujos = await flujosPublicados()
     const sourceId = String(m.referral?.source_id || '').trim()
-    const flujo = elegirFlujo({ flujos, sourceId, esNuevo, texto: m.contenido })
+    // ☠️ EL TEXTO QUE VE `elegirFlujo` NO ES SIEMPRE `m.contenido`: solo la rama de
+    // PALABRA lo usa, y esa es la peligrosa (aplica a cualquier texto de cualquier
+    // cliente, en cualquier momento de la conversación). Dos guardas:
+    //   1. `m.raw?.type === 'text'` — y no `m.tipo`, porque un BOTÓN TOCADO y una
+    //      UBICACIÓN llegan al inbox como `tipo:'texto'` (el título del botón, la
+    //      dirección). "Sí, quiero" no puede disparar un flujo de palabra.
+    //   2. `!humanoAtendiendo(...)` — si una persona está contestando este chat,
+    //      el lienzo no compite con ella (spec §1).
+    // NO se corta de entrada con un `return false`: sin texto, anuncio y orgánico
+    // siguen funcionando igual para fotos, audios, ubicaciones y botones tocados.
+    // Lo único que se silencia es la palabra clave.
+    const textoPalabra = (m.raw?.type === 'text' && !humanoAtendiendo(m.telefono)) ? m.contenido : ''
+    const flujo = elegirFlujo({ flujos, sourceId, esNuevo, texto: textoPalabra })
     if (!flujo) return false
     if (modoIAde(m.telefono, m.phoneId)) return false
     const t = tail9(m.telefono)
