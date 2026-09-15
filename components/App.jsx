@@ -1,5 +1,6 @@
 'use client'
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
+import dynamic from 'next/dynamic'
 import { fetchInboxSync, fetchHilo, buscarEnMensajes, sendReply, updateContact, updateTemperatura, isDemo, sendInteractiveButtons, toggleIAMode, sendVideo, sendDocumento, sendAudio, enviarAudioUrl, enviarDocumentoUrl, sendImageFile, precacheMedia, setCanalActivo, getCanalActivo } from '@/lib/api-client'
 import { buildConvs, fmtDate, parseDate } from '@/lib/utils'
 import { Spinner, Avatar, ContactRow, MessageBubble, Toast } from '@/components/Components'
@@ -25,6 +26,12 @@ import { pestanaGuardada } from '@/lib/pestana'
 import { fusionarHilo } from '@/lib/hilo-historico'
 import { ordenarBandeja } from '@/lib/orden-bandeja'
 import { decidirPegado, decidirAdjuntos, TOPE_FOTOS } from '@/lib/adjuntos'
+
+// ☠️ FLUJOS SE CARGA APARTE Y SOLO AL ENTRAR. React Flow pesa ~150 kB gz: metido
+// en el bundle de siempre, lo pagaría CADA vendedor en CADA carga del inbox para
+// una pantalla que usa una persona de vez en cuando. Con `ssr:false` porque la
+// librería mide el lienzo contra el navegador.
+const Flujos = dynamic(() => import('./flujos/Flujos'), { ssr: false })
 
 // ── Ancho del panel derecho: UNA sola fuente ──────────────────────
 // Lo usan el asa de arrastre, la restauración de localStorage y el ensanchado
@@ -169,7 +176,15 @@ export default function App() {
   // la misma vista de chat y solo cambia el canal. REPUBLIC antes leía WhatsApp
   // Web con una extensión de Chrome y un launcher en localhost:3098; ahora es
   // Cloud API como MANDI. Ver lib/canales.js.
-  const [linea, setLinea] = useState('MANDI') // 'MANDI' | 'REPUBLIC' | 'SOCIAL' | 'CONTACTOS' | 'AUTO'
+  const [linea, setLinea] = useState('MANDI') // 'MANDI' | 'REPUBLIC' | 'SOCIAL' | 'CONTACTOS' | 'AUTO' | 'FLUJOS'
+  // ☠️ FLUJOS NO SE MONTA HASTA QUE ALGUIEN ENTRA. Las demás pestañas viven
+  // montadas detrás con `display:none`, pero esa es justo la forma de que un
+  // `next/dynamic` NO ahorre nada: el trozo de React Flow (~150 kB gz) se
+  // descargaría en cada carga del inbox, para todos. Con esta bandera el trozo
+  // se pide la primera vez que se toca la pestaña, y desde ahí queda montado
+  // para no perder un lienzo a medio dibujar al ir a mirar un chat.
+  const [flujosVisitado, setFlujosVisitado] = useState(false)
+  useEffect(() => { if (linea === 'FLUJOS') setFlujosVisitado(true) }, [linea])
   // Canal por el que se va a responder AHORA MISMO. En las pestañas MANDI y
   // REPUBLIC es la pestaña misma; en GENERAL lo fija el contacto que abres.
   // Arranca en CANAL_POR_DEFECTO (nunca vacío): un envío con Canal vacío sale
@@ -1857,9 +1872,9 @@ export default function App() {
   useEffect(() => { pasteRef.current = handlePaste })
   useEffect(() => {
     // Solo con el chat de WhatsApp a la vista: en SOCIAL / CONTACTOS /
-    // AUTOMATIZACIONES el chat sigue montado detrás, y pegar ahí dejaría una
+    // AUTOMATIZACIONES / FLUJOS el chat sigue montado detrás, y pegar ahí dejaría una
     // foto encolada en una conversación que ni se está viendo.
-    if (!activeConv || ['SOCIAL', 'CONTACTOS', 'AUTO'].includes(linea)) return
+    if (!activeConv || ['SOCIAL', 'CONTACTOS', 'AUTO', 'FLUJOS'].includes(linea)) return
     const alPegarEnLaPagina = (e) => {
       const el = e.target
       const escribiendo = el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)
@@ -2394,6 +2409,7 @@ export default function App() {
             { id:'SOCIAL',   label:'SOCIAL',   icon:'🌐', color:'#1877F2', sub:'FB · IG' },
             { id:'CONTACTOS',label:'CONTACTOS',icon:'👥', color:'#38bdf8', sub:'Directorio' },
             { id:'AUTO',     label:'AUTOS',    icon:'⚙️', color:'#f59e0b', sub:'Reglas' },
+            { id:'FLUJOS',   label:'FLUJOS',   icon:'🧭', color:'#a78bfa', sub:'Lienzo' },
           ].map(({ id, label, icon, color, sub, badge = 0, title, armado = false }) => (
             <button key={id} onClick={() => cambiarLinea(id)} title={title || label} style={{
               padding:'4px 16px', border:'none', cursor:'pointer', flexShrink:0, whiteSpace:'nowrap',
@@ -3062,6 +3078,11 @@ export default function App() {
         {/* ══════ AUTOMATIZACIONES ══════ — reglas on/off */}
         <div style={{ flex:1, display: linea === 'AUTO' ? 'flex' : 'none', overflow:'hidden', height:'100%' }}>
           <Automatizaciones active={linea === 'AUTO'} />
+        </div>
+
+        {/* ══════ FLUJOS ══════ — el lienzo de nodos */}
+        <div style={{ flex:1, display: linea === 'FLUJOS' ? 'flex' : 'none', overflow:'hidden', height:'100%' }}>
+          {flujosVisitado && <Flujos active={linea === 'FLUJOS'} />}
         </div>
 
         </div>{/* fin app-shell */}
