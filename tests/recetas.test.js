@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert'
-import { normalizarBotones, decidirReceta, piezasDeReceta, textoAvisoAnuncioNuevo } from '../lib/recetas.js'
+import { normalizarBotones, decidirReceta, piezasDeReceta, textoAvisoAnuncioNuevo, MAX_PIEZAS } from '../lib/recetas.js'
 
 const H = 3600 * 1000
 const AHORA = Date.parse('2026-09-14T15:00:00Z')
@@ -83,6 +83,22 @@ test('piezas: pregunta sin botones válidos sale como texto plano; sin texto no 
   const r2 = { ...receta, pasos: [], pregunta: { texto: '', botones: [{ title: 'M' }] } }
   assert.equal(piezasDeReceta({ receta: r2, respuestas, contacto }).length, 0)
 })
+test(`piezas: tope de ${MAX_PIEZAS} piezas por receta`, () => {
+  const conAdjuntos = { id: 'r-catalogo', text: 'Catálogo:', botones: [],
+    adjuntos: Array.from({ length: 10 }, (_, i) => ({ tipo: 'imagen', url: `https://x/${i}.jpg`, nombre: '' })) }
+  const soloTexto = (id, text) => ({ id, text, botones: [], adjuntos: [] })
+  const respuestasLargas = [conAdjuntos, soloTexto('r-a', 'a'), soloTexto('r-b', 'b'), soloTexto('r-c', 'c')]
+  const recetaLarga = { id: 'r_larga', nombre: 'Larga', activa: true,
+    pasos: [
+      { tipo: 'respuesta', respuestaId: 'r-catalogo' },
+      { tipo: 'respuesta', respuestaId: 'r-a' },
+      { tipo: 'respuesta', respuestaId: 'r-b' },
+      { tipo: 'respuesta', respuestaId: 'r-c' },
+    ],
+    pregunta: { texto: '¿Cuál te gustó?', botones: [] } }
+  const p = piezasDeReceta({ receta: recetaLarga, respuestas: respuestasLargas, contacto })
+  assert.equal(p.length, MAX_PIEZAS)
+})
 test('el alias manda sobre el nombre de Meta', () => {
   const p = piezasDeReceta({ receta, respuestas, contacto: { ...contacto, alias: 'Anita' } })
   assert.equal(p[0].Nombre, 'Anita')
@@ -97,4 +113,21 @@ test('aviso de anuncio nuevo: trae cuenta, titular, id y enlace', () => {
   assert.match(t, /Hoodie Luffy/)
   assert.match(t, /120253/)
   assert.match(t, /tab=autos/)
+})
+test('aviso de anuncio nuevo: sin receta pide configurarla; con receta avisa que ya tiene', () => {
+  const sinReceta = textoAvisoAnuncioNuevo({ cuenta: 'MANDI', titular: 'Hoodie Luffy', sourceId: '120253', url: 'https://x' })
+  assert.match(sinReceta, /Sin receta: nadie le contesta solo/)
+  const conReceta = textoAvisoAnuncioNuevo({ cuenta: 'MANDI', titular: 'Hoodie Luffy', sourceId: '120253', url: 'https://x', tieneReceta: true })
+  assert.match(conReceta, /Ya tiene receta asignada\./)
+  assert.doesNotMatch(conReceta, /Sin receta/)
+})
+test('aviso de anuncio nuevo: tipo post cambia el rótulo, anuncio de pauta no', () => {
+  const post = textoAvisoAnuncioNuevo({ cuenta: 'MANDI', titular: 'x', sourceId: '1', url: 'https://x', tipo: 'post' })
+  assert.match(post, /Publicación NUEVA en MANDI/)
+  const ad = textoAvisoAnuncioNuevo({ cuenta: 'MANDI', titular: 'x', sourceId: '1', url: 'https://x', tipo: 'ad' })
+  assert.match(ad, /Anuncio NUEVO en MANDI/)
+})
+test('aviso de anuncio nuevo: escapa HTML del titular', () => {
+  const t = textoAvisoAnuncioNuevo({ cuenta: 'MANDI', titular: '<b>x</b> & y', sourceId: '1', url: 'https://x' })
+  assert.match(t, /&lt;b&gt;x&lt;\/b&gt; &amp; y/)
 })

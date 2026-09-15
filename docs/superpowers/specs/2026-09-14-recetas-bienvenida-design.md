@@ -59,8 +59,9 @@ pregunta de botones. No quiere un creador de flujos con condiciones y esperas: q
 }
 ```
 
-- `merge()` del servidor es de UN nivel: `recetas.lista` es un arreglo y se **reemplaza
-  entero** (así lo guarda la pantalla); `recetas.por_anuncio` es objeto y se mezcla por clave.
+- `merge()` del servidor es de UN nivel: a la profundidad de `recetas.lista` y
+  `recetas.por_anuncio` (profundidad 2) no llega ningún merge por clave, así que
+  la pantalla manda **los dos completos**, arreglo y objeto por igual.
 - `pasos[].tipo` hoy solo admite `respuesta`. Es la puerta para `espera`, `condicion`, etc.
 - Una respuesta rápida borrada deja un paso huérfano: se **salta con log**, no rompe la receta.
 
@@ -145,7 +146,7 @@ pendientes y entregas fallidas).
 
 | módulo | qué hace | prueba |
 |---|---|---|
-| `lib/recetas.js` (puro) | `decidirReceta`, `piezasDeReceta`, `normalizarReceta`, `esAnuncioNuevo` | `tests/recetas.test.js` |
+| `lib/recetas.js` (puro) | `normalizarBotones`, `decidirReceta`, `piezasDeReceta`, `textoAvisoAnuncioNuevo` | `tests/recetas.test.js` |
 | `lib/inbox-supabase.js` | `registrarAnuncioVistoSupabase`, `marcarRecetaSupabase` (con guardia), `getAnunciosSupabase` | integración manual |
 | `app/api/webhook/route.js` | los pasos del §4 | prueba en vivo |
 | `app/api/anuncios/route.js` | GET lista + PATCH etiqueta | `tests/rutas-publicas.test.js` (NO es pública) |

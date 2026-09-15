@@ -147,9 +147,15 @@ export default function Automatizaciones({ active }) {
   const togRcG = (valor) => guardarInterruptor(
     { recetas: { activo: valor } },
     prev => ({ ...prev, recetas: { ...(prev?.recetas || {}), activo: valor } }))
+  // El patch sale de la última config GUARDADA (`orig`), no de `rc` (el estado en
+  // pantalla): si hay una edición a medio escribir en otra receta o en los pasos,
+  // apretar este switch NO puede publicarla de contrabando. La UI en memoria sí
+  // se actualiza completa, para que el switch se vea prendido al instante.
   const togReceta = (id, valor) => {
-    const lista = (rc.lista || []).map(r => r.id === id ? { ...r, activa: valor } : r)
-    guardarInterruptor({ recetas: { lista } }, prev => ({ ...prev, recetas: { ...(prev?.recetas || {}), lista } }))
+    const listaGuardada = (JSON.parse(orig || '{}')?.recetas?.lista) || []
+    const lista = listaGuardada.map(r => r.id === id ? { ...r, activa: valor } : r)
+    guardarInterruptor({ recetas: { lista } }, prev => ({ ...prev, recetas: { ...(prev?.recetas || {}),
+      lista: (prev?.recetas?.lista || []).map(r => r.id === id ? { ...r, activa: valor } : r) } }))
   }
   const nuevaReceta = () => setRc({ lista: [...(rc.lista || []), {
     id: 'r_' + Math.random().toString(36).slice(2, 8), nombre: 'Nueva receta', activa: true, pasos: [], pregunta: null,
@@ -160,7 +166,15 @@ export default function Automatizaciones({ active }) {
     setRc({ lista: (rc.lista || []).filter(r => r.id !== id), por_anuncio })
   }
   const duplicarReceta = (r) => setRc({ lista: [...(rc.lista || []), { ...r, id: 'r_' + Math.random().toString(36).slice(2, 8), nombre: r.nombre + ' (copia)' }] })
-  const asignar = (sourceId, recetaId) => setRc({ por_anuncio: { ...(rc.por_anuncio || {}), [sourceId]: recetaId || null } })
+  // Sin receta → se BORRA la clave, no se guarda `null`: un `null` explícito en
+  // `por_anuncio` es indistinguible de "todavía no se decidió" para quien lea el
+  // objeto por fuera de este componente (p. ej. un futuro reporte de cobertura).
+  const asignar = (sourceId, recetaId) => {
+    const por_anuncio = { ...(rc.por_anuncio || {}) }
+    if (recetaId) por_anuncio[sourceId] = recetaId
+    else delete por_anuncio[sourceId]
+    setRc({ por_anuncio })
+  }
   const moverPaso = (r, i, d) => {
     const pasos = [...r.pasos]; const j = i + d
     if (j < 0 || j >= pasos.length) return
@@ -170,7 +184,7 @@ export default function Automatizaciones({ active }) {
   const respuestaDe = (id) => respuestas.find(x => String(x.id) === String(id))
   const resumenRespuesta = (x) => {
     const n = (Array.isArray(x?.adjuntos) && x.adjuntos.length) ? x.adjuntos.length
-      : [x?.imageUrl, x?.imageUrl2, x?.imageUrl3, x?.imageUrl4, x?.imageUrl5].filter(Boolean).length
+      : [x?.imageUrl, ...Array.from({ length: 9 }, (_, i) => x?.[`imageUrl${i + 2}`])].filter(Boolean).length
     return `${String(x?.text || '').slice(0, 60)}${n ? ` · ${n} adj.` : ''}`
   }
   const guardarEtiqueta = async (sourceId, etiqueta) => {
@@ -400,7 +414,7 @@ export default function Automatizaciones({ active }) {
                 const nuevo = !a.fijo && !asignada
                 return (
                   <div key={a.source_id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 10, marginBottom: 6, border: `1px solid ${nuevo ? '#f59e0b55' : '#1e2d3d'}`, background: nuevo ? '#f59e0b0c' : 'transparent' }}>
-                    {a.imagen_url ? <img src={a.imagen_url} alt="" style={{ width: 36, height: 36, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }} /> : <div style={{ width: 36, height: 36, borderRadius: 8, background: '#1e2d3d', flexShrink: 0 }} />}
+                    {a.imagen_url ? <img src={a.imagen_url} alt="" onError={e => { e.currentTarget.style.display = 'none' }} style={{ width: 36, height: 36, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }} /> : <div style={{ width: 36, height: 36, borderRadius: 8, background: '#1e2d3d', flexShrink: 0 }} />}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       {a.fijo
                         ? <div style={{ fontSize: 13, fontWeight: 800, color: '#e2e8f0' }}>{a.etiqueta}</div>

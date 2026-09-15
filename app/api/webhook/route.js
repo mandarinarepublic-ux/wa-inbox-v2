@@ -245,26 +245,47 @@ async function procesar(nuevos, origin) {
     recetados.add(t)
     saludados.add(t)
     waitUntil((async () => {
-      let salieron = 0
-      for (const p of piezas) {
-        const r = await enviarSaliente(origin, p)
-        if (r?.ok) salieron++
-        else console.error('[/api/webhook] receta', receta.id, 'pieza rechazada', r?.status ?? 'red', m.telefono)
+      try {
+        let salieron = 0
+        for (const p of piezas) {
+          const r = await enviarSaliente(origin, p)
+          if (r?.ok) salieron++
+          else console.error('[/api/webhook] receta', receta.id, 'pieza rechazada', r?.status ?? 'red', m.telefono)
+        }
+        console.log('[/api/webhook] receta', receta.id, 'a', m.telefono, `${salieron}/${piezas.length} piezas`)
+        // Si NINGUNA pieza salió, el cliente quedó marcado (marcarReceta ya corrió)
+        // pero sin recibir nada por 24h: nadie más lo va a intentar. Sin este aviso
+        // el chat se pierde en silencio.
+        if (salieron === 0 && piezas.length > 0) {
+          await enviarTelegram(
+            `⚠️ <b>Receta sin enviar en ${CUENTA}</b>\n` +
+            `receta ${receta.id} a ${m.telefono}: 0/${piezas.length} piezas salieron. ` +
+            `El chat quedó marcado 24 h. Revisa /api/saliente en los logs de Vercel.`
+          ).catch(() => {})
+        }
+      } catch (e) {
+        // Nunca relanzar: esto corre desenganchado del loop principal (waitUntil),
+        // y una excepción acá no tiene a quién contarle nada más que al log.
+        console.error('[/api/webhook] receta tarea falló:', e.message)
       }
-      console.log('[/api/webhook] receta', receta.id, 'a', m.telefono, `${salieron}/${piezas.length} piezas`)
     })())
     return true
   }
 
   // Anuncio que el inbox ve por PRIMERA vez → un aviso por Telegram, una sola vez.
+  // La compuerta es `avisado_at is null`, NO "la fila se creó ahora" (`nuevo`):
+  // un anuncio pudo registrarse sin que el aviso saliera (Telegram caído, deploy a
+  // mitad de un envío) y esa fila sigue con `avisado_at` en null para siempre.
   async function anuncioVistoSiCorresponde(m) {
     const sourceId = String(m.referral?.source_id || '').trim()
     if (!sourceId) return
-    const { nuevo } = await registrarAnuncioVisto({ sourceId, referral: m.referral })
-    if (!nuevo) return
+    const { avisado } = await registrarAnuncioVisto({ sourceId, referral: m.referral })
+    if (avisado !== false) return
     const texto = textoAvisoAnuncioNuevo({
       cuenta: CUENTA, titular: m.referral?.headline || '', sourceId,
-      url: `${origin}/?tab=autos`,
+      url: origin,
+      tieneReceta: Boolean(auto?.recetas?.por_anuncio?.[sourceId]),
+      tipo: m.referral?.source_type,
     })
     const r = await enviarTelegram(texto)
     if (r?.ok) await marcarAvisoAnuncio(sourceId).catch(() => {})
