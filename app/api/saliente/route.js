@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { guardarMensajeSupabase } from '@/lib/inbox-supabase'
 import { limpiarPush } from '@/lib/contactos'
+import { borrarEstadoFlujo } from '@/lib/flujos'
 import { parseLinkpago, crearLinkPago, mensajeLinkPago } from '@/lib/dlocal'
 import { resolverMediaId, invalidarMediaId, esErrorDeMediaId, urlLiviana, META_PHONE_ID } from '@/lib/media-id'
 import { CANALES } from '@/lib/canales'
@@ -418,6 +419,11 @@ export async function POST(req) {
     if (!body.auto) {
       await limpiarPush(telSal)
         .catch(e => console.error('[/api/saliente] limpiar enfriamiento push:', e.message))
+      // Una persona contestó: el flujo automático de ese cliente se retira (spec §1:
+      // "cualquier mensaje humano cancela el flujo"). Las piezas del propio flujo
+      // salen con auto:true y no pasan por acá.
+      await borrarEstadoFlujo(telSal)
+        .catch(e => console.error('[/api/saliente] borrar estado de flujo:', e.message))
     }
 
     // citaOmitida = el mensaje SÍ se envió, pero sin la cita. La UI lo avisa.

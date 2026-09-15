@@ -10,6 +10,7 @@ const PUBLICAS = [
   '/api/webhook',            // Meta (WhatsApp) — 1035 llamadas en 24h
   '/api/social/webhook',     // Meta (FB/IG)
   '/api/cron/seguimientos',  // cron de Vercel, cada hora
+  '/api/cron/flujos',       // cron de Vercel, cada 5 min — esperas de los flujos
   '/api/cron/pendientes',    // cron de Vercel, cada 5 min — recordatorio Telegram
   '/api/pago-dlocal',        // dLocal, ya protegida con secreto en la URL
 ]

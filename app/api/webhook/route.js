@@ -2,7 +2,9 @@ import { NextResponse } from 'next/server'
 import { waitUntil } from '@vercel/functions'
 import { registrarContactoEntrante, getContactos, updateEstado, updateModoIA, marcarPush, marcarReceta, registrarAnuncioVisto, reclamarAvisoAnuncio, liberarAvisoAnuncio, updateTemperatura } from '@/lib/contactos'
 import { decidirReceta, piezasDeReceta, textoAvisoAnuncioNuevo, esc } from '@/lib/recetas'
-import { elegirFlujo, caminoLineal, piezasDeNodos, temperaturaAlPasar } from '@/lib/flujo'
+import { elegirFlujo, caminoLineal, decidirEntranteEnFlujo } from '@/lib/flujo'
+import { correrTanda } from '@/lib/flujo-motor'
+import { getEstadoFlujo, guardarEstadoFlujo, borrarEstadoFlujo, registrarPasos } from '@/lib/flujos'
 import { getRespuestas } from '@/lib/respuestas'
 import { enviarTelegram } from '@/lib/telegram'
 import { usaSupabaseLectura, CUENTA } from '@/lib/supabase'
@@ -320,6 +322,74 @@ async function procesar(nuevos, origin) {
     }
     return flujosCache
   }
+
+  // Lo que el motor de flujos (lib/flujo-motor.js) necesita del mundo, una vez
+  // por ciclo. `enviar` va por /api/saliente con auto:true, como todo lo
+  // automático: así NO reinicia el enfriamiento del push ni borra el estado.
+  const depsFlujo = {
+    enviar: (p) => enviarSaliente(origin, p),
+    guardarEstado: guardarEstadoFlujo,
+    borrarEstado: borrarEstadoFlujo,
+    registrarPasos,
+    setTemperatura: updateTemperatura,
+    avisar: (texto) => enviarTelegram(texto),
+    ahora: () => new Date(),
+    cuenta: CUENTA,
+    log: console.log,
+  }
+  const contactoParaFlujo = (m) => {
+    const c = contactos.find(x => tail9(x.telefono) === tail9(m.telefono)) || null
+    return {
+      telefono: m.telefono, nombre: m.nombre, alias: c?.alias || '', phoneId: m.phoneId,
+      temperatura: c?.temperatura || '', tieneVenta: Boolean(c?.idVenta), estado: c?.estado || 'pendiente',
+      // El snapshot es de ANTES de este mensaje: el último entrante es ESTE, ahora.
+      ultimoEntranteAt: new Date().toISOString(),
+    }
+  }
+
+  // ── Fase B: el cliente YA está dentro de un flujo → avanzar ──────────────
+  // Corre ANTES de evaluar disparadores: el que está gana (spec §4). Cuesta una
+  // lectura por clave primaria, y solo si hay algún flujo publicado en el ciclo.
+  async function flujoEnCursoSiCorresponde(m) {
+    if (!auto?.flujos?.activo) return false
+    const flujos = await flujosPublicados()
+    if (!flujos.length) return false
+    const estado = await getEstadoFlujo(m.telefono)
+      .catch(e => { console.error('[/api/webhook] estado de flujo:', e.message); return null })
+    if (!estado) return false
+    const flujo = flujos.find(f => String(f.flujo_id) === String(estado.flujo_id)) || null
+    // Un botón tocado llega como tipo 'texto' con el TÍTULO en `contenido`; el id
+    // (rc_N ↔ btn_N) está en el crudo. Una foto o un audio no traen texto.
+    const tipoCrudo = m.raw?.type
+    const entrante = {
+      botonId: m.raw?.interactive?.button_reply?.id || '',
+      texto: ['text', 'interactive', 'button'].includes(tipoCrudo) ? m.contenido : '',
+    }
+    const d = decidirEntranteEnFlujo({ estado, flujo, entrante, ahora: new Date() })
+    if (d.accion === 'borrar') {
+      console.log('[/api/webhook] flujo en curso se retira:', d.motivo, m.telefono)
+      await borrarEstadoFlujo(m.telefono).catch(() => {})
+      return false
+    }
+    if (d.accion === 'ignorar') {
+      // Está esperando un reloj: su mensaje va a PENDIENTES para una persona, y
+      // ningún OTRO flujo ni receta puede entrar encima (el que está gana).
+      recetados.add(tail9(m.telefono))
+      return false
+    }
+    // Si la IA tomó el chat mientras tanto, el flujo no compite con ella.
+    if (modoIAde(m.telefono, m.phoneId)) {
+      await borrarEstadoFlujo(m.telefono).catch(() => {})
+      return false
+    }
+    const respuestas = await respuestasRapidas()
+    waitUntil(correrTanda(depsFlujo, {
+      flujo, desde: d.desde, esDisparo: false, contacto: contactoParaFlujo(m),
+      wamidEntrante: m.wamid, ultimoWamid: m.wamid, respuestas,
+    }).catch(e => console.error('[/api/webhook] flujo en curso falló:', e.message)))
+    return true
+  }
+
   async function flujoSiCorresponde(m) {
     // Interruptor general de FLUJOS (AUTOS). Va PRIMERO: apagado, ni se lee la
     // tabla. Ver DEFAULTS.flujos en lib/automatizaciones.js.
@@ -346,52 +416,25 @@ async function procesar(nuevos, origin) {
     if (modoIAde(m.telefono, m.phoneId)) return false
     const t = tail9(m.telefono)
     if (recetados.has(t)) return false
-    const camino = caminoLineal(flujo.grafo_vivo)
-    if (camino.motivo !== 'fin') {
-      console.log('[/api/webhook] flujo', flujo.nombre, 'se detuvo en', camino.motivo, camino.detenidoEn, '(Fase B)')
-    }
-    const contacto = contactos.find(c => tail9(c.telefono) === t) || null
-    const piezas = piezasDeNodos({
-      nodos: camino.mensajes, respuestas: await respuestasRapidas(),
-      contacto: { telefono: m.telefono, nombre: m.nombre, alias: contacto?.alias || '', phoneId: m.phoneId },
-      // La primera pieza cita el mensaje del cliente, como "Responder" a mano.
-      citaId: m.wamid,
-    })
-    if (!piezas.length) {
-      console.warn('[/api/webhook] flujo', flujo.nombre, 'sin piezas que mandar (camino vacío o nodos huérfanos), no se marca', m.telefono)
+    // Guardia de forma (sin red): un flujo cuyo camino se rompe antes del primer
+    // mensaje no marca al cliente — si no, quedaría 24 h sin recibir nada.
+    const forma = caminoLineal(flujo.grafo_vivo)
+    if (forma.motivo === 'huerfano' && !forma.mensajes.length) {
+      console.warn('[/api/webhook] flujo', flujo.nombre, 'arranca roto, no se marca', m.telefono)
       return false
     }
     const { marcado } = await marcarReceta(m.telefono).catch(e => { console.error('[/api/webhook] marcar flujo:', e.message); return { marcado: false } })
     if (!marcado) return false
     recetados.add(t)
     saludados.add(t)
-    const temp = temperaturaAlPasar(camino.mensajes)
-    if (temp) await updateTemperatura(m.telefono, temp).catch(e => console.error('[/api/webhook] temperatura de flujo:', e.message))
-    waitUntil((async () => {
-      try {
-        let salieron = 0
-        for (const p of piezas) {
-          const r = await enviarSaliente(origin, p)
-          if (r?.ok) salieron++
-          else console.error('[/api/webhook] flujo', flujo.nombre, 'pieza rechazada', r?.status ?? 'red', m.telefono)
-        }
-        console.log('[/api/webhook] flujo', flujo.nombre, 'a', m.telefono, `${salieron}/${piezas.length} piezas`)
-        // Si NINGUNA pieza salió, el cliente quedó marcado (marcarReceta ya corrió)
-        // pero sin recibir nada por 24h: nadie más lo va a intentar. Sin este aviso
-        // el chat se pierde en silencio.
-        if (salieron === 0 && piezas.length > 0) {
-          await enviarTelegram(
-            `⚠️ <b>Flujo sin enviar en ${esc(CUENTA)}</b>\n` +
-            `flujo ${esc(flujo.nombre)} a ${esc(m.telefono)}: 0/${piezas.length} piezas salieron. ` +
-            `El chat quedó marcado 24 h. Revisa /api/saliente en los logs de Vercel.`
-          ).catch(() => {})
-        }
-      } catch (e) {
-        // Nunca relanzar: esto corre desenganchado del loop principal (waitUntil),
-        // y una excepción acá no tiene a quién contarle nada más que al log.
-        console.error('[/api/webhook] flujo tarea falló:', e.message)
-      }
-    })())
+    const respuestas = await respuestasRapidas()
+    const disparador = flujo.grafo_vivo.nodos.filter(Boolean).find(n => n.tipo === 'disparador')
+    // Mandar, guardar el estado (si se detiene en botones/espera), la temperatura
+    // y la alarma de 0/N: todo eso vive en correrTanda (lib/flujo-motor.js).
+    waitUntil(correrTanda(depsFlujo, {
+      flujo, desde: { nodoId: disparador.id, puerto: 'siguiente' }, esDisparo: true,
+      contacto: contactoParaFlujo(m), wamidEntrante: m.wamid, ultimoWamid: m.wamid, respuestas,
+    }).catch(e => console.error('[/api/webhook] flujo tarea falló:', e.message)))
     return true
   }
 
@@ -506,8 +549,14 @@ async function procesar(nuevos, origin) {
     // Flujo publicado (Fase A) primero; recetas de bienvenida solo mientras sigan
     // activas (se retiran en la Fase B). Si alguno salió, reemplaza al saludo
     // automático.
-    let conReceta = await flujoSiCorresponde(m)
-      .catch(e => { console.error('[/api/webhook] flujo:', e.message); return false })
+    // Primero, si el cliente ya está dentro de un flujo, se avanza ese (el que
+    // está gana: un entrante que dispararía otro flujo no reinicia nada).
+    let conReceta = await flujoEnCursoSiCorresponde(m)
+      .catch(e => { console.error('[/api/webhook] flujo en curso:', e.message); return false })
+    if (!conReceta) {
+      conReceta = await flujoSiCorresponde(m)
+        .catch(e => { console.error('[/api/webhook] flujo:', e.message); return false })
+    }
     if (!conReceta && auto?.recetas?.activo) {
       conReceta = await recetaSiCorresponde(m)
         .catch(e => { console.error('[/api/webhook] receta:', e.message); return false })
@@ -580,6 +629,9 @@ async function procesarEchoes(echoes) {
         direccion: 'SALIENTE', mediaId: e.mediaId, contextoId: e.contextoId,
         raw: e.raw, phoneId: e.phoneId,
       })
+      // Escrito desde el CELULAR (coexistencia) = una persona contestó → el flujo
+      // automático de ese cliente se retira, igual que al contestar desde el inbox.
+      await borrarEstadoFlujo(e.telefono).catch(() => {})
       if (e.mediaId) await archivarMedia({ mediaId: e.mediaId, wamid: e.wamid }).catch(() => {})
     } catch (err) {
       console.error('[/api/webhook echo]', e.wamid, err.message)
