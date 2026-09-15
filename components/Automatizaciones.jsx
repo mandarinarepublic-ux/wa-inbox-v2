@@ -44,12 +44,23 @@ export default function Automatizaciones({ active }) {
 
   const cargar = useCallback(async () => {
     setLoading(true)
-    const r = await getAutomatizaciones()
+    const [r, a, r2] = await Promise.all([
+      getAutomatizaciones(),
+      getAnuncios().catch(() => null),
+      fetchRepliesFromSheet().catch(() => []),
+    ])
     const c = r?.config || {}
-    setConfig(c); setOrig(JSON.stringify(c)); setLoading(false)
-    const [a, r2] = await Promise.all([getAnuncios().catch(() => null), fetchRepliesFromSheet().catch(() => [])])
+    setConfig(c); setOrig(JSON.stringify(c))
     setAnuncios(a?.anuncios || [])
     setRespuestas(Array.isArray(r2) ? r2 : [])
+    // Si alguna de las dos falló, la tarjeta sigue usable con lo que sí cargó,
+    // pero hay que avisar: si no, "ANUNCIOS VISTOS · 0" se ve como que no hay
+    // anuncios, no como que falló la carga.
+    if (!a?.ok || !Array.isArray(r2)) {
+      setToast('⚠️ No pude cargar anuncios o respuestas rápidas')
+      setTimeout(() => setToast(null), 2500)
+    }
+    setLoading(false)
   }, [])
 
   // Recarga CADA VEZ que se entra a la pestaña (no solo la primera): si el
@@ -398,7 +409,7 @@ export default function Automatizaciones({ active }) {
                             style={{ ...selectStyle, width: '100%', fontWeight: 800, color: '#e2e8f0', padding: '4px 6px' }} />}
                       <div style={{ fontSize: 11, color: '#64748b', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {nuevo && <b style={{ color: '#f59e0b', marginRight: 6 }}>NUEVO</b>}
-                        {a.titular || '(sin titular)'}{a.chats_30d != null ? ` · ${a.chats_30d} chats en 30 días` : ''}
+                        {a.titular || '(sin titular)'}{a.chats_30d != null ? ` · ${a.chats_30d} chats en 30 días` : ''}{a.ultimo_chat ? ` · último chat ${new Date(a.ultimo_chat).toLocaleString('es-EC', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : ''}
                       </div>
                     </div>
                     <select value={asignada} onChange={e => asignar(a.source_id, e.target.value)} style={selectStyle}>
