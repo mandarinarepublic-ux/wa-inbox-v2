@@ -19,3 +19,17 @@ test('tocar la IA no pisa los saludos ni los seguimientos', () => {
   assert.equal(nueva.seguimientos.caliente.horas, 23)
   assert.ok(nueva.saludo_nuevo.texto.length > 0)
 })
+
+test('las recetas de bienvenida arrancan APAGADAS y vacías', () => {
+  assert.equal(DEFAULTS.recetas.activo, false)
+  assert.deepEqual(DEFAULTS.recetas.lista, [])
+  assert.deepEqual(DEFAULTS.recetas.por_anuncio, {})
+})
+
+test('por_anuncio se reemplaza ENTERO (merge de un nivel): la pantalla lo manda completo', () => {
+  const base  = merge(DEFAULTS, { recetas: { por_anuncio: { '111': 'r_a' } } })
+  const nueva = merge(base,     { recetas: { por_anuncio: { '222': 'r_b' } } })
+  assert.equal(nueva.recetas.por_anuncio['111'], undefined)
+  assert.equal(nueva.recetas.por_anuncio['222'], 'r_b')
+  assert.equal(nueva.recetas.activo, false) // lo que no se manda se conserva
+})
