@@ -1,7 +1,7 @@
 // components/flujos/grafo-reactflow.js — el puente entre el GRAFO y el LIENZO.
 //
 // La fuente de la verdad es siempre el grafo de `lib/flujo.js`
-// (`{ nodos:[{id,tipo,pos,datos}], lineas:[{id,de,puerto,a,esperaMin}] }`): es lo
+// (`{ nodos:[{id,tipo,pos,datos}], lineas:[{id,de,puerto,a,esperaMin,esperaSeg?}] }`): es lo
 // que se guarda, lo que se valida y lo que ejecuta el motor. React Flow tiene su
 // propio vocabulario (`nodes`/`edges`, `type`, `position`, `data`, `sourceHandle`)
 // y lo llena de cosas suyas al vuelo — `selected`, `dragging`, `measured`,
@@ -16,8 +16,10 @@
 //
 // Sin JSX ni React a propósito: así `node --test` lo puede importar tal cual.
 
-/** '⏱ 1 h 30 min' · '⏱ 45 min' · '⏱ 2 h'. Vacío si no hay espera. */
-export function etiquetaEspera(min) {
+/** '⏱ 3 s' · '⏱ 1 h 30 min' · '⏱ 45 min' · '⏱ 2 h'. Vacío si no hay espera. */
+export function etiquetaEspera(min, seg = 0) {
+  const s = Math.round(Number(seg) || 0)
+  if (s > 0 && !(Number(min) > 0)) return `⏱ ${s} s`
   const m = Math.round(Number(min) || 0)
   if (!m || m < 0) return ''
   const horas = Math.floor(m / 60)
@@ -48,14 +50,15 @@ export function aReactFlow(grafo) {
 
   const edges = lineas.map((l) => {
     const espera = Number(l.esperaMin) || 0
+    const seg = Number(l.esperaSeg) || 0
     return {
       id: l.id,
       source: l.de,
       sourceHandle: l.puerto,
       target: l.a,
       targetHandle: 'in',
-      label: espera ? etiquetaEspera(espera) : '',
-      data: { esperaMin: espera },
+      label: etiquetaEspera(espera, seg),
+      data: { esperaMin: espera, esperaSeg: seg },
     }
   })
 
@@ -73,13 +76,20 @@ export function deReactFlow(nodes, edges) {
     datos: { ...(n.data || {}) },
   }))
 
-  const lineas = (Array.isArray(edges) ? edges : []).filter(Boolean).map((e) => ({
-    id: e.id,
-    de: e.source,
-    puerto: e.sourceHandle,
-    a: e.target,
-    esperaMin: Number(e.data?.esperaMin) || 0,
-  }))
+  const lineas = (Array.isArray(edges) ? edges : []).filter(Boolean).map((e) => {
+    const linea = {
+      id: e.id,
+      de: e.source,
+      puerto: e.sourceHandle,
+      a: e.target,
+      esperaMin: Number(e.data?.esperaMin) || 0,
+    }
+    // `esperaSeg` solo si hay pausa: así un flujo guardado antes de que existieran
+    // los segundos no aparece "con cambios sin guardar" por el solo hecho de abrirlo.
+    const seg = Number(e.data?.esperaSeg) || 0
+    if (seg > 0) linea.esperaSeg = seg
+    return linea
+  })
 
   return { nodos, lineas }
 }

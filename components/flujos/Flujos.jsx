@@ -278,7 +278,7 @@ function Lienzo({ active }) {
       return
     }
     setEdges((eds) => addEdge({
-      ...c, id: nuevoIdLocal('l'), targetHandle: 'in', label: '', data: { esperaMin: 0 },
+      ...c, id: nuevoIdLocal('l'), targetHandle: 'in', label: '', data: { esperaMin: 0, esperaSeg: 0 },
     }, eds))
   }, [avisar, getEdges, setEdges])
 
@@ -328,11 +328,13 @@ function Lienzo({ active }) {
     setEdges((es) => es.filter((e) => e.source !== id || puertos.includes(e.sourceHandle)))
   }, [seleccion, getNodes, setNodes, setEdges])
 
-  const cambiarEspera = useCallback((esperaMin) => {
+  // Recibe las DOS esperas juntas: el editor de la línea limpia la que no se usa
+  // (segundos = pausa de corrido · minutos/horas = el flujo se detiene).
+  const cambiarEspera = useCallback(({ esperaMin = 0, esperaSeg = 0 } = {}) => {
     if (seleccion?.tipo !== 'linea') return
     const id = seleccion.id
     setEdges((es) => es.map((e) => (e.id === id
-      ? { ...e, data: { ...(e.data || {}), esperaMin }, label: esperaMin ? etiquetaEspera(esperaMin) : '' }
+      ? { ...e, data: { ...(e.data || {}), esperaMin, esperaSeg }, label: etiquetaEspera(esperaMin, esperaSeg) }
       : e)))
   }, [seleccion, setEdges])
 
@@ -408,12 +410,14 @@ function Lienzo({ active }) {
   // ── Pintado ────────────────────────────────────────────────────────────────
   const edgesPintados = useMemo(() => edges.map((e) => {
     const espera = Number(e.data?.esperaMin) || 0
+    const pausa = Number(e.data?.esperaSeg) || 0
     const roto = !!erroresPorLinea[e.id]
     return {
       ...e,
-      // La espera se ve punteada: en Fase A esa línea todavía no corre.
+      // Punteada = espera en minutos u horas (el flujo se detiene y lo retoma el
+      // cron). Continua y morada = pausa en segundos (sigue de corrido).
       style: {
-        stroke: roto ? '#f87171' : espera ? '#94a3b8' : '#334155',
+        stroke: roto ? '#f87171' : espera ? '#94a3b8' : pausa ? '#a78bfa' : '#334155',
         strokeWidth: e.selected ? 2.4 : 1.6,
         strokeDasharray: espera ? '6 4' : undefined,
       },

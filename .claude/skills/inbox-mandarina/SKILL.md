@@ -185,7 +185,7 @@ título o la dirección en `contenido`. Quien decide por `m.tipo === 'texto'` tr
 
 > `flujoEnCursoSiCorresponde` (webhook) es quien lee ese id para avanzar el flujo, en
 > los DOS repos (IND lo recibió el 15-sep-2026). ⚠️ En IND corre en background y EN
-> COLA por lote (`colaAutomaticos`): su loop es el camino síncrono del 200 a Meta.
+> COLA POR CLIENTE (`colasAutomaticos`): su loop es el camino síncrono del 200 a Meta.
 
 ---
 

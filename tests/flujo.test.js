@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert'
-import { normalizarTexto, nodoDisparador, puertosDe, validarFlujo, choquesDeDisparador, elegirFlujo, caminoLineal, piezasDeNodos, temperaturaAlPasar, recetaAFlujo, nuevoGrafo, avanzarDesde, evaluarCondicion, puertoDeEntrante, paradaDeCamino, citaDeTanda, ventanaAbierta, horaEcuador, decidirEntranteEnFlujo, decidirVencido } from '../lib/flujo.js'
+import { normalizarTexto, nodoDisparador, puertosDe, validarFlujo, choquesDeDisparador, elegirFlujo, caminoLineal, piezasDeNodos, temperaturaAlPasar, recetaAFlujo, nuevoGrafo, avanzarDesde, evaluarCondicion, puertoDeEntrante, paradaDeCamino, citaDeTanda, ventanaAbierta, horaEcuador, decidirEntranteEnFlujo, decidirVencido, MAX_ESPERA_SEG, MAX_PAUSA_TANDA_SEG } from '../lib/flujo.js'
 import { MAX_PIEZAS } from '../lib/recetas.js'
 
 const D = (datos) => ({ id: 'd', tipo: 'disparador', pos: { x: 0, y: 0 }, datos })
@@ -301,4 +301,50 @@ test('decidirVencido: ventana abierta y flujo vivo → seguir saltando la espera
   assert.equal(decidirVencido({ estado, flujo: null, contacto: abierta, ahora }).accion, 'borrar')
   assert.equal(decidirVencido({ estado: { ...estado, nodo_id: 'zzz' }, flujo, contacto: abierta, ahora }).accion, 'borrar')
   assert.equal(decidirVencido({ estado, flujo, contacto: null, ahora }).accion, 'borrar')
+})
+
+// ── Pausas en segundos (15-sep-2026) ─────────────────────────────────────────
+const LS = (de, a, seg, puerto = 'siguiente') => ({ ...L(de, a, puerto), esperaSeg: seg })
+const conPausas = { nodos: [D({ tipo: 'organico' }), M('a', {}), M('b', {}), F], lineas: [LS('d', 'a', 5), LS('a', 'b', 3), L('b', 'f')] }
+
+test('pausa en segundos: NO detiene el camino y queda alineada con cada mensaje', () => {
+  const r = caminoLineal(conPausas)
+  assert.equal(r.motivo, 'fin')
+  assert.deepEqual(r.mensajes.map(n => n.id), ['a', 'b'])
+  assert.deepEqual(r.pausasSeg, [5, 3])
+})
+test('pausa en segundos antes de una Condición se suma a la del siguiente mensaje', () => {
+  const g = { nodos: [D({ tipo: 'organico' }), M('a', {}), C('c', { campo: 'temperatura', valor: 'caliente' }), M('b', {}), F], lineas: [L('d', 'a'), LS('a', 'c', 4), LS('c', 'b', 2, 'si'), L('b', 'f')] }
+  const r = avanzarDesde(g, { nodoId: 'd', puerto: 'siguiente', evaluar: () => true })
+  assert.deepEqual(r.mensajes.map(n => n.id), ['a', 'b'])
+  assert.deepEqual(r.pausasSeg, [0, 6])
+})
+test('validarFlujo: pausa válida pasa; basura, más del tope o segundos + minutos en la misma línea son error', () => {
+  assert.deepEqual(validarFlujo(conPausas), [])
+  const con = (linea) => ({ nodos: [D({ tipo: 'organico' }), M('a', {}), F], lineas: [L('d', 'a'), linea] })
+  assert.ok(validarFlujo(con({ ...L('a', 'f'), esperaSeg: 'tres' })).some(e => e.lineaId))
+  assert.ok(validarFlujo(con(LS('a', 'f', MAX_ESPERA_SEG + 1))).some(e => e.lineaId))
+  assert.ok(validarFlujo(con({ ...L('a', 'f', 'siguiente', 10), esperaSeg: 3 })).some(e => /segundos y minutos/.test(e.texto)))
+})
+test('validarFlujo: un ciclo hecho solo de pausas en SEGUNDOS sigue siendo un ciclo sin espera', () => {
+  const g = { nodos: [D({ tipo: 'organico' }), M('a', {}), M('b', {})], lineas: [L('d', 'a'), LS('a', 'b', 5), LS('b', 'a', 5)] }
+  assert.ok(validarFlujo(g).some(e => /ciclo/i.test(e.texto)))
+})
+test('piezasDeNodos: la pausa va en la PRIMERA pieza del nodo; un nodo sin piezas pasa su pausa al siguiente', () => {
+  const rs = [{ id: 'r1', text: 'Saludo', botones: [], adjuntos: [{ tipo: 'imagen', url: 'https://x/1.jpg', nombre: '' }] }]
+  const nodos = [M('a', { origen: 'respuesta', respuestaId: 'r1' }), M('perdido', { origen: 'respuesta', respuestaId: 'no-existe' }), M('b', {})]
+  const piezas = piezasDeNodos({ nodos, respuestas: rs, contacto, pausasSeg: [5, 3, 2] })
+  assert.equal(piezas.length, 3) // texto de a · foto de a · texto de b
+  assert.equal(piezas[0]._esperaSeg, 5)
+  assert.equal(piezas[1]._esperaSeg, undefined)
+  assert.equal(piezas[2]._esperaSeg, 5) // 3 del nodo sin piezas + 2 propios
+})
+test('piezasDeNodos: las pausas de una tanda se recortan a MAX_PAUSA_TANDA_SEG en total', () => {
+  const piezas = piezasDeNodos({ nodos: [M('a', {}), M('b', {}), M('c', {})], respuestas: [], contacto, pausasSeg: [20, 20, 5] })
+  assert.deepEqual(piezas.map(p => p._esperaSeg), [20, MAX_PAUSA_TANDA_SEG - 20, undefined])
+})
+test('piezasDeNodos: sin pausas, ninguna pieza lleva el campo interno', () => {
+  const piezas = piezasDeNodos({ nodos: [M('a', {}), M('b', {})], respuestas: [], contacto, citaId: 'w1' })
+  assert.ok(piezas.every(p => !('_esperaSeg' in p)))
+  assert.equal(piezas[0].ContextoId, 'w1')
 })

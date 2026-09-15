@@ -39,7 +39,20 @@ Hoy no corre nada nuevo en producción: con 0 flujos publicados el webhook ni le
   `HH:MM-HH:MM`, que puede cruzar la medianoche. Todo lo raro va por "no".
 - Todo termina en PENDIENTES: el motor nunca toca la bandeja.
 
-## Dónde vive cada cosa
+## Pausas en segundos en las líneas (15-sep, tarde)
+
+- La cajita de la línea ahora tiene **segundos**, además de minutos y horas. Segundos = pausa corta y el
+  flujo sigue de corrido (`esperaSeg`). Minutos u horas = el flujo se detiene y lo retoma el cron (`esperaMin`).
+  Una línea tiene una o la otra: elegir una unidad limpia la otra.
+- Topes: **20 s por línea** y **30 s sumando una tanda**. La tanda corre dentro del webhook, que vive 60 s.
+  Lo que pasa del tope se recorta con aviso en el log; ninguna pieza se pierde.
+- La pausa viaja en `_esperaSeg` de la primera pieza de cada mensaje; `correrTanda` la espera y la saca antes
+  de llamar a `/api/saliente`. Una pausa antes de una Condición o de un nodo sin piezas pasa al siguiente mensaje.
+- Un ciclo hecho solo de pausas en segundos sigue siendo "ciclo sin espera" (no termina nunca).
+- El cron procesa los clientes vencidos **en paralelo, de a 20** (máx. 40 por pasada): en fila, dos tandas con
+  pausas ya pasarían los 60 s.
+- En el lienzo, la línea con pausa en segundos se ve **continua y morada** con "⏱ 3 s"; la de minutos, punteada.
+
 
 | pieza | archivo |
 |---|---|

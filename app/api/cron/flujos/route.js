@@ -41,7 +41,7 @@ export async function GET(req) {
   const ahora = new Date()
   const caducados = await borrarEstadosCaducados(ahora.toISOString())
     .catch(e => { console.error('[/api/cron/flujos] caducados:', e.message); return { borrados: -1 } })
-  const vencidos = await getEstadosVencidos(ahora.toISOString())
+  const vencidos = await getEstadosVencidos(ahora.toISOString(), 40)
     .catch(e => { console.error('[/api/cron/flujos] vencidos:', e.message); return [] })
   if (!vencidos.length) return NextResponse.json({ ok: true, vencidos: 0, caducados: caducados.borrados })
 
@@ -65,14 +65,17 @@ export async function GET(req) {
 
   const seguidos = []
   const borrados = []
-  for (const estado of vencidos) {
+  // Clientes distintos EN PARALELO, de a 20. Con las pausas en segundos una tanda
+  // puede tardar hasta ~40 s: en fila, dos clientes ya pasarían los 60 s del cron.
+  // Los que no alcancen quedan vencidos y los toma la pasada siguiente (5 min).
+  const procesarUno = async (estado) => {
     const flujo = flujos.find(f => String(f.flujo_id) === String(estado.flujo_id)) || null
     const c = contactos.find(x => tail9(x.telefono) === tail9(estado.telefono)) || null
     const d = decidirVencido({ estado, flujo, contacto: c, ahora })
     if (d.accion === 'borrar') {
       await borrarEstadoFlujo(estado.telefono).catch(() => {})
       borrados.push({ telefono: estado.telefono, motivo: d.motivo })
-      continue
+      return
     }
     try {
       const r = await correrTanda(deps, {
@@ -90,6 +93,9 @@ export async function GET(req) {
       await borrarEstadoFlujo(estado.telefono).catch(() => {})
       borrados.push({ telefono: estado.telefono, motivo: 'error: ' + e.message })
     }
+  }
+  for (let i = 0; i < vencidos.length; i += 20) {
+    await Promise.all(vencidos.slice(i, i + 20).map(procesarUno))
   }
   console.log('[/api/cron/flujos]', `vencidos ${vencidos.length} · seguidos ${seguidos.length} · borrados ${borrados.length} · caducados ${caducados.borrados}`)
   return NextResponse.json({ ok: true, vencidos: vencidos.length, seguidos, borrados, caducados: caducados.borrados })

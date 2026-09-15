@@ -11,7 +11,7 @@
 // React reusaría el componente y se vería la palabra del nodo anterior.
 import React, { useState } from 'react'
 import { MAX_BOTONES, MAX_TITULO } from '@/lib/recetas'
-import { MAX_ESPERA_MIN } from '@/lib/flujo'
+import { MAX_ESPERA_MIN, MAX_ESPERA_SEG, MAX_PAUSA_TANDA_SEG } from '@/lib/flujo'
 import { adjuntosDeRespuesta } from '@/lib/adjuntos-respuesta'
 import { EMOJI_TEMP } from './nodos'
 
@@ -294,21 +294,28 @@ function EditorCondicion({ datos, onCambiar }) {
 
 // ── Línea ─────────────────────────────────────────────────────────────────────
 
-function EditorLinea({ esperaMin, onCambiar }) {
+function EditorLinea({ esperaMin, esperaSeg, onCambiar }) {
   // El estado vive acá porque "2" y "2 h" son la misma espera escrita de dos
-  // formas: si el número se recalculara desde `esperaMin` en cada tecla, cambiar
-  // la unidad de min a h reescribiría el número que la persona está tecleando.
-  const enHoras = esperaMin > 0 && esperaMin % 60 === 0
-  const [unidad, setUnidad] = useState(enHoras ? 'h' : 'min')
-  const [valor, setValor] = useState(esperaMin ? String(enHoras ? esperaMin / 60 : esperaMin) : '')
+  // formas: si el número se recalculara en cada tecla, cambiar la unidad
+  // reescribiría el número que la persona está tecleando.
+  //
+  // SEGUNDOS no es "minutos con otra escala": una pausa en segundos se espera en el
+  // mismo envío (el flujo sigue de corrido); una en minutos u horas DETIENE el flujo
+  // y lo retoma el cron. Por eso van en campos distintos (`esperaSeg` / `esperaMin`)
+  // y elegir una unidad limpia la otra.
+  const enSeg = esperaSeg > 0
+  const enHoras = !enSeg && esperaMin > 0 && esperaMin % 60 === 0
+  const [unidad, setUnidad] = useState(enSeg ? 's' : enHoras ? 'h' : 'min')
+  const [valor, setValor] = useState(enSeg ? String(esperaSeg) : esperaMin ? String(enHoras ? esperaMin / 60 : esperaMin) : '')
 
   const aplicar = (v, u) => {
     setValor(v); setUnidad(u)
     const n = String(v).trim()
-    if (!n) { onCambiar(0); return }              // vacío = inmediato
+    if (!n) { onCambiar({ esperaMin: 0, esperaSeg: 0 }); return }  // vacío = inmediato
     const num = Number(n)
-    if (!Number.isFinite(num) || num < 0) return  // basura: no se toca el grafo
-    onCambiar(Math.min(Math.round(u === 'h' ? num * 60 : num), MAX_ESPERA_MIN))
+    if (!Number.isFinite(num) || num < 0) return                     // basura: no se toca el grafo
+    if (u === 's') { onCambiar({ esperaMin: 0, esperaSeg: Math.min(Math.round(num), MAX_ESPERA_SEG) }); return }
+    onCambiar({ esperaMin: Math.min(Math.round(u === 'h' ? num * 60 : num), MAX_ESPERA_MIN), esperaSeg: 0 })
   }
 
   return (
@@ -316,13 +323,16 @@ function EditorLinea({ esperaMin, onCambiar }) {
       <div style={{ display: 'flex', gap: 6 }}>
         <input type="number" min="0" value={valor} onChange={(e) => aplicar(e.target.value, unidad)}
           placeholder="0" style={{ ...estiloCampo, flex: 1, minWidth: 0 }} />
-        <select value={unidad} onChange={(e) => aplicar(valor, e.target.value)} style={{ ...estiloCampo, width: 90, flexShrink: 0 }}>
+        <select value={unidad} onChange={(e) => aplicar(valor, e.target.value)} style={{ ...estiloCampo, width: 96, flexShrink: 0 }}>
+          <option value="s">segundos</option>
           <option value="min">minutos</option>
           <option value="h">horas</option>
         </select>
       </div>
-      <div style={{ fontSize: 10, color: '#64748b', marginTop: 6 }}>
-        En blanco = sale de inmediato. Tope {MAX_ESPERA_MIN / 60} h: después de 24 h Meta cierra la ventana.
+      <div style={{ fontSize: 10, color: '#64748b', marginTop: 6, lineHeight: 1.5 }}>
+        En blanco = sale de inmediato.<br />
+        <b>Segundos</b>: pausa corta entre mensajes; el flujo sigue de corrido (tope {MAX_ESPERA_SEG} s por línea y {MAX_PAUSA_TANDA_SEG} s por envío).<br />
+        <b>Minutos u horas</b>: el flujo se detiene y sigue después (tope {MAX_ESPERA_MIN / 60} h: después de 24 h Meta cierra la ventana).
       </div>
     </Bloque>
   )
@@ -334,7 +344,7 @@ const TITULOS = { disparador: '📣 Disparador', mensaje: '💬 Mensaje', condic
 
 /**
  * `nodo` = el nodo de React Flow seleccionado ({ id, type, data }) · `linea` = la
- * línea seleccionada ({ id, data:{esperaMin} }). Nunca los dos a la vez.
+ * línea seleccionada ({ id, data:{esperaMin, esperaSeg} }). Nunca los dos a la vez.
  */
 export default function PanelEdicion({ nodo, linea, anuncios, respuestas, errores = [], onCambiarNodo, onCambiarLinea }) {
   if (!nodo && !linea) {
@@ -364,7 +374,7 @@ export default function PanelEdicion({ nodo, linea, anuncios, respuestas, errore
           El Fin no tiene nada que configurar. Termine como termine, el chat queda en PENDIENTES.
         </div>
       )}
-      {linea && <EditorLinea esperaMin={Number(linea.data?.esperaMin) || 0} onCambiar={onCambiarLinea} />}
+      {linea && <EditorLinea esperaMin={Number(linea.data?.esperaMin) || 0} esperaSeg={Number(linea.data?.esperaSeg) || 0} onCambiar={onCambiarLinea} />}
 
       {errores.length > 0 && (
         <div style={{ marginTop: 10, padding: 10, borderRadius: 8, background: 'rgba(248,113,113,.08)', border: '1px solid rgba(248,113,113,.35)' }}>

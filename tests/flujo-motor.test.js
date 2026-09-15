@@ -103,3 +103,16 @@ test('correrTanda: camino roto → no manda, borra estado; un fallo en pasos o t
   const r2 = await correrTanda(dos.deps, { flujo: flujo(grafo), desde: desdeD, esDisparo: true, contacto, wamidEntrante: 'w', ultimoWamid: 'w', respuestas: [] })
   assert.equal(r2.salieron, 1)
 })
+
+test('correrTanda: espera las pausas en segundos ANTES de cada pieza y no manda el campo interno', async () => {
+  const { deps, reg } = depsFalsas()
+  const esperas = []
+  deps.dormir = async (ms) => { esperas.push(ms); reg.orden.push(`dormir ${ms}`) }
+  const grafo = { nodos: [D({ tipo: 'organico' }), M('a', {}), M('b', {}), F], lineas: [{ ...L('d', 'a'), esperaSeg: 5 }, { ...L('a', 'b'), esperaSeg: 3 }, L('b', 'f')] }
+  const r = await correrTanda(deps, { flujo: flujo(grafo), desde: desdeD, esDisparo: true, contacto, wamidEntrante: 'w', ultimoWamid: 'w', respuestas: [] })
+  assert.equal(r.salieron, 2)
+  assert.deepEqual(esperas, [5000, 3000])
+  assert.deepEqual(reg.orden.filter(x => x !== 'borrar'), ['dormir 5000', 'enviar', 'dormir 3000', 'enviar'])
+  assert.ok(reg.enviadas.every(p => !('_esperaSeg' in p)))
+  assert.equal(reg.enviadas[0].ContextoId, 'w')
+})
