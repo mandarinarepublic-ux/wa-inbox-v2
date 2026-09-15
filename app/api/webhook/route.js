@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server'
 import { waitUntil } from '@vercel/functions'
-import { registrarContactoEntrante, getContactos, updateEstado, updateModoIA, marcarPush } from '@/lib/contactos'
-import { usaSupabaseLectura } from '@/lib/supabase'
+import { registrarContactoEntrante, getContactos, updateEstado, updateModoIA, marcarPush, marcarReceta, registrarAnuncioVisto, marcarAvisoAnuncio } from '@/lib/contactos'
+import { decidirReceta, piezasDeReceta, textoAvisoAnuncioNuevo } from '@/lib/recetas'
+import { getRespuestas } from '@/lib/respuestas'
+import { enviarTelegram } from '@/lib/telegram'
+import { usaSupabaseLectura, CUENTA } from '@/lib/supabase'
 import { guardarMensajeSupabase, existeWamidSupabase, guardarEventoCrudoSupabase, actualizarEstadoEntregaSupabase, asegurarConversacionSalienteSupabase } from '@/lib/inbox-supabase'
 import { archivarMedia } from '@/lib/media-archive'
 import { parseLinkpago, crearLinkPago, mensajeLinkPago } from '@/lib/dlocal'
@@ -183,6 +186,66 @@ async function procesar(nuevos, origin) {
     }
   }
 
+  // ── Recetas de bienvenida por anuncio ──────────────────────────────────────
+  // Ver lib/recetas.js. Devuelve true si SALIÓ una receta (entonces el saludo
+  // automático no se manda: la receta ya saludó).
+  //
+  // Orden que importa:
+  //   1. marcarReceta ANTES de enviar, con guardia → una reentrega de Meta no
+  //      duplica el paquete (el segundo proceso ve `marcado:false` y se va).
+  //   2. Las piezas salen UNA a UNA con await: el cliente las ve en el orden
+  //      que Rodrigo cargó (texto → fotos → voz → pregunta).
+  //   3. Una pieza rechazada se registra con su código y se sigue: mejor un
+  //      paquete incompleto que uno mudo.
+  let respuestasCache = null
+  const respuestasRapidas = async () => {
+    if (!respuestasCache) respuestasCache = await getRespuestas().catch(() => [])
+    return respuestasCache
+  }
+  const recetados = new Set()
+  async function recetaSiCorresponde(m) {
+    if (!auto?.recetas?.activo) return false
+    const t = tail9(m.telefono)
+    if (recetados.has(t)) return false
+    const sourceId = String(m.referral?.source_id || '').trim()
+    const contacto = contactos.find(c => tail9(c.telefono) === t) || null
+    const receta = decidirReceta({
+      config: auto, sourceId, esNuevo: esNuevoDe(m.telefono),
+      contacto: { ...(contacto || {}), telefono: m.telefono, nombre: m.nombre, phoneId: m.phoneId },
+      botActivo: modoIAde(m.telefono, m.phoneId),
+    })
+    if (!receta) return false
+    recetados.add(t)
+    const { marcado } = await marcarReceta(m.telefono).catch(e => { console.error('[/api/webhook] marcar receta:', e.message); return { marcado: false } })
+    if (!marcado) return false
+    const piezas = piezasDeReceta({
+      receta, respuestas: await respuestasRapidas(),
+      contacto: { telefono: m.telefono, nombre: m.nombre, alias: contacto?.alias || '', phoneId: m.phoneId },
+    })
+    let salieron = 0
+    for (const p of piezas) {
+      const r = await enviarSaliente(origin, p)
+      if (r?.ok) salieron++
+      else console.error('[/api/webhook] receta', receta.id, 'pieza rechazada', r?.status ?? 'red', m.telefono)
+    }
+    console.log('[/api/webhook] receta', receta.id, 'a', m.telefono, `${salieron}/${piezas.length} piezas`)
+    return salieron > 0
+  }
+
+  // Anuncio que el inbox ve por PRIMERA vez → un aviso por Telegram, una sola vez.
+  async function anuncioVistoSiCorresponde(m) {
+    const sourceId = String(m.referral?.source_id || '').trim()
+    if (!sourceId) return
+    const { nuevo } = await registrarAnuncioVisto({ sourceId, referral: m.referral })
+    if (!nuevo) return
+    const texto = textoAvisoAnuncioNuevo({
+      cuenta: CUENTA, titular: m.referral?.headline || '', sourceId,
+      url: `${origin}/?tab=autos`,
+    })
+    const r = await enviarTelegram(texto)
+    if (r?.ok) await marcarAvisoAnuncio(sourceId).catch(() => {})
+  }
+
   // Archivado de fotos entrantes a Supabase Storage (URL estable en media_url).
   // Corre concurrente con la IA; lo esperamos al final para que waitUntil no mate
   // la función antes de terminar. Solo en modo supabase (la fila ya está insertada).
@@ -253,10 +316,20 @@ async function procesar(nuevos, origin) {
         .catch(e => console.error('[/api/webhook] reabrir a PENDIENTE:', e.message))
     }
 
+    // Anuncio nuevo → aviso. Nunca lanza, nunca frena el resto.
+    await anuncioVistoSiCorresponde(m)
+      .catch(e => console.error('[/api/webhook] anuncio visto:', e.message))
+
+    // Receta de bienvenida por anuncio. Si salió, reemplaza al saludo automático.
+    const conReceta = await recetaSiCorresponde(m)
+      .catch(e => { console.error('[/api/webhook] receta:', e.message); return false })
+
     // Saludo automático (bienvenida a nuevo / "hola de vuelta" al reactivarse).
     // Va antes de LINKPAGO/IA y solo dispara con la IA apagada.
-    await saludarSiCorresponde(m.telefono, m.nombre, m.phoneId)
-      .catch(e => console.error('[/api/webhook] saludo:', e.message))
+    if (!conReceta) {
+      await saludarSiCorresponde(m.telefono, m.nombre, m.phoneId)
+        .catch(e => console.error('[/api/webhook] saludo:', e.message))
+    }
 
     // LINKPAGO<monto> entrante → genera link dLocal y lo devuelve al remitente.
     // Funciona SIEMPRE (independiente del modo IA), como el flujo viejo de Make.
