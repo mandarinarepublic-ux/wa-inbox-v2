@@ -53,3 +53,7 @@ test('la lista no está vacía ni es un comodín', () => {
   assert.ok(COLS_CONTACTO.length > 20)
   assert.equal(COLS_CONTACTO.includes('*'), false)
 })
+
+test('la ficha trae ultimaRecetaAt y la columna ultima_receta_at está pedida', () => {
+  assert.ok(COLS_CONTACTO.includes('ultima_receta_at'))
+})
