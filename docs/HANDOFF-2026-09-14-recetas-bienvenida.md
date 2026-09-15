@@ -36,6 +36,9 @@ hace que el 50 % vuelva a escribir, contra 35 % si se tarda más de 4 h.
 - El envío corre en su propia tarea (`waitUntil`) para no tener de rehén al guardado de los demás
   mensajes del lote. El webhook tiene `maxDuration = 60`.
 - Una respuesta rápida borrada deja un paso huérfano: se salta con log y la pantalla lo pinta en rojo.
+- **La primera pieza sale citando el mensaje del cliente**, como cuando tocas "Responder" en la
+  burbuja: así el paquete se siente contestado por alguien y no automático. Solo la primera; las
+  demás salen sueltas debajo (pedido de Rodrigo, 15-sep).
 - Tope de **15 piezas** por receta (una receta absurda no dispara 50 mensajes).
 - Si NINGUNA pieza sale (0/N), llega una alarma por Telegram: el chat ya quedó marcado 24 h y
   hay que mirar `/api/saliente` en los logs. Sin esa alarma, "marcar antes de enviar" no

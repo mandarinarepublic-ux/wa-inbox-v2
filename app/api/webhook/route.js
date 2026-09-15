@@ -235,6 +235,8 @@ async function procesar(nuevos, origin) {
     const piezas = piezasDeReceta({
       receta, respuestas: await respuestasRapidas(),
       contacto: { telefono: m.telefono, nombre: m.nombre, alias: contacto?.alias || '', phoneId: m.phoneId },
+      // La primera pieza cita el mensaje del cliente, como "Responder" a mano.
+      citaId: m.wamid,
     })
     if (!piezas.length) {
       console.warn('[/api/webhook] receta', receta.id, 'sin piezas que mandar (pasos huérfanos y sin pregunta), no se marca', m.telefono)

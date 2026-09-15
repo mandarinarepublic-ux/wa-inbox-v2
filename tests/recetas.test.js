@@ -131,3 +131,14 @@ test('aviso de anuncio nuevo: escapa HTML del titular', () => {
   const t = textoAvisoAnuncioNuevo({ cuenta: 'MANDI', titular: '<b>x</b> & y', sourceId: '1', url: 'https://x' })
   assert.match(t, /&lt;b&gt;x&lt;\/b&gt; &amp; y/)
 })
+
+test('la PRIMERA pieza cita el mensaje del cliente (como Responder); las demás salen sueltas', () => {
+  const p = piezasDeReceta({ receta, respuestas, contacto, citaId: 'wamid.ABC' })
+  assert.equal(p[0].ContextoId, 'wamid.ABC')
+  assert.ok(p.slice(1).every(x => !x.ContextoId), 'solo la primera lleva la cita')
+})
+
+test('sin citaId ninguna pieza lleva ContextoId', () => {
+  const p = piezasDeReceta({ receta, respuestas, contacto })
+  assert.ok(p.every(x => !('ContextoId' in x)))
+})
