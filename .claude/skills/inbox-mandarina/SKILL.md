@@ -183,8 +183,9 @@ título o la dirección en `contenido`. Quien decide por `m.tipo === 'texto'` tr
   botones que salen del inbox llevan ids `rc_1..rc_3` (`normalizarBotones`), que en
   el lienzo son los puertos `btn_1..btn_3`, con el mismo índice.
 
-> En MANDI, `flujoEnCursoSiCorresponde` (webhook) es quien lee ese id para avanzar el
-> flujo. Si IND hereda FLUJOS, hereda también esta lectura.
+> `flujoEnCursoSiCorresponde` (webhook) es quien lee ese id para avanzar el flujo, en
+> los DOS repos (IND lo recibió el 15-sep-2026). ⚠️ En IND corre en background y EN
+> COLA por lote (`colaAutomaticos`): su loop es el camino síncrono del 200 a Meta.
 
 ---
 
