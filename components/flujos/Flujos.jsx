@@ -182,8 +182,12 @@ function Lienzo({ active }) {
     setSeleccion(null)
     setErroresPublicar([])
     setAvisoImportar(null)
-    firmaRef.current = guardado ? JSON.stringify({ nombre: nom, grafo: g }) : ''
-    histRef.current = { pila: [g], i: 0 }
+    // ☠️ La firma sale del LIENZO (deReactFlow), nunca del grafo tal como vino de la
+    // base: jsonb reordena las claves y un flujo existente se abría ya marcado
+    // "Cambios sin guardar" (y Publicar pedía guardar) sin haber tocado nada.
+    const gLienzo = deReactFlow(ns, es)
+    firmaRef.current = guardado ? JSON.stringify({ nombre: nom, grafo: gLienzo }) : ''
+    histRef.current = { pila: [gLienzo], i: 0 }
     setPuedeDeshacer(false); setPuedeRehacer(false)
     // Encuadrar después de que React Flow haya medido las tarjetas nuevas.
     setTimeout(() => { try { fitView({ padding: 0.25, duration: 300 }) } catch { /* lienzo desmontado */ } }, 60)
@@ -265,6 +269,11 @@ function Lienzo({ active }) {
 
   const firma = useMemo(() => JSON.stringify({ nombre, grafo }), [nombre, grafo])
   const sinGuardar = !!actual && (!actual.flujo_id || firma !== firmaRef.current)
+  // Un flujo publicado cuyo borrador (o lo que está en pantalla) ya no es lo que
+  // corre: ahí hace falta "Publicar cambios", no "Despublicar".
+  const filaActual = actual?.flujo_id ? flujos.find((f) => f.flujo_id === actual.flujo_id) : null
+  const cambiosSinPublicar = !!actual?.publicado && (sinGuardar
+    || (!!filaActual && JSON.stringify(filaActual.grafo || null) !== JSON.stringify(filaActual.grafo_vivo || null)))
 
   // ── Edición del lienzo ─────────────────────────────────────────────────────
   const onConnect = useCallback((c) => {
@@ -339,30 +348,38 @@ function Lienzo({ active }) {
   }, [seleccion, setEdges])
 
   // ── Guardar / publicar / borrar ────────────────────────────────────────────
+  // Devuelve el flujo_id guardado (o null si falló): Publicar lo usa para guardar
+  // primero y publicar justo lo que se ve.
   const guardar = useCallback(async () => {
-    if (!actual) return
+    if (!actual) return null
     const nom = nombre.trim() || 'Flujo sin nombre'
     const g = deReactFlow(getNodes(), getEdges())
     setTrabajando(true)
     const r = await saveFlujo({ flujo_id: actual.flujo_id || undefined, nombre: nom, grafo: g })
     setTrabajando(false)
-    if (!r?.ok) { avisar('❌ No se pudo guardar: ' + (r?.error || 'reintenta')); return }
+    if (!r?.ok) { avisar('❌ No se pudo guardar: ' + (r?.error || 'reintenta')); return null }
     const f = r.flujo || {}
     setActual({ flujo_id: f.flujo_id || actual.flujo_id, publicado: !!f.publicado })
     setNombre(nom)
     firmaRef.current = JSON.stringify({ nombre: nom, grafo: g })
     await recargarLista()
     avisar('✅ Borrador guardado')
+    return f.flujo_id || actual.flujo_id || null
   }, [actual, nombre, getNodes, getEdges, recargarLista, avisar])
 
   const publicar = useCallback(async (quiero) => {
-    if (!actual?.flujo_id) { avisar('⚠️ Guarda el borrador antes de publicar'); return }
     // ☠️ Publicar copia `grafo` (lo GUARDADO) a `grafo_vivo`. Con cambios sin
-    // guardar, el servidor publicaría una versión anterior a la que se está
-    // viendo — y nadie lo notaría hasta que un cliente reciba lo que no es.
-    if (quiero && sinGuardar) { avisar('⚠️ Guarda el borrador antes de publicar'); return }
+    // guardar, el servidor publicaría una versión anterior a la que se ve. Por eso
+    // Publicar GUARDA primero. Antes pedía guardar a mano, y un flujo ya publicado
+    // no tenía ningún botón para subir sus cambios: solo "Despublicar".
+    let id = actual?.flujo_id || null
+    if (quiero && (sinGuardar || !id)) {
+      id = await guardar()
+      if (!id) return
+    }
+    if (!id) return
     setTrabajando(true)
-    const r = await publicarFlujo(actual.flujo_id, quiero)
+    const r = await publicarFlujo(id, quiero)
     setTrabajando(false)
     if (!r?.ok) {
       setErroresPublicar(Array.isArray(r?.errores) ? r.errores : [{ texto: r?.error || 'No se pudo publicar' }])
@@ -373,7 +390,18 @@ function Lienzo({ active }) {
     setActual((a) => ({ ...a, publicado: quiero }))
     await recargarLista()
     avisar(quiero ? '🚀 Publicado' : '⏸ Despublicado')
-  }, [actual, sinGuardar, recargarLista, avisar])
+  }, [actual, sinGuardar, guardar, recargarLista, avisar])
+
+  // Ctrl+S (o Cmd+S) guarda desde cualquier parte de la pestaña, no solo con el foco
+  // en el lienzo. Sin esto el navegador ofrece "Guardar página como…".
+  useEffect(() => {
+    if (!active || !actual) return
+    const alTecla = (e) => {
+      if ((e.ctrlKey || e.metaKey) && String(e.key).toLowerCase() === 's') { e.preventDefault(); guardar() }
+    }
+    window.addEventListener('keydown', alTecla)
+    return () => window.removeEventListener('keydown', alTecla)
+  }, [active, actual, guardar])
 
   // Eliminar en DOS clics, sin `confirm()`: el diálogo del navegador bloquea la
   // pestaña entera y acá al lado hay un inbox en vivo.
@@ -529,13 +557,17 @@ function Lienzo({ active }) {
               <input value={nombre} onChange={(e) => setNombre(e.target.value)} maxLength={120} placeholder="Nombre del flujo"
                 style={{ width: 210, padding: '6px 9px', background: '#080d14', border: `1px solid ${BORDE}`, borderRadius: 8, color: '#e2e8f0', fontSize: 12, fontWeight: 700, outline: 'none', fontFamily: 'Outfit,sans-serif' }} />
 
-              <button onClick={guardar} disabled={trabajando} style={boton(MORADO, !trabajando)}>💾 Guardar borrador</button>
+              <button onClick={guardar} disabled={trabajando} title="Guardar (Ctrl+S)" style={boton(MORADO, !trabajando)}>💾 Guardar borrador</button>
+              {cambiosSinPublicar && (
+                <button onClick={() => publicar(true)} disabled={trabajando} title="Guarda y reemplaza lo que está corriendo por lo que ves"
+                  style={boton('#25d366', !trabajando)}>🚀 Publicar cambios</button>
+              )}
               <button onClick={() => publicar(!actual.publicado)} disabled={trabajando} style={boton(actual.publicado ? '#f59e0b' : '#25d366', !trabajando)}>
                 {actual.publicado ? '⏸ Despublicar' : '🚀 Publicar'}
               </button>
 
-              <span style={{ fontSize: 10, fontWeight: 800, color: sinGuardar ? '#f59e0b' : actual.publicado ? '#25d366' : '#64748b' }}>
-                {sinGuardar ? '● Cambios sin guardar' : actual.publicado ? '● Publicado' : '● Borrador guardado'}
+              <span style={{ fontSize: 10, fontWeight: 800, color: (sinGuardar || cambiosSinPublicar) ? '#f59e0b' : actual.publicado ? '#25d366' : '#64748b' }}>
+                {sinGuardar ? '● Cambios sin guardar' : cambiosSinPublicar ? '● Guardado, falta publicar' : actual.publicado ? '● Publicado' : '● Borrador guardado'}
               </span>
               {totalErrores > 0 && (
                 <span style={{ fontSize: 10, fontWeight: 800, color: '#f87171' }}>⚠️ {totalErrores} error(es)</span>
