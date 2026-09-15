@@ -1,6 +1,6 @@
 # FLUJOS · Fase A — lienzo + motor lineal · plan de implementación (MANDI)
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Una pestaña FLUJOS con un lienzo de nodos (React Flow) donde Rodrigo dibuja Disparador → Mensajes → Fin, y un motor que ejecuta el camino lineal de cada flujo publicado igual que hoy corren las recetas; las recetas del 14-sep se importan como flujos y su motor se apaga.
 
@@ -33,13 +33,13 @@
 **Interfaces:**
 - Produces: tabla `inbox.flujos (flujo_id uuid pk, cuenta text, nombre text, publicado bool, grafo jsonb, grafo_vivo jsonb, creado_at, actualizado_at)` + índice `(cuenta, publicado)` + trigger `inbox.tocar_updated_at`-style para `actualizado_at` (ya existe la función `inbox.tocar_updated_at()`: ver `trg_conversaciones_updated_at`).
 
-- [ ] **Step 1: Control previo**
+- [x] **Step 1: Control previo**
 ```sql
 select count(*) from information_schema.tables where table_schema='inbox' and table_name='flujos';
 ```
 Esperado: 0.
 
-- [ ] **Step 2: Aplicar**
+- [x] **Step 2: Aplicar**
 ```sql
 -- FLUJOS (15-sep-2026). Ver wa-inbox-next/docs/superpowers/specs/2026-09-15-flujos-lienzo-design.md
 create table if not exists inbox.flujos (
@@ -59,7 +59,7 @@ create trigger trg_flujos_updated_at before update on inbox.flujos
 ```
 ⚠️ Si `inbox.tocar_updated_at()` escribe `updated_at` y no `actualizado_at`, revisar su definición con `select pg_get_functiondef('inbox.tocar_updated_at'::regproc)` y, si hace falta, crear `inbox.tocar_actualizado_at()` equivalente que ponga `new.actualizado_at = now()`.
 
-- [ ] **Step 3: Verificar**
+- [x] **Step 3: Verificar**
 ```sql
 select column_name from information_schema.columns where table_schema='inbox' and table_name='flujos' order by ordinal_position;
 insert into inbox.flujos (cuenta, nombre) values ('PRUEBA','x') returning flujo_id;
@@ -103,7 +103,7 @@ Forma del grafo:
   lineas: [ { id:'l1', de:'n1', puerto:'siguiente', a:'n2', esperaMin: 0 } ] }
 ```
 
-- [ ] **Step 1: Pruebas (RED)** — crear `tests/flujo.test.js` con, como mínimo, estos casos (usar fixtures pequeños definidos arriba del archivo):
+- [x] **Step 1: Pruebas (RED)** — crear `tests/flujo.test.js` con, como mínimo, estos casos (usar fixtures pequeños definidos arriba del archivo):
 ```js
 import test from 'node:test'
 import assert from 'node:assert'
@@ -200,9 +200,9 @@ test('nuevoGrafo: un disparador orgánico y un fin, válido', () => {
 ```
 Run: `node --test tests/flujo.test.js` → `Cannot find module`.
 
-- [ ] **Step 2: Exportar helpers de `lib/recetas.js`**: cambiar `const pieza = …` y `const interactivo = …` por `export const pieza = …` / `export const interactivo = …` (sin tocar su cuerpo). `node --test tests/recetas.test.js` sigue en verde.
+- [x] **Step 2: Exportar helpers de `lib/recetas.js`**: cambiar `const pieza = …` y `const interactivo = …` por `export const pieza = …` / `export const interactivo = …` (sin tocar su cuerpo). `node --test tests/recetas.test.js` sigue en verde.
 
-- [ ] **Step 3: Implementar `lib/flujo.js`** (puro; solo importa `./adjuntos-respuesta.js` y `./recetas.js`). Puntos que NO son obvios:
+- [x] **Step 3: Implementar `lib/flujo.js`** (puro; solo importa `./adjuntos-respuesta.js` y `./recetas.js`). Puntos que NO son obvios:
   - `normalizarTexto`: `String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/\s+/g,' ').trim()`.
   - `puertosDe`: `disparador`→`['siguiente']`; `mensaje` con botones normalizados n≥1 → `btn_1..btn_n` + `'otra'`; si no y `esperarRespuesta` → `['respuesta']`; si no → `['siguiente']`; `condicion`→`['si','no']`; `fin`→`[]`.
   - `validarFlujo`: errores como `{ nodoId, texto }` o `{ lineaId, texto }`: exactamente un disparador · el disparador `anuncio` con ≥1 sourceId, `palabra` con ≥1 palabra · alcanzabilidad por BFS desde el disparador · líneas cuyo `de`/`a` no existan o cuyo `puerto` no esté en `puertosDe(de)` · más de una línea del mismo puerto · botones >3 o título >20 · `mensaje` `origen=respuesta` sin `respuestaId` o cuyo id no esté en `respuestas` (solo si se pasó `respuestas`) · `mensaje` `origen=texto` sin texto ni adjuntos · `esperaMin` < 0 o > `MAX_ESPERA_MIN` · ciclo alcanzable por líneas con `esperaMin` 0 (DFS con colores; un ciclo que pase por una línea con espera no es error).
@@ -213,9 +213,9 @@ Run: `node --test tests/flujo.test.js` → `Cannot find module`.
   - `recetaAFlujo`: nodos en columna (`pos.y` = 0, 140, 280…); disparador `{tipo: organico? 'organico':'anuncio', sourceIds, palabras:[]}`; un `mensaje` `origen=respuesta` por paso; si `pregunta.texto` → `mensaje` `origen=texto` con `botones`; `fin`; líneas `siguiente` encadenadas (la pregunta con botones NO se conecta a fin: sus puertos quedan libres = Fin).
   - `nuevoGrafo`: `[disparador organico en (0,0), fin en (0,300)]` con línea `siguiente`.
 
-- [ ] **Step 4: GREEN** — `node --test tests/flujo.test.js tests/recetas.test.js` → todo pasa. `npm test` → 0 fallos.
+- [x] **Step 4: GREEN** — `node --test tests/flujo.test.js tests/recetas.test.js` → todo pasa. `npm test` → 0 fallos.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 ```bash
 git add lib/flujo.js lib/recetas.js tests/flujo.test.js
 git commit -m "feat(flujos): modelo, validación, elección, camino lineal y conversión de recetas (puro, probado)"
@@ -251,7 +251,7 @@ export function planDeImportacion(config, flujosExistentes)   // PURO: → [{ re
 ```
 Rutas: `GET /api/flujos` → `{ok, flujos}` · `POST /api/flujos` `{flujo_id?, nombre, grafo}` → `{ok, flujo}` · `DELETE /api/flujos?flujo_id=` → `{ok}` · `POST /api/flujos/publicar` `{flujo_id, publicar}` → `{ok}` | `{ok:false, errores:[{texto,...}]}` · `POST /api/flujos/importar-recetas` → `{ok, creados, saltados}`. Todas con `dynamic='force-dynamic'`, `revalidate=0`, `try/catch` → 500 con `{ok:false,error}` como `app/api/anuncios/route.js`.
 
-- [ ] **Step 1: Pruebas (RED)**: `tests/rutas-publicas.test.js` (3 rutas en PROTEGIDAS — pasan ya, son la red) y `tests/flujos-importar.test.js`:
+- [x] **Step 1: Pruebas (RED)**: `tests/rutas-publicas.test.js` (3 rutas en PROTEGIDAS — pasan ya, son la red) y `tests/flujos-importar.test.js`:
 ```js
 import test from 'node:test'
 import assert from 'node:assert'
@@ -273,9 +273,9 @@ test('planDeImportacion: con recetas.activo=false nada queda publicado', () => {
 ```
 ⚠️ `lib/flujos.js` importa `./inbox-supabase.js` para las funciones async; `planDeImportacion` debe ser exportable sin tocar Supabase (el import del módulo no debe abrir conexión — `getSupabase()` es perezoso, así que basta con no llamarlo al cargar).
 
-- [ ] **Step 2: Implementar** las cuatro capas. Notas: `guardarFlujoSupabase` con `flujo_id` → `.update({nombre, grafo}).eq('cuenta',CUENTA).eq('flujo_id',id).select().single()`; sin id → `.insert({cuenta:CUENTA, nombre, grafo}).select().single()`. `setPublicadoFlujoSupabase(id, true)` → leer `grafo`, `.update({ publicado:true, grafo_vivo: grafo })`; `false` → `.update({ publicado:false, grafo_vivo:null })`. `publicarFlujo` obtiene `respuestas` con `getRespuestas()` (`lib/respuestas.js`) y `otros` con `getFlujosPublicadosSupabase()` excluyendo el propio id. `importarRecetas` usa `getAutomatizaciones`/`setAutomatizaciones` (`lib/automatizaciones.js`) y `getAnunciosResumen` no hace falta (los `sourceIds` salen de `por_anuncio`).
+- [x] **Step 2: Implementar** las cuatro capas. Notas: `guardarFlujoSupabase` con `flujo_id` → `.update({nombre, grafo}).eq('cuenta',CUENTA).eq('flujo_id',id).select().single()`; sin id → `.insert({cuenta:CUENTA, nombre, grafo}).select().single()`. `setPublicadoFlujoSupabase(id, true)` → leer `grafo`, `.update({ publicado:true, grafo_vivo: grafo })`; `false` → `.update({ publicado:false, grafo_vivo:null })`. `publicarFlujo` obtiene `respuestas` con `getRespuestas()` (`lib/respuestas.js`) y `otros` con `getFlujosPublicadosSupabase()` excluyendo el propio id. `importarRecetas` usa `getAutomatizaciones`/`setAutomatizaciones` (`lib/automatizaciones.js`) y `getAnunciosResumen` no hace falta (los `sourceIds` salen de `por_anuncio`).
 
-- [ ] **Step 3: `npm test` → 0 fallos. Commit**
+- [x] **Step 3: `npm test` → 0 fallos. Commit**
 ```bash
 git add lib/inbox-supabase.js lib/flujos.js app/api/flujos/route.js app/api/flujos/publicar/route.js app/api/flujos/importar-recetas/route.js lib/api-client.js tests/rutas-publicas.test.js tests/flujos-importar.test.js
 git commit -m "feat(flujos): persistencia, /api/flujos (guardar, publicar con validación, borrar) e importación de recetas"
@@ -290,14 +290,14 @@ git commit -m "feat(flujos): persistencia, /api/flujos (guardar, publicar con va
 
 **Interfaces:** Consumes `getFlujosPublicadosSupabase` (vía `lib/flujos.js` → `getFlujosPublicados`), `elegirFlujo`, `caminoLineal`, `piezasDeNodos`, `temperaturaAlPasar` (`lib/flujo.js`), `updateTemperatura` (`lib/contactos.js`), y lo que ya usa `recetaSiCorresponde`: `marcarReceta`, `enviarSaliente`, `enviarTelegram`, `esc`, `respuestasRapidas()`, `recetados`, `saludados`, `modoIAde`, `esNuevoDe`, `tail9`, `waitUntil`.
 
-- [ ] **Step 1: Implementar `flujoSiCorresponde`** copiando la estructura de `recetaSiCorresponde` (léela primero) con estas diferencias:
+- [x] **Step 1: Implementar `flujoSiCorresponde`** copiando la estructura de `recetaSiCorresponde` (léela primero) con estas diferencias:
   - Los flujos publicados se leen UNA vez por ciclo con un caché igual a `respuestasCache` (`flujosCache`), y solo cuando el mensaje tiene referral, o es contacto nuevo, o trae texto (`m.tipo === 'texto'`).
   - `const flujo = elegirFlujo({ flujos, sourceId, esNuevo: esNuevoDe(m.telefono), texto: m.contenido })`; sin flujo → `false`.
   - Guardias iguales: `modoIAde` → false; `recetados.has(t)` → false; `caminoLineal(flujo.grafo_vivo)` → `mensajes`; `piezas = piezasDeNodos({ nodos: mensajes, respuestas, contacto, citaId: m.wamid })`; vacío → warn y false; `marcarReceta` con guardia → si no `marcado` false; `recetados.add(t)`, `saludados.add(t)`.
   - Antes de despachar el envío: `const temp = temperaturaAlPasar(mensajes); if (temp) await updateTemperatura(m.telefono, temp).catch(log)`.
   - Tarea diferida idéntica (try/catch, envío secuencial, log `N/M piezas`, alarma Telegram si 0/N) con el texto `flujo <nombre>` en vez de `receta <id>`.
   - Log al detenerse en una rama: `console.log('[/api/webhook] flujo', flujo.nombre, 'se detuvo en', camino.motivo, camino.detenidoEn, '(Fase B)')`.
-- [ ] **Step 2: Enganchar en el bucle**: reemplazar `const conReceta = await recetaSiCorresponde(m)…` por
+- [x] **Step 2: Enganchar en el bucle**: reemplazar `const conReceta = await recetaSiCorresponde(m)…` por
 ```js
     let conReceta = await flujoSiCorresponde(m).catch(e => { console.error('[/api/webhook] flujo:', e.message); return false })
     if (!conReceta && auto?.recetas?.activo) {
@@ -305,7 +305,7 @@ git commit -m "feat(flujos): persistencia, /api/flujos (guardar, publicar con va
     }
 ```
   (el `if (!conReceta) saludarSiCorresponde…` queda igual).
-- [ ] **Step 3: `npm test` y `npx next build` limpios. Commit** `git add app/api/webhook/route.js` · `feat(flujos): el webhook ejecuta el camino lineal del flujo publicado; recetas solo si siguen activas`.
+- [x] **Step 3: `npm test` y `npx next build` limpios. Commit** `git add app/api/webhook/route.js` · `feat(flujos): el webhook ejecuta el camino lineal del flujo publicado; recetas solo si siguen activas`.
 
 ---
 
@@ -319,7 +319,7 @@ git commit -m "feat(flujos): persistencia, /api/flujos (guardar, publicar con va
 
 **Interfaces:** Consumes `getFlujos`, `saveFlujo`, `publicarFlujo`, `deleteFlujo`, `importarRecetas`, `fetchRepliesFromSheet`, `getAnuncios` (`lib/api-client.js`); `validarFlujo`, `puertosDe`, `nuevoGrafo`, `TIPOS_NODO` (`lib/flujo.js`).
 
-- [ ] **Step 1: Prueba del puente (RED)** `tests/grafo-reactflow.test.js`:
+- [x] **Step 1: Prueba del puente (RED)** `tests/grafo-reactflow.test.js`:
 ```js
 import test from 'node:test'
 import assert from 'node:assert'
@@ -335,13 +335,13 @@ test('ida y vuelta conserva nodos, datos, posiciones y líneas con su puerto y e
   assert.deepEqual(deReactFlow(nodes, edges), g)
 })
 ```
-- [ ] **Step 2: `npm install @xyflow/react@12.11.6`** (commit `package.json` + `package-lock.json`).
-- [ ] **Step 3: `grafo-reactflow.js`** (puro): `aReactFlow(grafo)` → `nodes: [{ id, type: nodo.tipo, position: nodo.pos, data: { ...nodo.datos } }]`, `edges: [{ id, source: de, sourceHandle: puerto, target: a, targetHandle: 'in', label: esperaMin ? etiquetaEspera(esperaMin) : '', data: { esperaMin } }]`; `deReactFlow(nodes, edges)` inverso (`pos` con enteros redondeados, `datos` copia). `etiquetaEspera(min)` → `'⏱ 1 h 30 min'` / `'⏱ 45 min'`.
-- [ ] **Step 4: `nodos.jsx`**: cuatro componentes con `Handle` de React Flow. Entrada: `<Handle type="target" position={Position.Top} id="in" />` en mensaje/condicion/fin. Salidas: un `<Handle type="source" position={Position.Bottom} id={puerto} />` por cada `puertosDe(nodo)`, repartidos horizontalmente con etiqueta (título del botón, "Otra respuesta", "sí"/"no", "siguiente"). Tarjeta: cabecera con icono y tipo (📣 Disparador · 💬 Mensaje · 🔀 Condición · 🔴 Fin), cuerpo con resumen (anuncios/palabras; texto de la respuesta recortado + n.º adjuntos + 🔥/🌤️/❄️ si marca temperatura + "✋ espera respuesta" + "↩ cita"). Selección resaltada. Paleta del inbox (`#0d1828`, `#1e2d3d`, naranja `#f59e0b` para el disparador, verde `#25d366` para mensaje, azul `#60a5fa` para condición, rojo `#f87171` para fin). En Fase A, un mensaje con botones/esperar y las líneas con espera muestran una etiqueta gris "corre desde la Fase B".
-- [ ] **Step 5: `PanelEdicion.jsx`**: recibe el nodo o la línea seleccionada y `onChange`. Disparador: tipo (radio), lista de anuncios con casillas (etiqueta + titular + chats 30 d, de `getAnuncios`), palabras clave (chips). Mensaje: origen (respuesta rápida con `<select>` y vista previa / texto libre + adjuntos por URL + tipo), botones (3 inputs, maxLength 20), casillas esperar respuesta y citar última respuesta, temperatura al llegar (— / 🔥 / 🌤️ / ❄️). Condición: campo + valor. Línea: espera (número + unidad min/h, tope 23 h; vacío = inmediato). Errores de validación del nodo seleccionado en rojo debajo.
-- [ ] **Step 6: `Flujos.jsx`**: estado `flujos`, `actual`, `nodes/edges` (hooks `useNodesState`/`useEdgesState` de React Flow), `seleccion`, `dirty`, `errores`. Columna izquierda (lista, "+ Nuevo flujo" → `nuevoGrafo()`, duplicar, eliminar con confirmación por doble clic — no `confirm()`). Cabecera: nombre editable, "Guardar borrador" (`saveFlujo`), "Publicar"/"Despublicar" (`publicarFlujo`; si `errores`, mostrarlos y marcar nodos), estado (borrador/publicado/con cambios sin publicar), deshacer/rehacer (pila de grafos, 50). Paleta: botones "+ Mensaje", "+ Condición", "+ Fin" que agregan un nodo en el centro visible. `<ReactFlow nodeTypes fitView onConnect onNodesChange onEdgesChange onNodeClick onEdgeClick deleteKeyCode="Delete">` con `<Background/>`, `<MiniMap/>`, `<Controls/>`. `onConnect`: rechazar si el puerto ya tiene línea (un puerto, una línea). Importar `'@xyflow/react/dist/style.css'` en este archivo. Al abrir por primera vez sin flujos y con `config.recetas.lista.length>0`, ofrecer un botón "Importar las recetas de AUTOS" → `importarRecetas()`.
-- [ ] **Step 7: `App.jsx`**: agregar `{ id:'FLUJOS', label:'FLUJOS', icon:'🧭', color:'#a78bfa', sub:'Lienzo' }` después de `AUTO` en la lista de pestañas; sumar `'FLUJOS'` a los arreglos donde aparece `'AUTO'` como pestaña sin chat (`['SOCIAL','CONTACTOS','AUTO']` y cualquier `esPestanaDeChat`); montar `const Flujos = dynamic(() => import('./flujos/Flujos'), { ssr:false })` y un bloque igual al de AUTOMATIZACIONES con `display: linea === 'FLUJOS' ? 'flex' : 'none'`.
-- [ ] **Step 8: `npm test`, `npx next build`. Commit** (todos los archivos por nombre) `feat(flujos): pestaña FLUJOS con lienzo de nodos (React Flow), panel de edición, guardar y publicar`.
+- [x] **Step 2: `npm install @xyflow/react@12.11.6`** (commit `package.json` + `package-lock.json`).
+- [x] **Step 3: `grafo-reactflow.js`** (puro): `aReactFlow(grafo)` → `nodes: [{ id, type: nodo.tipo, position: nodo.pos, data: { ...nodo.datos } }]`, `edges: [{ id, source: de, sourceHandle: puerto, target: a, targetHandle: 'in', label: esperaMin ? etiquetaEspera(esperaMin) : '', data: { esperaMin } }]`; `deReactFlow(nodes, edges)` inverso (`pos` con enteros redondeados, `datos` copia). `etiquetaEspera(min)` → `'⏱ 1 h 30 min'` / `'⏱ 45 min'`.
+- [x] **Step 4: `nodos.jsx`**: cuatro componentes con `Handle` de React Flow. Entrada: `<Handle type="target" position={Position.Top} id="in" />` en mensaje/condicion/fin. Salidas: un `<Handle type="source" position={Position.Bottom} id={puerto} />` por cada `puertosDe(nodo)`, repartidos horizontalmente con etiqueta (título del botón, "Otra respuesta", "sí"/"no", "siguiente"). Tarjeta: cabecera con icono y tipo (📣 Disparador · 💬 Mensaje · 🔀 Condición · 🔴 Fin), cuerpo con resumen (anuncios/palabras; texto de la respuesta recortado + n.º adjuntos + 🔥/🌤️/❄️ si marca temperatura + "✋ espera respuesta" + "↩ cita"). Selección resaltada. Paleta del inbox (`#0d1828`, `#1e2d3d`, naranja `#f59e0b` para el disparador, verde `#25d366` para mensaje, azul `#60a5fa` para condición, rojo `#f87171` para fin). En Fase A, un mensaje con botones/esperar y las líneas con espera muestran una etiqueta gris "corre desde la Fase B".
+- [x] **Step 5: `PanelEdicion.jsx`**: recibe el nodo o la línea seleccionada y `onChange`. Disparador: tipo (radio), lista de anuncios con casillas (etiqueta + titular + chats 30 d, de `getAnuncios`), palabras clave (chips). Mensaje: origen (respuesta rápida con `<select>` y vista previa / texto libre + adjuntos por URL + tipo), botones (3 inputs, maxLength 20), casillas esperar respuesta y citar última respuesta, temperatura al llegar (— / 🔥 / 🌤️ / ❄️). Condición: campo + valor. Línea: espera (número + unidad min/h, tope 23 h; vacío = inmediato). Errores de validación del nodo seleccionado en rojo debajo.
+- [x] **Step 6: `Flujos.jsx`**: estado `flujos`, `actual`, `nodes/edges` (hooks `useNodesState`/`useEdgesState` de React Flow), `seleccion`, `dirty`, `errores`. Columna izquierda (lista, "+ Nuevo flujo" → `nuevoGrafo()`, duplicar, eliminar con confirmación por doble clic — no `confirm()`). Cabecera: nombre editable, "Guardar borrador" (`saveFlujo`), "Publicar"/"Despublicar" (`publicarFlujo`; si `errores`, mostrarlos y marcar nodos), estado (borrador/publicado/con cambios sin publicar), deshacer/rehacer (pila de grafos, 50). Paleta: botones "+ Mensaje", "+ Condición", "+ Fin" que agregan un nodo en el centro visible. `<ReactFlow nodeTypes fitView onConnect onNodesChange onEdgesChange onNodeClick onEdgeClick deleteKeyCode="Delete">` con `<Background/>`, `<MiniMap/>`, `<Controls/>`. `onConnect`: rechazar si el puerto ya tiene línea (un puerto, una línea). Importar `'@xyflow/react/dist/style.css'` en este archivo. Al abrir por primera vez sin flujos y con `config.recetas.lista.length>0`, ofrecer un botón "Importar las recetas de AUTOS" → `importarRecetas()`.
+- [x] **Step 7: `App.jsx`**: agregar `{ id:'FLUJOS', label:'FLUJOS', icon:'🧭', color:'#a78bfa', sub:'Lienzo' }` después de `AUTO` en la lista de pestañas; sumar `'FLUJOS'` a los arreglos donde aparece `'AUTO'` como pestaña sin chat (`['SOCIAL','CONTACTOS','AUTO']` y cualquier `esPestanaDeChat`); montar `const Flujos = dynamic(() => import('./flujos/Flujos'), { ssr:false })` y un bloque igual al de AUTOMATIZACIONES con `display: linea === 'FLUJOS' ? 'flex' : 'none'`.
+- [x] **Step 8: `npm test`, `npx next build`. Commit** (todos los archivos por nombre) `feat(flujos): pestaña FLUJOS con lienzo de nodos (React Flow), panel de edición, guardar y publicar`.
 
 ---
 
@@ -349,7 +349,7 @@ test('ida y vuelta conserva nodos, datos, posiciones y líneas con su puerto y e
 
 **Files:** Modify `components/Automatizaciones.jsx`.
 
-- [ ] Quitar el editor de recetas y el combo; dejar el interruptor global de recetas SOLO si `config.recetas.lista.length > 0` con la nota "Las recetas ahora viven en FLUJOS. Importa las que tengas desde esa pestaña; al importar, esto se apaga solo." y la lista de anuncios vistos (etiqueta editable, titular, chats 30 d, último chat) mostrando "→ flujo: <nombre>" cuando algún flujo publicado lo tenga en su Disparador (calculado con `getFlujos()`), o "sin flujo" en ámbar. Quitar helpers muertos (eslint los marca). `npm test` + build. Commit `refactor(autos): la tarjeta de anuncios apunta a FLUJOS; el editor de recetas se retira`.
+- [x] Quitar el editor de recetas y el combo; dejar el interruptor global de recetas SOLO si `config.recetas.lista.length > 0` con la nota "Las recetas ahora viven en FLUJOS. Importa las que tengas desde esa pestaña; al importar, esto se apaga solo." y la lista de anuncios vistos (etiqueta editable, titular, chats 30 d, último chat) mostrando "→ flujo: <nombre>" cuando algún flujo publicado lo tenga en su Disparador (calculado con `getFlujos()`), o "sin flujo" en ámbar. Quitar helpers muertos (eslint los marca). `npm test` + build. Commit `refactor(autos): la tarjeta de anuncios apunta a FLUJOS; el editor de recetas se retira`.
 
 ---
 
@@ -357,16 +357,16 @@ test('ida y vuelta conserva nodos, datos, posiciones y líneas con su puerto y e
 
 **Files:** Create `docs/HANDOFF-2026-09-15-flujos-fase-a.md`; Modify `docs/HANDOFF-2026-09-14-recetas-bienvenida.md` (nota arriba: "reemplazado por FLUJOS").
 
-- [ ] Handoff de una página: qué es, cómo se dibuja un flujo, qué corre en Fase A y qué no, cómo importar las recetas, los controles SQL (`select nombre, publicado, actualizado_at from inbox.flujos where cuenta='MANDI'`; el de `ultima_receta_at`), y lo pendiente de Fase B. Commit `docs: handoff FLUJOS fase A`.
+- [x] Handoff de una página: qué es, cómo se dibuja un flujo, qué corre en Fase A y qué no, cómo importar las recetas, los controles SQL (`select nombre, publicado, actualizado_at from inbox.flujos where cuenta='MANDI'`; el de `ultima_receta_at`), y lo pendiente de Fase B. Commit `docs: handoff FLUJOS fase A`.
 
 ---
 
 ### Task 8: Deploy, importación y verificación (controlador + Rodrigo)
 
-- [ ] `git push origin main`; confirmar deployment `READY` con el sha del último commit.
-- [ ] Controles negativos: `curl -s -o /dev/null -w "%{http_code}" https://inbox.apps.mandarinaec.com/api/flujos` → 401.
+- [x] `git push origin main`; confirmar deployment `READY` con el sha del último commit.
+- [x] Controles negativos: `curl -s -o /dev/null -w "%{http_code}" https://inbox.apps.mandarinaec.com/api/flujos` → 401.
 - [ ] Rodrigo abre FLUJOS, importa las recetas, ve los flujos lineales, publica el de prueba (Orgánico), escribe desde un número nuevo → llegan las piezas, la primera citando. Control: `select nombre, publicado from inbox.flujos where cuenta='MANDI'` y `select recetas->>'activo' from (select config->'recetas' recetas from inbox.automatizaciones where cuenta='MANDI') x` → `false`.
-- [ ] Memoria de Claude: archivo `inbox-flujos-lienzo.md` + línea en `MEMORY.md`.
+- [x] Memoria de Claude: archivo `inbox-flujos-lienzo.md` + línea en `MEMORY.md`.
 
 ---
 
