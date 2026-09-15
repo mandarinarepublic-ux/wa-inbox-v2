@@ -18,7 +18,8 @@ const PUBLICAS = [
 const PROTEGIDAS = [
   '/api/anuncios', '/api/automatizaciones', '/api/buscar', '/api/capi/diag', '/api/cliente-pedidos',
   '/api/contactos', '/api/contactos/estado', '/api/conversacion', '/api/dashboard',
-  '/api/directorio', '/api/hilo', '/api/inbox-sync', '/api/linkpago', '/api/lista', '/api/media',
+  '/api/directorio', '/api/flujos', '/api/flujos/publicar', '/api/flujos/importar-recetas',
+  '/api/hilo', '/api/inbox-sync', '/api/linkpago', '/api/lista', '/api/media',
   '/api/media/precache', '/api/media/upload', '/api/mensaje', '/api/mensajes',
   '/api/notas', '/api/plantillas', '/api/push/subscribe', '/api/push/test',
   '/api/respuestas', '/api/saliente', '/api/social/estado', '/api/social/ingest',
