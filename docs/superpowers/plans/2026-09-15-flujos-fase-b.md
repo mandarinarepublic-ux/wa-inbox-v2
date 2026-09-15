@@ -34,14 +34,14 @@
 **Interfaces:**
 - Produces: tabla `inbox.flujo_estado (cuenta, telefono, flujo_id, nodo_id, esperando, puerto_tiempo, vence_at, ultimo_wamid, actualizado_at)` con PK `(cuenta, telefono)`; tabla `inbox.flujo_pasos (paso_id, cuenta, telefono, flujo_id, nodo_id, pasado_at)`; función `inbox.flujo_pasos_contar(p_cuenta text, p_flujo_id uuid, p_desde timestamptz) returns table (nodo_id text, n bigint)`.
 
-- [ ] **Step 1: Control previo**
+- [x] **Step 1: Control previo**
 ```sql
 select table_name from information_schema.tables where table_schema='inbox' and table_name in ('flujo_estado','flujo_pasos');
 select pg_get_functiondef('inbox.tocar_updated_at'::regproc);
 ```
 Esperado: 0 filas; la función existe y escribe `new.actualizado_at` (si escribe `updated_at`, usar la misma que usó la Fase A para `trg_flujos_updated_at`: mirar `select tgname, pg_get_triggerdef(oid) from pg_trigger where tgrelid='inbox.flujos'::regclass`).
 
-- [ ] **Step 2: Aplicar**
+- [x] **Step 2: Aplicar**
 ```sql
 -- FLUJOS Fase B (15-sep-2026): estado por cliente + bitácora de pasos.
 -- Ver wa-inbox-next/docs/superpowers/specs/2026-09-15-flujos-lienzo-design.md §3.
@@ -83,7 +83,7 @@ language sql stable as $$
 $$;
 ```
 
-- [ ] **Step 3: Verificar**
+- [x] **Step 3: Verificar**
 ```sql
 select column_name from information_schema.columns where table_schema='inbox' and table_name='flujo_estado' order by ordinal_position;
 insert into inbox.flujos (cuenta, nombre) values ('PRUEBA','x') returning flujo_id;  -- anotar el uuid
@@ -115,7 +115,7 @@ Esperado: 9 columnas · `m1 | 2` (dos teléfonos distintos, no tres filas) · `0
   - `ventanaAbierta(ultimoEntranteAt, ahora, margenMin = 5)` → `boolean`.
   - `horaEcuador(fecha)` → `'HH:MM'`.
 
-- [ ] **Step 1: Pruebas (RED)** — agregar al final de `tests/flujo.test.js` (usa los fixtures `D`, `M`, `F`, `L`, `contacto`, `respuestas`, `lineal` que ya están arriba del archivo). Sumar `avanzarDesde, evaluarCondicion, puertoDeEntrante, paradaDeCamino, citaDeTanda, ventanaAbierta, horaEcuador` al `import` de la línea 3.
+- [x] **Step 1: Pruebas (RED)** — agregar al final de `tests/flujo.test.js` (usa los fixtures `D`, `M`, `F`, `L`, `contacto`, `respuestas`, `lineal` que ya están arriba del archivo). Sumar `avanzarDesde, evaluarCondicion, puertoDeEntrante, paradaDeCamino, citaDeTanda, ventanaAbierta, horaEcuador` al `import` de la línea 3.
 
 ```js
 // ── Fase B ────────────────────────────────────────────────────────────────────
@@ -226,12 +226,12 @@ test('ventanaAbierta: 24 h desde el último entrante, con 5 min de margen; sin f
 })
 ```
 
-- [ ] **Step 2: Correr y ver que falla**
+- [x] **Step 2: Correr y ver que falla**
 
 Run: `node --test tests/flujo.test.js`
 Expected: FAIL con `avanzarDesde is not a function` (o `does not provide an export named`).
 
-- [ ] **Step 3: Implementar en `lib/flujo.js`** — reemplazar `caminoLineal` por esto (mismo comentario de cabecera que tiene hoy, ampliado) y agregar el resto debajo de `temperaturaAlPasar`:
+- [x] **Step 3: Implementar en `lib/flujo.js`** — reemplazar `caminoLineal` por esto (mismo comentario de cabecera que tiene hoy, ampliado) y agregar el resto debajo de `temperaturaAlPasar`:
 
 ```js
 /**
@@ -406,12 +406,12 @@ export function ventanaAbierta(ultimoEntranteAt, ahora, margenMin = 5) {
 ```
 Notas: `TOPE_PASOS_CAMINO` y `esperaMinDe` ya existen más arriba en el archivo. El `import` de `./recetas.js` ya trae `normalizarBotones`.
 
-- [ ] **Step 4: GREEN**
+- [x] **Step 4: GREEN**
 
 Run: `node --test tests/flujo.test.js tests/grafo-reactflow.test.js && npm test`
 Expected: todo pasa (las 26 pruebas viejas + las 10 nuevas); lint 0 errores.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 ```bash
 git add lib/flujo.js tests/flujo.test.js
 git commit -m "feat(flujos): motor puro de la Fase B — avanzarDesde, condición, puerto del entrante, parada y cita"
@@ -438,7 +438,7 @@ git commit -m "feat(flujos): motor puro de la Fase B — avanzarDesde, condició
   - `contarPasosFlujoSupabase(flujo_id, desdeIso)` → `{ [nodo_id]: n }`.
 - Produces en `lib/flujos.js`: `filaDeEstado(telefono, parada, { flujo_id, ultimoWamid })` (PURO) y los async `getEstadoFlujo`, `guardarEstadoFlujo`, `borrarEstadoFlujo`, `getEstadosVencidos`, `borrarEstadosCaducados`, `registrarPasos`, `contarPasos` que delegan en `SB.*`.
 
-- [ ] **Step 1: Prueba (RED)** — crear `tests/flujos-estado.test.js`:
+- [x] **Step 1: Prueba (RED)** — crear `tests/flujos-estado.test.js`:
 ```js
 import test from 'node:test'
 import assert from 'node:assert'
@@ -456,7 +456,7 @@ test('filaDeEstado: convierte la parada del motor puro en la fila de inbox.flujo
 ```
 Run: `node --test tests/flujos-estado.test.js` → FAIL (`filaDeEstado` no existe).
 
-- [ ] **Step 2: Implementar en `lib/inbox-supabase.js`** (al final del bloque FLUJOS):
+- [x] **Step 2: Implementar en `lib/inbox-supabase.js`** (al final del bloque FLUJOS):
 ```js
 // ── FLUJOS Fase B: estado por cliente + bitácora ────────────────────────────
 // Un cliente está en UN flujo a la vez: PK (cuenta, telefono). El teléfono se
@@ -532,7 +532,7 @@ export async function contarPasosFlujoSupabase(flujo_id, desdeIso) {
 }
 ```
 
-- [ ] **Step 3: Implementar en `lib/flujos.js`** (al final):
+- [x] **Step 3: Implementar en `lib/flujos.js`** (al final):
 ```js
 // ── Fase B: estado por cliente ───────────────────────────────────────────────
 /** PURO: la parada que devuelve lib/flujo.js (paradaDeCamino) → fila de inbox.flujo_estado. */
@@ -556,9 +556,9 @@ export async function registrarPasos(args) { return SB.registrarPasosFlujoSupaba
 export async function contarPasos(flujo_id, desdeIso) { return SB.contarPasosFlujoSupabase(flujo_id, desdeIso) }
 ```
 
-- [ ] **Step 4: GREEN + prueba real contra la base** — `npm test` en verde, y desde una consola Node con las variables de prod NO se puede (memoria: `vercel env pull` oculta los secretos). En su lugar, verificar por SQL después del deploy de la Task 5 (los controles están ahí).
+- [x] **Step 4: GREEN + prueba real contra la base** — `npm test` en verde, y desde una consola Node con las variables de prod NO se puede (memoria: `vercel env pull` oculta los secretos). En su lugar, verificar por SQL después del deploy de la Task 5 (los controles están ahí).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 ```bash
 git add lib/inbox-supabase.js lib/flujos.js tests/flujos-estado.test.js
 git commit -m "feat(flujos): persistencia del estado por cliente y de la bitácora de pasos"
@@ -579,7 +579,7 @@ git commit -m "feat(flujos): persistencia del estado por cliente y de la bitáco
   - `args = { flujo: { flujo_id, nombre, grafo_vivo }, desde: { nodoId, puerto, saltarEsperaInicial }, esDisparo, contacto: { telefono, nombre, alias, phoneId, temperatura, tieneVenta, estado, ultimoEntranteAt }, wamidEntrante, ultimoWamid, respuestas }`
   - Devuelve `{ camino, piezas, parada, salieron }`. **Orden fijo:** caminar → guardar/borrar estado → registrar pasos → temperatura → mandar piezas (en ese orden, para que un cliente que contesta mientras se manda ya encuentre su estado).
 
-- [ ] **Step 1: Pruebas (RED)** — `tests/flujo-motor.test.js`:
+- [x] **Step 1: Pruebas (RED)** — `tests/flujo-motor.test.js`:
 ```js
 import test from 'node:test'
 import assert from 'node:assert'
@@ -671,7 +671,7 @@ test('correrTanda: camino huérfano o sin piezas → no manda, borra estado, dev
 ```
 Run: `node --test tests/flujo-motor.test.js` → FAIL (módulo no existe).
 
-- [ ] **Step 2: Implementar `lib/flujo-motor.js`**:
+- [x] **Step 2: Implementar `lib/flujo-motor.js`**:
 ```js
 // lib/flujo-motor.js — FLUJOS Fase B: correr UNA tanda de un flujo para un cliente.
 // Lo llaman el webhook (al disparar y al avanzar con un entrante) y el cron
@@ -732,12 +732,12 @@ export async function correrTanda(deps, { flujo, desde, esDisparo, contacto, wam
 }
 ```
 
-- [ ] **Step 3: GREEN**
+- [x] **Step 3: GREEN**
 
 Run: `node --test tests/flujo-motor.test.js && npm test`
 Expected: 6 nuevas en verde; todo lo demás igual.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 ```bash
 git add lib/flujo-motor.js tests/flujo-motor.test.js
 git commit -m "feat(flujos): correrTanda — el único sitio que manda piezas y escribe el estado por cliente"
@@ -757,7 +757,7 @@ git commit -m "feat(flujos): correrTanda — el único sitio que manda piezas y 
 - Consumes: `correrTanda` (Task 4), `getEstadoFlujo`, `borrarEstadoFlujo`, `guardarEstadoFlujo`, `registrarPasos` (Task 3), `puertoDeEntrante` (Task 2), `enviarSaliente`, `enviarTelegram`, `updateTemperatura`, `marcarReceta` (existen).
 - Produces: en `lib/flujo.js`, `decidirEntranteEnFlujo({ estado, flujo, entrante, ahora })` → `{ accion: 'seguir', desde: { nodoId, puerto } } | { accion: 'borrar', motivo } | { accion: 'ignorar', motivo }` (PURO).
 
-- [ ] **Step 1: Prueba de la decisión (RED)** — `tests/webhook-flujo-decision.test.js`:
+- [x] **Step 1: Prueba de la decisión (RED)** — `tests/webhook-flujo-decision.test.js`:
 ```js
 import test from 'node:test'
 import assert from 'node:assert'
@@ -786,7 +786,7 @@ test('decidirEntranteEnFlujo: esperando tiempo → ignorar (el cron sigue); venc
 ```
 Run: `node --test tests/webhook-flujo-decision.test.js` → FAIL.
 
-- [ ] **Step 2: Agregar a `lib/flujo.js`** (después de `puertoDeEntrante`):
+- [x] **Step 2: Agregar a `lib/flujo.js`** (después de `puertoDeEntrante`):
 ```js
 /**
  * Qué hacer con un entrante de un cliente que YA está dentro de un flujo.
@@ -812,7 +812,7 @@ export function decidirEntranteEnFlujo({ estado, flujo, entrante, ahora }) {
 ```
 Run: `node --test tests/webhook-flujo-decision.test.js` → PASS.
 
-- [ ] **Step 3: Webhook — imports** (línea 5 y nuevas):
+- [x] **Step 3: Webhook — imports** (línea 5 y nuevas):
 ```js
 import { elegirFlujo, caminoLineal, decidirEntranteEnFlujo } from '@/lib/flujo'
 import { correrTanda } from '@/lib/flujo-motor'
@@ -820,7 +820,7 @@ import { getEstadoFlujo, guardarEstadoFlujo, borrarEstadoFlujo, registrarPasos }
 ```
 (`piezasDeNodos` y `temperaturaAlPasar` dejan de importarse acá: los usa `correrTanda`.)
 
-- [ ] **Step 4: Webhook — el motor.** Dentro de `procesar`, justo debajo de `flujosPublicados`, agregar el armado de `deps` y la función de AVANCE; y reescribir `flujoSiCorresponde` para que dispare con `correrTanda`:
+- [x] **Step 4: Webhook — el motor.** Dentro de `procesar`, justo debajo de `flujosPublicados`, agregar el armado de `deps` y la función de AVANCE; y reescribir `flujoSiCorresponde` para que dispare con `correrTanda`:
 ```js
   // Las dependencias con red/base del motor de flujos (lib/flujo-motor.js), una
   // vez por ciclo. `enviar` va por /api/saliente con auto:true, como todo lo
@@ -896,7 +896,7 @@ Y en `flujoSiCorresponde`, reemplazar TODO lo que va desde `const camino = camin
 ```
 (Se van de `flujoSiCorresponde`: `piezasDeNodos`, `temperaturaAlPasar`, el `for` de envío y la alarma; todo eso vive ahora en `correrTanda`.)
 
-- [ ] **Step 5: Webhook — loop principal** (línea ~509): el avance va primero:
+- [x] **Step 5: Webhook — loop principal** (línea ~509): el avance va primero:
 ```js
     let conReceta = await flujoEnCursoSiCorresponde(m)
       .catch(e => { console.error('[/api/webhook] flujo en curso:', e.message); return false })
@@ -910,7 +910,7 @@ Y en `flujoSiCorresponde`, reemplazar TODO lo que va desde `const camino = camin
     }
 ```
 
-- [ ] **Step 6: Salientes humanos cancelan el flujo.**
+- [x] **Step 6: Salientes humanos cancelan el flujo.**
   - `app/api/saliente/route.js`, dentro del `if (!body.auto) { ... }` existente (línea ~418), agregar después de `limpiarPush`:
 ```js
       // Una persona contestó: el flujo automático de ese cliente se retira (spec §1:
@@ -926,7 +926,7 @@ Y en `flujoSiCorresponde`, reemplazar TODO lo que va desde `const camino = camin
       await borrarEstadoFlujo(e.telefono).catch(() => {})
 ```
 
-- [ ] **Step 7: `npm test` en verde, commit, push, verificar el deploy con el sha**
+- [x] **Step 7: `npm test` en verde, commit, push, verificar el deploy con el sha**
 ```bash
 git add lib/flujo.js tests/webhook-flujo-decision.test.js app/api/webhook/route.js app/api/saliente/route.js
 git commit -m "feat(flujos): el webhook avanza el flujo con cada entrante y los salientes humanos lo cancelan (Fase B)"
@@ -934,7 +934,7 @@ git push origin main
 ```
 Después: `vercel ls --prod` → el deploy más nuevo `● Ready`, y confirmar el sha con la API (`curl -s https://api.vercel.com/v13/deployments/<url> -H "Authorization: Bearer <token de ~/AppData/Roaming/xdg.data/com.vercel.cli/auth.json>" | python -c "import sys,json;print(json.load(sys.stdin)['meta']['githubCommitSha'][:7])"` = `git rev-parse --short HEAD`).
 
-- [ ] **Step 8: Control en la base tras el deploy** (con un flujo de prueba publicado con botones y un número de prueba — ver Task 9):
+- [x] **Step 8: Control en la base tras el deploy** (con un flujo de prueba publicado con botones y un número de prueba — ver Task 9):
 ```sql
 select telefono, nodo_id, esperando, vence_at, ultimo_wamid from inbox.flujo_estado where cuenta='MANDI';
 select nodo_id, count(*) from inbox.flujo_pasos where cuenta='MANDI' group by 1;
@@ -953,7 +953,7 @@ select nodo_id, count(*) from inbox.flujo_pasos where cuenta='MANDI' group by 1;
 - Produces en `lib/flujo.js`: `decidirVencido({ estado, flujo, contacto, ahora })` → `{ accion: 'seguir', desde: { nodoId, puerto, saltarEsperaInicial: true } } | { accion: 'borrar', motivo }` (PURO).
 - Consumes: `getEstadosVencidos`, `borrarEstadosCaducados`, `borrarEstadoFlujo`, `guardarEstadoFlujo`, `registrarPasos` (Task 3), `correrTanda` (Task 4), `getFlujosPublicadosSupabase`, `getContactos(null)`, `getRespuestas`, `enviarSaliente`, `enviarTelegram`, `updateTemperatura`, `getAutomatizaciones`.
 
-- [ ] **Step 1: Prueba (RED)** — al final de `tests/flujo.test.js` (sumar `decidirVencido` al import):
+- [x] **Step 1: Prueba (RED)** — al final de `tests/flujo.test.js` (sumar `decidirVencido` al import):
 ```js
 test('decidirVencido: ventana abierta y flujo vivo → seguir saltando la espera; ventana cerrada / despublicado / nodo perdido → borrar', () => {
   const ahora = new Date('2026-09-15T12:00:00Z')
@@ -967,7 +967,7 @@ test('decidirVencido: ventana abierta y flujo vivo → seguir saltando la espera
 })
 ```
 
-- [ ] **Step 2: Implementar `decidirVencido` en `lib/flujo.js`** (después de `decidirEntranteEnFlujo`):
+- [x] **Step 2: Implementar `decidirVencido` en `lib/flujo.js`** (después de `decidirEntranteEnFlujo`):
 ```js
 /** Una espera de reloj que ya se cumplió: ¿se sigue o se borra? Nunca fuera de la ventana de 24 h. */
 export function decidirVencido({ estado, flujo, contacto, ahora }) {
@@ -979,7 +979,7 @@ export function decidirVencido({ estado, flujo, contacto, ahora }) {
 }
 ```
 
-- [ ] **Step 3: La ruta `app/api/cron/flujos/route.js`**:
+- [x] **Step 3: La ruta `app/api/cron/flujos/route.js`**:
 ```js
 import { NextResponse } from 'next/server'
 import { getContactos, updateTemperatura } from '@/lib/contactos'
@@ -1067,13 +1067,13 @@ export async function GET(req) {
 ```
 Nota: `c.phoneId` es el canal por el que habla ese cliente (`toContacto` en `inbox-supabase.js`). Si `c` fuera null, `decidirVencido` ya devolvió `borrar` (ventana cerrada), así que acá `c` siempre existe.
 
-- [ ] **Step 4: Los tres lugares**
+- [x] **Step 4: Los tres lugares**
   - `vercel.json`: agregar `{ "path": "/api/cron/flujos", "schedule": "*/5 * * * *" }` a `crons`.
   - `lib/rutas-publicas.js`: agregar `'/api/cron/flujos',` a `RUTAS_PUBLICAS` con el comentario `// esperas de los FLUJOS (Fase B), cada 5 min`; y sumar la línea `//   /api/cron/flujos      → CRON_SECRET` al bloque de arriba.
   - `middleware.js`: en el matcher, `...|api/cron/pagos|api/cron/flujos|api/pago-dlocal|...`.
   - `tests/rutas-publicas.test.js` línea ~12-16: agregar `'/api/cron/flujos',       // cron de Vercel, cada 5 min — esperas de los flujos` a la lista PÚBLICAS.
 
-- [ ] **Step 5: GREEN, commit, push, verificar que el cron VIVE**
+- [x] **Step 5: GREEN, commit, push, verificar que el cron VIVE**
 ```bash
 npm test
 git add app/api/cron/flujos/route.js vercel.json lib/rutas-publicas.js middleware.js tests/rutas-publicas.test.js lib/flujo.js tests/flujo.test.js
@@ -1098,7 +1098,7 @@ Tras el deploy (sha verificado): `curl -s "https://inbox.apps.mandarinaec.com/ap
 - Produces: `GET /api/flujos/pasos?flujo_id=&dias=30` → `{ ok, porNodo: { [nodoId]: n }, dias }`; `getPasosFlujo(flujo_id)` en `lib/api-client.js` → mismo objeto o `{ ok:false, porNodo:{} }`.
 - Consumes: `contarPasos(flujo_id, desdeIso)` (Task 3).
 
-- [ ] **Step 1: Ruta `app/api/flujos/pasos/route.js`** (mismo estilo que `app/api/flujos/route.js`: mirar cómo lee query y responde):
+- [x] **Step 1: Ruta `app/api/flujos/pasos/route.js`** (mismo estilo que `app/api/flujos/route.js`: mirar cómo lee query y responde):
 ```js
 import { NextResponse } from 'next/server'
 import { contarPasos } from '@/lib/flujos'
@@ -1124,7 +1124,7 @@ export async function GET(req) {
 ```
 Y en `tests/rutas-publicas.test.js` línea 21 sumar `'/api/flujos/pasos'` a la lista PROTEGIDAS. `npm test` → verde.
 
-- [ ] **Step 2: `lib/api-client.js`** (junto a `getFlujos`, misma forma con `cache: 'no-store'` y `t=Date.now()`):
+- [x] **Step 2: `lib/api-client.js`** (junto a `getFlujos`, misma forma con `cache: 'no-store'` y `t=Date.now()`):
 ```js
 export async function getPasosFlujo(flujo_id, dias = 30) {
   try {
@@ -1136,18 +1136,18 @@ export async function getPasosFlujo(flujo_id, dias = 30) {
 }
 ```
 
-- [ ] **Step 3: `Flujos.jsx`** — estado `const [pasos, setPasos] = useState({})`; en el `useEffect` que se dispara al cambiar el flujo abierto (`actual?.flujo_id`, cerca de la línea 183), cargar `getPasosFlujo(actual.flujo_id).then(r => setPasos(r?.porNodo || {}))` y `setPasos({})` si no hay flujo; en `ctx` (línea ~549, el `useMemo` que arma el valor del Provider) sumar `pasos`. Importar `getPasosFlujo` en la línea 22.
+- [x] **Step 3: `Flujos.jsx`** — estado `const [pasos, setPasos] = useState({})`; en el `useEffect` que se dispara al cambiar el flujo abierto (`actual?.flujo_id`, cerca de la línea 183), cargar `getPasosFlujo(actual.flujo_id).then(r => setPasos(r?.porNodo || {}))` y `setPasos({})` si no hay flujo; en `ctx` (línea ~549, el `useMemo` que arma el valor del Provider) sumar `pasos`. Importar `getPasosFlujo` en la línea 22.
 
-- [ ] **Step 4: `nodos.jsx`** — línea 21: `createContext({ erroresPorNodo: {}, respuestas: [], anuncios: [], pasos: {} })`. Borrar `EtiquetaFaseB` y TODOS sus `<EtiquetaFaseB />` (en `NodoMensaje` cuando `faseB`, y en Condición); borrar la variable `faseB` si queda sin uso. En el armazón común (la función que recibe `nodo` y pinta título + puertos, línea ~75), leer `const { erroresPorNodo, pasos } = useContext(CtxLienzo)` y, debajo del título, si `pasos[id] > 0`:
+- [x] **Step 4: `nodos.jsx`** — línea 21: `createContext({ erroresPorNodo: {}, respuestas: [], anuncios: [], pasos: {} })`. Borrar `EtiquetaFaseB` y TODOS sus `<EtiquetaFaseB />` (en `NodoMensaje` cuando `faseB`, y en Condición); borrar la variable `faseB` si queda sin uso. En el armazón común (la función que recibe `nodo` y pinta título + puertos, línea ~75), leer `const { erroresPorNodo, pasos } = useContext(CtxLienzo)` y, debajo del título, si `pasos[id] > 0`:
 ```jsx
 <div title="clientes distintos que pasaron por acá en los últimos 30 días"
   style={{ fontSize: 9, fontWeight: 800, color: '#a78bfa', marginTop: 2 }}>👤 {pasos[id]}</div>
 ```
 (el `id` del nodo llega por props de React Flow a cada nodo: ver cómo `NodoMensaje({ id, data, selected })` lo recibe y pasarlo al armazón).
 
-- [ ] **Step 5: `PanelEdicion.jsx`** — borrar el `<div>` "las esperas corren desde la Fase B" (líneas ~326-328). Nada más cambia.
+- [x] **Step 5: `PanelEdicion.jsx`** — borrar el `<div>` "las esperas corren desde la Fase B" (líneas ~326-328). Nada más cambia.
 
-- [ ] **Step 6: Verificar en el navegador y commit** — `npm run dev`, abrir FLUJOS, un flujo publicado con pasos: se ve `👤 N` en los nodos por los que pasó alguien; los nodos con botones ya no dicen "corre desde la Fase B".
+- [x] **Step 6: Verificar en el navegador y commit** — `npm run dev`, abrir FLUJOS, un flujo publicado con pasos: se ve `👤 N` en los nodos por los que pasó alguien; los nodos con botones ya no dicen "corre desde la Fase B".
 ```bash
 npm test
 git add app/api/flujos/pasos/route.js lib/api-client.js components/flujos/Flujos.jsx components/flujos/nodos.jsx components/flujos/PanelEdicion.jsx tests/rutas-publicas.test.js
@@ -1190,7 +1190,7 @@ git push origin main
 - Modify: memoria de Claude `inbox-flujos-lienzo.md` + línea del índice.
 - Modify: skill `inbox-mandarina` (3 copias: `wa-inbox-next/.claude/skills/`, `ind-inbox-next/.claude/skills/`, `~/.claude/skills/`) — una trampa nueva: **"un cliente que contesta un flujo llega como `tipo:'texto'`; el id del botón está en `raw.interactive.button_reply.id`"**.
 
-- [ ] **Step 1: Handoff** con: qué corre ahora (tabla como la del handoff A, todo en "sí"), dónde vive cada cosa (`lib/flujo-motor.js`, `flujo_estado`, `flujo_pasos`, cron), controles SQL:
+- [x] **Step 1: Handoff** con: qué corre ahora (tabla como la del handoff A, todo en "sí"), dónde vive cada cosa (`lib/flujo-motor.js`, `flujo_estado`, `flujo_pasos`, cron), controles SQL:
 ```sql
 select telefono, nodo_id, esperando, puerto_tiempo, vence_at from inbox.flujo_estado where cuenta='MANDI' order by actualizado_at desc;
 select f.nombre, p.nodo_id, count(distinct p.telefono) clientes from inbox.flujo_pasos p join inbox.flujos f using (flujo_id) where p.cuenta='MANDI' and p.pasado_at > now() - interval '7 days' group by 1,2 order by 1,3 desc;
@@ -1205,7 +1205,7 @@ y logs: `[flujo] <nombre> a <tel> N/M piezas (motivo)` · `[/api/cron/flujos] ve
   5. Repetir y, en la espera, contestarle a mano desde el inbox → SQL: la fila desapareció (el cron no manda nada después).
   6. Despublicar "PRUEBA B".
 
-- [ ] **Step 3: Memoria y skill** actualizadas; commit de docs:
+- [x] **Step 3: Memoria y skill** actualizadas; commit de docs:
 ```bash
 git add docs/HANDOFF-2026-09-XX-flujos-fase-b.md docs/HANDOFF-2026-09-15-flujos-fase-a.md .claude/skills/inbox-mandarina/SKILL.md
 git commit -m "docs(flujos): handoff de la Fase B y trampa del botón tocado en la skill"

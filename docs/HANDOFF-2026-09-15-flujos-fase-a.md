@@ -1,3 +1,5 @@
+> ⚠️ **Superado por `docs/HANDOFF-2026-09-15-flujos-fase-b.md`** (la Fase B ya está en producción).
+
 # HANDOFF · 15-sep-2026 · FLUJOS, Fase A (lienzo + motor lineal) — MANDI
 
 **Qué es:** la pestaña **FLUJOS** del inbox: un lienzo de nodos (React Flow) donde Rodrigo dibuja

@@ -170,6 +170,22 @@ estar en el default de la tabla o en `getConvId`, no en un paso posterior.
 > Corolario para el cron de seguimientos: decidir por el **cortafuegos del
 > NÚMERO + el chat** (`decidirIA`), nunca solo por `modoIA` del chat.
 
+### 8. Un botón tocado parece un texto (sep-2026)
+
+`extraer()` (`lib/wa-mensaje.js`) convierte un botón tocado (`interactive.button_reply`),
+una respuesta de plantilla (`button`) y una ubicación en **`tipo:'texto'`**, con el
+título o la dirección en `contenido`. Quien decide por `m.tipo === 'texto'` trata
+"Sí, quiero" como si el cliente lo hubiera escrito.
+
+- Para saber si ESCRIBIÓ, mirar el crudo: `m.raw?.type === 'text'`. Así se protege
+  el disparador por palabra clave de FLUJOS.
+- Para saber QUÉ botón tocó, el id está en `m.raw.interactive.button_reply.id`. Los
+  botones que salen del inbox llevan ids `rc_1..rc_3` (`normalizarBotones`), que en
+  el lienzo son los puertos `btn_1..btn_3`, con el mismo índice.
+
+> En MANDI, `flujoEnCursoSiCorresponde` (webhook) es quien lee ese id para avanzar el
+> flujo. Si IND hereda FLUJOS, hereda también esta lectura.
+
 ---
 
 ## Reglas que ya se pagaron
