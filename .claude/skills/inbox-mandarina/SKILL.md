@@ -189,6 +189,26 @@ título o la dirección en `contenido`. Quien decide por `m.tipo === 'texto'` tr
 
 ---
 
+### 9. Meta no deja editar ni borrar lo ya enviado (sep-2026)
+
+Verificado contra la documentación de la Cloud API antes de prometer nada:
+
+- **No hay endpoint para editar** un mensaje que enviamos, ni para **borrarlo** ("eliminar para
+  todos"). Solo enviar, reaccionar, marcar leído y el indicador de escribiendo.
+- **Tampoco existe "reenviar"**: no hay bandera `forwarded`. Reenviar es mandar el MISMO contenido
+  otra vez, como mensaje nuevo (`lib/reenvio.js`, 18-sep-2026).
+
+⚠️ **Pero editar y borrar SÍ pasan del lado del cliente** y Meta los manda por webhook, solo en
+coexistencia: editar hasta 15 min después, borrar hasta 2 días después. Medido en 60 días: IND
+recibió **242 ediciones y 112 borrados**, y 35 ediciones salieron desde el celular. Hoy cada uno
+entra como fila nueva ("✏️ Editó un mensaje" / "🚫 Eliminó un mensaje") y **el mensaje original se
+queda con el texto viejo**: el inbox muestra algo que el cliente ya cambió.
+
+> Al reenviar, el canal es el del chat DESTINO, nunca el de la pestaña ni el del chat de origen. Y un
+> medio sin `mediaUrl` no se reenvía: su `mediaId` es de NUESTRO número.
+
+---
+
 ## Reglas que ya se pagaron
 
 - **Ningún automatismo saca un chat de Pendientes.** *"Si esa bandeja está vacía,
