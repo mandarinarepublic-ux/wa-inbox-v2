@@ -1,7 +1,7 @@
 'use client'
-import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
 import dynamic from 'next/dynamic'
-import { fetchInboxSync, fetchHilo, buscarEnMensajes, sendReply, updateContact, updateTemperatura, isDemo, sendInteractiveButtons, toggleIAMode, sendVideo, sendDocumento, sendAudio, enviarAudioUrl, enviarDocumentoUrl, sendImageFile, precacheMedia, setCanalActivo, getCanalActivo } from '@/lib/api-client'
+import { fetchInboxSync, fetchHilo, buscarEnMensajes, sendReply, updateContact, updateTemperatura, isDemo, sendInteractiveButtons, toggleIAMode, sendVideo, sendDocumento, sendAudio, enviarAudioUrl, enviarDocumentoUrl, sendImageFile, precacheMedia, setCanalActivo, getCanalActivo, reenviarPieza } from '@/lib/api-client'
 import { buildConvs, fmtDate, parseDate } from '@/lib/utils'
 import { Spinner, Avatar, ContactRow, MessageBubble, Toast } from '@/components/Components'
 import RightPanel from '@/components/RightPanel'
@@ -26,6 +26,7 @@ import { pestanaGuardada } from '@/lib/pestana'
 import { fusionarHilo } from '@/lib/hilo-historico'
 import { ordenarBandeja } from '@/lib/orden-bandeja'
 import { decidirPegado, decidirAdjuntos, TOPE_FOTOS } from '@/lib/adjuntos'
+import { piezasDeReenvio, destinosParaReenviar, resumenDeReenvio } from '@/lib/reenvio'
 
 // ☠️ FLUJOS SE CARGA APARTE Y SOLO AL ENTRAR. React Flow pesa ~150 kB gz: metido
 // en el bundle de siempre, lo pagaría CADA vendedor en CADA carga del inbox para
@@ -239,6 +240,10 @@ export default function App() {
   const [showSidebar,  setShowSidebar]  = useState(true)
   const [showRight,    setShowRight]    = useState(false)
   const [showTplModal, setShowTplModal] = useState(false) // plantilla desde el chat (fuera de 24h)
+  // Reenviar: el mensaje elegido, el buscador de destino y el candado del envío.
+  const [reenviando, setReenviando] = useState(null)
+  const [buscaReenvio, setBuscaReenvio] = useState('')
+  const [reenviandoAhora, setReenviandoAhora] = useState(false)
   const [tplToast,     setTplToast]     = useState(null)
   const [imgFiles,     setImgFiles]     = useState([]) // array de { file, preview }
   const [imgUploading, setImgUploading] = useState(false)
@@ -1994,6 +1999,43 @@ export default function App() {
    * barra de la cita ARRIBA del textarea, que lo mueve; enfocarlo antes de que
    * el navegador lo recoloque deja la vista saltando.
    */
+  // ── Reenviar a otro chat ───────────────────────────────────────────────────
+  // `piezasDeReenvio` (lib/reenvio.js, con pruebas) decide QUÉ sale según el tipo;
+  // acá solo se manda, en orden, al chat elegido. ☠️ El canal es el del DESTINO,
+  // no el de la pestaña ni el del chat de origen: escribirle a otra conversación
+  // por el número equivocado es un mensaje que Meta rechaza y nadie recibe.
+  const destinosReenvio = useMemo(
+    () => (reenviando
+      ? destinosParaReenviar(convs, {
+        excluir: activeConv ? { telefono: activeConv.telefono, phoneId: activeConv.phoneId } : null,
+        busqueda: buscaReenvio,
+      })
+      : []),
+    [reenviando, convs, activeConv, buscaReenvio],
+  )
+
+  const confirmarReenvio = async (destino) => {
+    const msg = reenviando
+    if (!msg || !destino?.puede || reenviandoAhora) return
+    const piezas = piezasDeReenvio(msg)
+    if (!piezas.length) { setReenviando(null); return }
+    setReenviandoAhora(true)
+    let salieron = 0
+    let motivo = ''
+    for (const pieza of piezas) {
+      const r = await reenviarPieza(destino.telefono, destino.nombre, pieza, destino.phoneId)
+      if (r?.ok) salieron++
+      else if (!motivo) motivo = r?.error || 'Meta lo rechazó'
+    }
+    setReenviandoAhora(false)
+    setReenviando(null)
+    setBuscaReenvio('')
+    setToast(salieron === piezas.length
+      ? { ok: true, msg: `↪ Reenviado a ${destino.nombre}` }
+      : { ok: false, msg: `No se pudo reenviar a ${destino.nombre}: ${motivo}` })
+    setTimeout(() => setToast(null), 3500)
+  }
+
   const responderA = (msg) => {
     setCitando(msg)
     requestAnimationFrame(() => {
@@ -2769,7 +2811,7 @@ export default function App() {
                         <span style={{ background:'rgba(255,255,255,.04)', borderRadius:20, padding:'3px 14px', fontSize:11, color:'#475569' }}>{fmtDate(msg.timestamp)}</span>
                       </div>
                     )}
-                    <MessageBubble msg={msg} allMsgs={activeConv.msgs} onResponder={responderA} onAbrirChat={openConv} />
+                    <MessageBubble msg={msg} allMsgs={activeConv.msgs} onResponder={responderA} onAbrirChat={openConv} onReenviar={setReenviando} />
                   </div>
                 )
               })}
@@ -3087,6 +3129,53 @@ export default function App() {
 
         </div>{/* fin app-shell */}
       </div>{/* fin wrapper */}
+
+      {/* ══════ REENVIAR A OTRO CHAT ══════
+          Meta no tiene "reenviar": esto manda el MISMO contenido a otra
+          conversación, como mensaje nuevo. El canal sale del chat DESTINO. */}
+      {reenviando && (
+        <div onClick={() => setReenviando(null)} style={{
+          position:'fixed', inset:0, zIndex:80, background:'rgba(0,0,0,.6)',
+          display:'flex', alignItems:'center', justifyContent:'center', padding:16,
+        }}>
+          <div onClick={(e) => e.stopPropagation()} style={{
+            width:'min(420px, 96vw)', maxHeight:'80vh', display:'flex', flexDirection:'column',
+            background:'#0d1828', border:`1px solid ${'#1e2d3d'}`, borderRadius:14, overflow:'hidden',
+          }}>
+            <div style={{ padding:'12px 14px', borderBottom:`1px solid ${'#1e2d3d'}` }}>
+              <div style={{ fontSize:13, fontWeight:800, color:'#e2e8f0' }}>↪ Reenviar a otro chat</div>
+              <div style={{ fontSize:11, color:'#94a3b8', marginTop:3, wordBreak:'break-word' }}>{resumenDeReenvio(reenviando)}</div>
+            </div>
+            <div style={{ padding:10, borderBottom:`1px solid ${'#1e2d3d'}` }}>
+              <input autoFocus value={buscaReenvio} onChange={(e) => setBuscaReenvio(e.target.value)}
+                placeholder="Buscar nombre o número…"
+                style={{ width:'100%', padding:'8px 10px', borderRadius:9, border:`1px solid ${'#1e2d3d'}`,
+                  background:'rgba(0,0,0,.25)', color:'#e2e8f0', fontSize:12, outline:'none', fontFamily:'inherit' }} />
+            </div>
+            <div style={{ overflowY:'auto', padding:8 }}>
+              {destinosReenvio.length === 0 && (
+                <div style={{ padding:12, fontSize:12, color:'#94a3b8' }}>No hay chats que coincidan.</div>
+              )}
+              {destinosReenvio.slice(0, 60).map((d) => (
+                <button key={`${d.telefono}|${d.phoneId}`} disabled={!d.puede || reenviandoAhora}
+                  onClick={() => confirmarReenvio(d)}
+                  title={d.puede ? 'Reenviar a este chat' : d.motivo}
+                  style={{
+                    width:'100%', textAlign:'left', display:'block', marginBottom:6, padding:'9px 11px', borderRadius:10,
+                    background: d.puede ? 'rgba(255,255,255,.04)' : 'transparent',
+                    border:`1px solid ${'#1e2d3d'}`, color: d.puede ? '#e2e8f0' : '#64748b',
+                    cursor: d.puede && !reenviandoAhora ? 'pointer' : 'not-allowed', fontFamily:'inherit', fontSize:12, fontWeight:700,
+                  }}>
+                  <span>{d.nombre}</span>
+                  <span style={{ display:'block', fontSize:10, fontWeight:600, color:'#64748b', marginTop:2 }}>
+                    {d.puede ? d.telefono : `${d.telefono} · ${d.motivo}`}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal de plantilla desde el chat (cuando la ventana de 24h está cerrada) */}
       {showTplModal && activeConv && (

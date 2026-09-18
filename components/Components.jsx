@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { colorFor, initialsFor, fmtTime, parseDate, hashWamid } from '@/lib/utils'
 import { partirEnlaces } from '@/lib/enlaces'
 import { resumenDeLista } from '@/lib/resumen-lista'
+import { puedeReenviar } from '@/lib/reenvio'
 
 // ── SPINNER ──────────────────────────────────────────────────────
 export function Spinner({ size = 24 }) {
@@ -806,8 +807,9 @@ function UbicacionCard({ u }) {
   )
 }
 
-export function MessageBubble({ msg, allMsgs, onResponder, onAbrirChat }) {
+export function MessageBubble({ msg, allMsgs, onResponder, onAbrirChat, onReenviar }) {
   const [accion, setAccion] = useState(false)
+  const [hover, setHover] = useState(false)
   const isMe     = msg.direccion === 'SALIENTE'
 
   // Un clic sobre una foto, un link o un botón hace LO SUYO, no abre el "Responder".
@@ -821,11 +823,32 @@ export function MessageBubble({ msg, allMsgs, onResponder, onAbrirChat }) {
   const hasMedia = !!(msg.mediaUrl || msg.mediaId)
   const hasText  = !!msg.mensaje
 
+  // ↪ Reenviar a otro chat. Va FUERA de la burbuja, del lado de afuera: dentro
+  // competiría con el clic que abre "Responder" y con los enlaces del texto.
+  // Tenue por defecto y entero al pasar el mouse o al tocar el mensaje, para que
+  // también aparezca en el celular, donde no hay hover.
+  const sePuedeReenviar = !!onReenviar && puedeReenviar(msg).ok
+  const botonReenviar = sePuedeReenviar ? (
+    <button
+      onClick={(e) => { e.stopPropagation(); setAccion(false); onReenviar(msg) }}
+      title="Reenviar a otro chat"
+      style={{
+        alignSelf: 'center', flexShrink: 0, margin: '0 4px',
+        background: 'transparent', border: 'none', cursor: 'pointer',
+        fontSize: 15, lineHeight: 1, padding: 4, color: '#94a3b8',
+        opacity: (hover || accion) ? 1 : 0.28, transition: 'opacity .15s',
+      }}>↪</button>
+  ) : null
+
   return (
-    <div style={{
-      display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start',
+    <div
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+      display: 'flex', alignItems: 'center', justifyContent: isMe ? 'flex-end' : 'flex-start',
       marginBottom: 4, animation: 'up .2s ease',
     }}>
+      {isMe && botonReenviar}
       <div className="msg-bubble"
         onClick={alTocar}
         title={onResponder ? 'Toca para responder a este mensaje' : undefined}
@@ -940,6 +963,7 @@ export function MessageBubble({ msg, allMsgs, onResponder, onAbrirChat }) {
           </div>
         )}
       </div>
+      {!isMe && botonReenviar}
     </div>
   )
 }
