@@ -434,14 +434,80 @@ export default function Automatizaciones({ active }) {
             })}
           </Card>
 
-          {/* Nota siguiente módulo */}
-          <div style={{
-            border: '1px dashed #1e2d3d', borderRadius: 14, padding: 16, textAlign: 'center',
-            color: '#475569', fontSize: 12,
-          }}>
-            🚧 Aquí iremos sumando más automatizaciones (seguimiento, fuera de horario, etiquetas…).
-          </div>
         </>)}
+
+        {/* ══════ NÚMEROS CONECTADOS A LA API ══════
+            Va FUERA del `config &&` de arriba a propósito. Es la herramienta de
+            rescate del inbox, y el día que se necesita puede ser justo el día en
+            que /api/automatizaciones no contesta: un botón de emergencia
+            escondido detrás de una carga que falló no sirve para nada.
+
+            Por qué existe esta tarjeta: REPUBLIC se cayó de la API el 5-sep-2026
+            y pasaron 16 días sin que nadie se enterara. En coexistencia el
+            celular es el dueño del número, así que siguió recibiendo y
+            contestando todo con normalidad; lo único que se cortó fue la copia
+            hacia el inbox — sin error en pantalla y sin un solo 5xx en Vercel.
+            La página para re-engancharlo existe desde el 12-sep, pero no estaba
+            enlazada en ningún lado: había que saberse la dirección de memoria. */}
+        <Card>
+          <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 4 }}>📱 Números conectados a la API</div>
+          <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 14, lineHeight: 1.5 }}>
+            Un número que vive en la app de WhatsApp Business de un celular está en{' '}
+            <b style={{ color: '#cbd5e1' }}>coexistencia</b>: el teléfono es el dueño y la API va al
+            costado, copiando todo al inbox. Ese enganche se cae solo cada tanto, y cuando se cae el
+            celular sigue igual de bien — lo único que se queda mudo es esta pantalla.
+          </div>
+
+          <a href="/admin/conectar-whatsapp" target="_blank" rel="noopener noreferrer" style={{
+            display: 'block', textAlign: 'center', textDecoration: 'none',
+            background: 'linear-gradient(135deg,#25d366,#1da851)', color: '#0b1220',
+            borderRadius: 12, padding: '12px 18px', fontWeight: 900, fontSize: 14,
+            fontFamily: 'Outfit,sans-serif',
+          }}>
+            🔌 Conectar o re-enganchar un número del celular
+          </a>
+          <div style={{ fontSize: 11, color: '#64748b', marginTop: 8, lineHeight: 1.5 }}>
+            Abre el diálogo de Meta. Te manda un WhatsApp de <b>Facebook Business</b> al celular con un
+            código: ahí tocas <b>Conectar a la Plataforma empresarial</b> y pegas el código.
+            <b style={{ color: '#94a3b8' }}> Ten el teléfono a mano</b> antes de empezar.
+          </div>
+
+          <div style={{
+            fontSize: 11, color: '#64748b', letterSpacing: '.05em',
+            marginTop: 16, marginBottom: 6, textTransform: 'uppercase',
+          }}>
+            ¿Qué dice Meta de cada número? (solo lectura)
+          </div>
+          {/* Un enlace por canal en vez de uno solo: el diagnóstico es POR número
+              —`platform_type`, `status` y las apps suscritas son de ese número, no
+              de la cuenta— y el que se cae casi nunca es el que estás mirando. */}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {CANALES.map(c => (
+              <a key={c.id} href={`/api/admin/meta-waba?canal=${c.id}`} target="_blank" rel="noopener noreferrer"
+                title={c.titulo}
+                style={{
+                  textDecoration: 'none', color: c.color, fontWeight: 800, fontSize: 12,
+                  border: `1px solid ${c.color}55`, borderRadius: 10, padding: '7px 13px',
+                  background: `${c.color}12`, fontFamily: 'Outfit,sans-serif',
+                }}>
+                🔎 {c.etiqueta}
+              </a>
+            ))}
+          </div>
+          <div style={{ fontSize: 11, color: '#64748b', marginTop: 8, lineHeight: 1.5 }}>
+            Sano es <b style={{ color: '#25d366' }}>CLOUD_API · CONNECTED</b>. Si sale{' '}
+            <b style={{ color: '#f97316' }}>ON_PREMISE</b>, <b style={{ color: '#f97316' }}>NOT_APPLICABLE</b>{' '}
+            o el número ni aparece, el enganche está muerto y toca rehacerlo con el botón de arriba.
+          </div>
+        </Card>
+
+        {/* Nota siguiente módulo */}
+        <div style={{
+          border: '1px dashed #1e2d3d', borderRadius: 14, padding: 16, textAlign: 'center',
+          color: '#475569', fontSize: 12,
+        }}>
+          🚧 Aquí iremos sumando más automatizaciones (seguimiento, fuera de horario, etiquetas…).
+        </div>
       </div>
 
       {/* Barra de guardar (sticky) */}
