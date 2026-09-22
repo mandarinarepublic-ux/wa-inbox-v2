@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { waitUntil } from '@vercel/functions'
 import { registrarContactoEntrante, getContactos, updateEstado, updateModoIA, marcarPush, marcarReceta, registrarAnuncioVisto, reclamarAvisoAnuncio, liberarAvisoAnuncio, updateTemperatura } from '@/lib/contactos'
 import { decidirReceta, piezasDeReceta, textoAvisoAnuncioNuevo, esc } from '@/lib/recetas'
-import { elegirFlujo, caminoLineal, decidirEntranteEnFlujo } from '@/lib/flujo'
+import { elegirFlujo, caminoLineal, decidirEntranteEnFlujo, elegirFlujoPorBoton, tituloBotonTocado, nodoDisparador } from '@/lib/flujo'
 import { correrTanda } from '@/lib/flujo-motor'
 import { getEstadoFlujo, guardarEstadoFlujo, borrarEstadoFlujo, registrarPasos } from '@/lib/flujos'
 import { getRespuestas } from '@/lib/respuestas'
@@ -390,6 +390,40 @@ async function procesar(nuevos, origin) {
     return true
   }
 
+  // ── Disparador "Botón tocado" (22-sep-2026) ──────────────────────────────
+  // El vendedor manda una respuesta rápida con botones ("¿Cómo prefieres pagar?"
+  // → Pichincha · Guayaquil · Produbanco) y cada toque se contesta solo con el
+  // flujo publicado cuyo Disparador tiene ese título.
+  //
+  // A propósito NO pasa por las guardas de flujoSiCorresponde, que acá dirían lo
+  // contrario de lo que se quiere:
+  //   - humanoAtendiendo: el botón lo mandó una persona, así que SIEMPRE hay una.
+  //   - marcarReceta (uno por cliente cada 24 h): al que vino de pauta ya le salió
+  //     el saludo, y el que toca Pichincha y después Guayaquil necesita los dos.
+  //   - modoIAde: el flujo gana; el llamador salta la IA para este mensaje, para
+  //     que no conteste encima el título del botón (ni invente una cuenta).
+  // La única guarda que sí queda es la de la tanda (`recetados`): un cliente que
+  // ya recibió algo automático en ESTE lote no recibe otra cosa encima.
+  async function flujoPorBotonSiCorresponde(m) {
+    if (!auto?.flujos?.activo) return false
+    const titulo = tituloBotonTocado(m.raw)
+    if (!titulo) return false
+    const flujo = elegirFlujoPorBoton({ flujos: await flujosPublicados(), titulo })
+    if (!flujo) return false
+    const t = tail9(m.telefono)
+    if (recetados.has(t)) return false
+    recetados.add(t)
+    saludados.add(t)
+    const respuestas = await respuestasRapidas()
+    const disparador = nodoDisparador(flujo.grafo_vivo)
+    console.log('[/api/webhook] botón', JSON.stringify(titulo), '→ flujo', flujo.nombre, m.telefono)
+    waitUntil(correrTanda(depsFlujo, {
+      flujo, desde: { nodoId: disparador.id, puerto: 'siguiente' }, esDisparo: true,
+      contacto: contactoParaFlujo(m), wamidEntrante: m.wamid, ultimoWamid: m.wamid, respuestas,
+    }).catch(e => console.error('[/api/webhook] flujo de botón falló:', e.message)))
+    return true
+  }
+
   async function flujoSiCorresponde(m) {
     // Interruptor general de FLUJOS (AUTOS). Va PRIMERO: apagado, ni se lee la
     // tabla. Ver DEFAULTS.flujos en lib/automatizaciones.js.
@@ -553,6 +587,12 @@ async function procesar(nuevos, origin) {
     // está gana: un entrante que dispararía otro flujo no reinicia nada).
     let conReceta = await flujoEnCursoSiCorresponde(m)
       .catch(e => { console.error('[/api/webhook] flujo en curso:', e.message); return false })
+    let porBoton = false
+    if (!conReceta) {
+      porBoton = await flujoPorBotonSiCorresponde(m)
+        .catch(e => { console.error('[/api/webhook] flujo de botón:', e.message); return false })
+      conReceta = porBoton
+    }
     if (!conReceta) {
       conReceta = await flujoSiCorresponde(m)
         .catch(e => { console.error('[/api/webhook] flujo:', e.message); return false })
@@ -583,6 +623,9 @@ async function procesar(nuevos, origin) {
         continue // no seguir con la IA para este mensaje
       }
     }
+
+    // Un botón que ya contestó su flujo no se le pasa además a la IA.
+    if (porBoton) continue
 
     // Auto-respuesta IA (solo si el contacto tiene la IA prendida):
     if (modoIAde(m.telefono, m.phoneId)) {

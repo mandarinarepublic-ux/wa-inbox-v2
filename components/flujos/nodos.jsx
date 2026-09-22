@@ -156,6 +156,16 @@ function NodoDisparador({ id, data, selected }) {
         </div>
       </>
     )
+  } else if (tipo === 'boton') {
+    const boton = String(data?.boton || '').trim()
+    cuerpo = (
+      <>
+        <div style={{ fontWeight: 800, color: '#e2e8f0' }}>Toca un botón</div>
+        <div style={{ color: boton ? '#94a3b8' : '#f87171', marginTop: 2 }}>
+          {boton ? `🔘 ${boton}` : 'sin título de botón'}
+        </div>
+      </>
+    )
   } else {
     cuerpo = (
       <>

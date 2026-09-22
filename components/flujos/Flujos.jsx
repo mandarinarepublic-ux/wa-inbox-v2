@@ -60,6 +60,7 @@ function resumenDisparador(grafo) {
     return `🔤 ${ps.slice(0, 3).join(', ') || 'sin palabras'}${ps.length > 3 ? '…' : ''}`
   }
   if (dt.tipo === 'organico') return '🌱 Contacto nuevo'
+  if (dt.tipo === 'boton') return `🔘 ${String(dt.boton || '').trim() || 'sin título de botón'}`
   return '⚠️ Sin disparador'
 }
 

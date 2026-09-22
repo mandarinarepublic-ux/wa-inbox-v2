@@ -90,8 +90,21 @@ function EditorDisparador({ datos, anuncios, onCambiar }) {
           { id: 'organico', label: '🌱 Contacto nuevo sin anuncio' },
           { id: 'anuncio', label: '📣 Llega desde un anuncio' },
           { id: 'palabra', label: '🔤 Escribe una palabra' },
+          { id: 'boton', label: '🔘 Toca un botón' },
         ]} />
       </Bloque>
+
+      {tipo === 'boton' && (
+        <Bloque titulo="TÍTULO DEL BOTÓN">
+          <input value={String(datos?.boton || '')} onChange={(e) => onCambiar({ boton: e.target.value })}
+            placeholder="ej. Banco Pichincha" maxLength={MAX_TITULO} style={estiloCampo} />
+          <div style={{ fontSize: 10, color: '#64748b', marginTop: 5 }}>
+            Arranca cuando el cliente TOCA un botón con este título, aunque lo haya mandado
+            una persona desde una respuesta rápida. Tiene que ser el título exacto (sin
+            importar mayúsculas ni tildes); si lo escribe a mano, no arranca.
+          </div>
+        </Bloque>
+      )}
 
       {tipo === 'anuncio' && (
         <Bloque titulo={`ANUNCIOS (${sourceIds.length})`}>
