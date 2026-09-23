@@ -207,6 +207,20 @@ queda con el texto viejo**: el inbox muestra algo que el cliente ya cambió.
 > Al reenviar, el canal es el del chat DESTINO, nunca el de la pestaña ni el del chat de origen. Y un
 > medio sin `mediaUrl` no se reenvía: su `mediaId` es de NUESTRO número.
 
+### 10. Un cron que se llama a sí mismo por `req.url` rebota con 401 (sep-2026)
+
+Vercel Cron invoca la dirección INTERNA del despliegue (`ind-inbox-v2-xxxx….vercel.app`),
+que tiene la protección de Vercel prendida. Todo `fetch(`${new URL(req.url).origin}/api/saliente`)`
+rebotaba con `401 Protected deployment` **antes de llegar a nuestro código**, y el cron
+devolvía 200 igual. Resultado en IND: **cero seguimientos en toda la historia** (~40
+rechazos por hora). MANDI tenía el mismo síntoma.
+
+**Arreglo (IND, 22-sep-2026):** `lib/url-propia.js` → dominio de producción (o `INBOX_URL`),
+con prueba que prohíbe volver a `req.url` en los crons. El webhook NO lo necesita: a él lo
+llama Meta por el dominio público.
+
+> Un 200 del cron no prueba que salió nada: mirar el CUERPO de la respuesta y los logs.
+
 ---
 
 ## Reglas que ya se pagaron
