@@ -3,7 +3,7 @@
 // y cada toque se contesta solo con el flujo cuyo Disparador tiene ese título.
 import test from 'node:test'
 import assert from 'node:assert'
-import { validarFlujo, choquesDeDisparador, elegirFlujo, elegirFlujoPorBoton, tituloBotonTocado } from '../lib/flujo.js'
+import { validarFlujo, choquesDeDisparador, elegirFlujo, elegirFlujoPorBoton, tituloBotonTocado, decidirEntranteEnFlujo } from '../lib/flujo.js'
 import { MAX_TITULO } from '../lib/recetas.js'
 
 const D = (datos) => ({ id: 'd', tipo: 'disparador', pos: { x: 0, y: 0 }, datos })
@@ -57,6 +57,41 @@ test('elegirFlujoPorBoton: ignora los flujos de palabra, anuncio y orgánico', (
 test('elegirFlujo: un flujo de botón NUNCA sale por palabra ni por orgánico', () => {
   const flujos = [flujo('p', 'Banco Pichincha')]
   assert.equal(elegirFlujo({ flujos, sourceId: '', esNuevo: true, texto: 'banco pichincha' }), null)
+})
+
+// ── Un flujo que termina en botones SIN conectar no se traga el toque ─────────
+// Caso real (22-sep-2026): el flujo de Dragon Ball termina mandando "¿Cómo
+// prefieres pagar?" con [Deuna] [Transferencia] [Tarjeta]. Ese nodo guarda el
+// estado "esperando botón"; si el toque se decidía como `seguir` por un puerto
+// sin línea, el flujo en curso terminaba sin mandar nada y ya no corría el
+// flujo del botón (Deuna…): el cliente tocaba y no pasaba nada.
+const terminaEnPago = {
+  flujo_id: 'dbz', nombre: 'DBZ', publicado: true,
+  grafo_vivo: {
+    nodos: [D({ tipo: 'boton', boton: 'Naranja con Azul' }),
+      { id: 'pago', tipo: 'mensaje', pos: { x: 0, y: 0 }, datos: { origen: 'texto', texto: '¿Cómo prefieres pagar?', adjuntos: [], botones: [{ title: 'Deuna' }, { title: 'Transferencia' }, { title: 'Tarjeta de crédito' }] } }],
+    lineas: [{ id: 'l1', de: 'd', puerto: 'siguiente', a: 'pago' }],
+  },
+}
+const ahora = new Date('2026-09-22T20:00:00Z')
+const esperandoPago = { flujo_id: 'dbz', nodo_id: 'pago', esperando: 'boton', vence_at: '2026-09-23T19:00:00Z' }
+
+test('decidirEntranteEnFlujo: botón tocado cuyo puerto no tiene línea → borrar (el toque sigue su camino)', () => {
+  const d = decidirEntranteEnFlujo({ estado: esperandoPago, flujo: terminaEnPago, entrante: { botonId: 'rc_1', texto: 'Deuna' }, ahora })
+  assert.equal(d.accion, 'borrar')
+})
+test('decidirEntranteEnFlujo: texto libre con "otra" sin línea → borrar', () => {
+  const d = decidirEntranteEnFlujo({ estado: esperandoPago, flujo: terminaEnPago, entrante: { botonId: '', texto: '¿cuánto es el envío?' }, ahora })
+  assert.equal(d.accion, 'borrar')
+})
+test('decidirEntranteEnFlujo: esperando respuesta sin línea de salida → borrar', () => {
+  const flujo = { ...terminaEnPago, grafo_vivo: { nodos: [D({ tipo: 'boton', boton: 'X' }), { id: 'talla', tipo: 'mensaje', pos: { x: 0, y: 0 }, datos: { origen: 'texto', texto: '¿Qué talla?', adjuntos: [], botones: [], esperarRespuesta: true } }], lineas: [{ id: 'l1', de: 'd', puerto: 'siguiente', a: 'talla' }] } }
+  const d = decidirEntranteEnFlujo({ estado: { ...esperandoPago, nodo_id: 'talla', esperando: 'respuesta' }, flujo, entrante: { botonId: '', texto: 'M' }, ahora })
+  assert.equal(d.accion, 'borrar')
+})
+test('decidirEntranteEnFlujo: botón tocado con su línea conectada → seguir, como siempre', () => {
+  const flujo = { ...terminaEnPago, grafo_vivo: { ...terminaEnPago.grafo_vivo, nodos: [...terminaEnPago.grafo_vivo.nodos, F], lineas: [...terminaEnPago.grafo_vivo.lineas, { id: 'l2', de: 'pago', puerto: 'btn_2', a: 'f' }] } }
+  assert.deepEqual(decidirEntranteEnFlujo({ estado: esperandoPago, flujo, entrante: { botonId: 'rc_2', texto: 'Transferencia' }, ahora }), { accion: 'seguir', desde: { nodoId: 'pago', puerto: 'btn_2' } })
 })
 
 // ── Validación y choques ──────────────────────────────────────────────────────

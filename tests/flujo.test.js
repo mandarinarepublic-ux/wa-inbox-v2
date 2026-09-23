@@ -273,7 +273,9 @@ test('ventanaAbierta: 24 h desde el último entrante, con 5 min de margen; sin f
 })
 
 test('decidirEntranteEnFlujo: botón tocado → seguir por su puerto; texto libre → otra; esperando respuesta → respuesta', () => {
-  const flujo = { flujo_id: 'f1', nombre: 'X', publicado: true, grafo_vivo: { nodos: [...conBotones.nodos, M('e', { esperarRespuesta: true })], lineas: conBotones.lineas } }
+  // 'e' lleva su línea de 'respuesta': sin ella, el puerto no sigue a ningún lado y
+  // la decisión es `borrar` (ver tests/flujo-boton.test.js).
+  const flujo = { flujo_id: 'f1', nombre: 'X', publicado: true, grafo_vivo: { nodos: [...conBotones.nodos, M('e', { esperarRespuesta: true })], lineas: [...conBotones.lineas, L('e', 'f', 'respuesta')] } }
   const ahora = new Date('2026-09-15T10:00:00Z')
   const vivo = '2026-09-16T09:00:00Z'
   assert.deepEqual(decidirEntranteEnFlujo({ estado: { flujo_id: 'f1', nodo_id: 'preg', esperando: 'boton', vence_at: vivo }, flujo, entrante: { botonId: 'rc_1', texto: 'Sí' }, ahora }), { accion: 'seguir', desde: { nodoId: 'preg', puerto: 'btn_1' } })
