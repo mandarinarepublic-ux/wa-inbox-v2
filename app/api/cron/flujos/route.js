@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { urlPropia } from '@/lib/url-propia'
 import { getContactos, updateTemperatura } from '@/lib/contactos'
 import { getAutomatizaciones } from '@/lib/automatizaciones'
 import { getRespuestas } from '@/lib/respuestas'
@@ -37,7 +38,9 @@ export async function GET(req) {
   const cfg = await getAutomatizaciones().catch(() => null)
   if (!cfg?.flujos?.activo) return NextResponse.json({ ok: true, skipped: 'flujos apagados (interruptor general)' })
 
-  const origin = new URL(req.url).origin
+  // Dominio de producción, NO req.url: la dirección del despliegue está
+  // protegida por Vercel y todo envío rebota con 401 (lib/url-propia.js).
+  const origin = urlPropia()
   const ahora = new Date()
   const caducados = await borrarEstadosCaducados(ahora.toISOString())
     .catch(e => { console.error('[/api/cron/flujos] caducados:', e.message); return { borrados: -1 } })

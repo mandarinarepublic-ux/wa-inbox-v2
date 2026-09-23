@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { urlPropia } from '@/lib/url-propia'
 import { getContactos, marcarSeguimiento } from '@/lib/contactos'
 import { getAutomatizaciones } from '@/lib/automatizaciones'
 import { caminoDeSeguimiento } from '@/lib/camino-seguimiento'
@@ -43,7 +44,9 @@ export async function GET(req) {
     return NextResponse.json({ ok: true, skipped: 'seguimientos apagado (global)' })
   }
 
-  const origin = new URL(req.url).origin
+  // Dominio de producción, NO req.url: la dirección del despliegue está
+  // protegida por Vercel y todo envío rebota con 401 (lib/url-propia.js).
+  const origin = urlPropia()
   // `null` = TODOS los canales. Con el default (solo el número principal) los
   // contactos de la otra bandeja nunca recibían seguimiento. Cada envío sale por
   // el número al que ese cliente escribió (`Canal: c.phoneId`).
