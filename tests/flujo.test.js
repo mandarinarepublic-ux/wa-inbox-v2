@@ -1,23 +1,23 @@
 import test from 'node:test'
 import assert from 'node:assert'
-import { normalizarTexto, nodoDisparador, puertosDe, validarFlujo, choquesDeDisparador, elegirFlujo, caminoLineal, piezasDeNodos, temperaturaAlPasar, recetaAFlujo, nuevoGrafo, avanzarDesde, evaluarCondicion, puertoDeEntrante, paradaDeCamino, citaDeTanda, ventanaAbierta, horaEcuador, decidirEntranteEnFlujo, decidirVencido, MAX_ESPERA_SEG, MAX_PAUSA_TANDA_SEG } from '../lib/flujo.js'
+import { normalizarTexto, nodoDisparador, puertosDe, validarFlujo, choquesDeDisparador, elegirFlujo, caminoLineal, piezasDeNodos, etapaAlPasar, deudaAlPasar, recetaAFlujo, nuevoGrafo, avanzarDesde, evaluarCondicion, puertoDeEntrante, paradaDeCamino, citaDeTanda, ventanaAbierta, horaEcuador, decidirEntranteEnFlujo, decidirVencido, MAX_ESPERA_SEG, MAX_PAUSA_TANDA_SEG } from '../lib/flujo.js'
 import { MAX_PIEZAS } from '../lib/recetas.js'
 
 const D = (datos) => ({ id: 'd', tipo: 'disparador', pos: { x: 0, y: 0 }, datos })
-const M = (id, datos) => ({ id, tipo: 'mensaje', pos: { x: 0, y: 0 }, datos: { origen: 'texto', texto: 'hola ' + id, adjuntos: [], botones: [], esperarRespuesta: false, citarUltimaRespuesta: false, temperatura: '', ...datos } })
+const M = (id, datos) => ({ id, tipo: 'mensaje', pos: { x: 0, y: 0 }, datos: { origen: 'texto', texto: 'hola ' + id, adjuntos: [], botones: [], esperarRespuesta: false, citarUltimaRespuesta: false, etapa: '', ...datos } })
 const F = { id: 'f', tipo: 'fin', pos: { x: 0, y: 0 }, datos: {} }
 const L = (de, a, puerto = 'siguiente', esperaMin = 0) => ({ id: `${de}-${puerto}-${a}`, de, puerto, a, esperaMin })
 const contacto = { telefono: '593999000111', nombre: 'Ana', alias: '', phoneId: '1024077200794372' }
 const respuestas = [{ id: 'r1', text: 'Saludo', botones: [], adjuntos: [{ tipo: 'imagen', url: 'https://x/1.jpg', nombre: '' }] }]
 
-const lineal = { nodos: [D({ tipo: 'anuncio', sourceIds: ['111'], palabras: [] }), M('m1', { origen: 'respuesta', respuestaId: 'r1' }), M('m2', { temperatura: 'caliente' }), F], lineas: [L('d', 'm1'), L('m1', 'm2'), L('m2', 'f')] }
+const lineal = { nodos: [D({ tipo: 'anuncio', sourceIds: ['111'], palabras: [] }), M('m1', { origen: 'respuesta', respuestaId: 'r1' }), M('m2', { etapa: 'cotizando' }), F], lineas: [L('d', 'm1'), L('m1', 'm2'), L('m2', 'f')] }
 
 test('normalizarTexto: minúsculas, sin acentos, espacios simples', () => {
   assert.equal(normalizarTexto('  Hóla   CHAQUETA dragón '), 'hola chaqueta dragon')
 })
 test('puertosDe: mensaje simple, con botones, esperando, condición', () => {
   assert.deepEqual(puertosDe(M('a', {})), ['siguiente'])
-  assert.deepEqual(puertosDe(M('a', { botones: [{ title: 'Sí' }, { title: 'No' }] })), ['btn_1', 'btn_2', 'otra'])
+  assert.deepEqual(puertosDe(M('a', { botones: [{ title: 'Sí' }, { title: 'No' }] })), ['btn_1', 'btn_2', 'foto', 'otra'])
   assert.deepEqual(puertosDe(M('a', { esperarRespuesta: true })), ['respuesta'])
   assert.deepEqual(puertosDe({ id: 'c', tipo: 'condicion', datos: { campo: 'temperatura', valor: 'caliente' } }), ['si', 'no'])
 })
@@ -100,7 +100,7 @@ test('caminoLineal: la línea del puerto "otra" nunca se sigue (se detiene en bo
   assert.equal(c.detenidoEn, 'a')
 })
 test('puertosDe: con botones Y esperarRespuesta a la vez, ganan los botones', () => {
-  assert.deepEqual(puertosDe(M('a', { botones: [{ title: 'Sí' }], esperarRespuesta: true })), ['btn_1', 'otra'])
+  assert.deepEqual(puertosDe(M('a', { botones: [{ title: 'Sí' }], esperarRespuesta: true })), ['btn_1', 'foto', 'otra'])
 })
 test('caminoLineal: una línea a un nodo que no existe → huerfano, parado en el último nodo válido', () => {
   const roto = { nodos: [D({ tipo: 'organico' }), M('a', {})], lineas: [L('d', 'a'), { id: 'a-siguiente-x', de: 'a', puerto: 'siguiente', a: 'no-existe', esperaMin: 0 }] }
@@ -143,9 +143,22 @@ test('piezasDeNodos: los adjuntos de un nodo texto se normalizan (null y url vac
   const p = piezasDeNodos({ nodos, respuestas, contacto })
   assert.deepEqual(p.map(x => x.AudioURL), ['https://x/v.ogg'])
 })
-test('temperaturaAlPasar: la última no vacía', () => {
-  assert.equal(temperaturaAlPasar([M('a', { temperatura: 'tibio' }), M('b', {}), M('c', { temperatura: 'caliente' })]), 'caliente')
-  assert.equal(temperaturaAlPasar([M('a', {})]), '')
+test('etapaAlPasar: la última válida; un flujo solo pone 💬 o 💳', () => {
+  assert.equal(etapaAlPasar([M('a', { etapa: 'cotizando' }), M('b', {}), M('c', { etapa: 'esperando_pago' })]), 'esperando_pago')
+  assert.equal(etapaAlPasar([M('a', { etapa: 'falta_pedido' })]), '')
+  assert.equal(etapaAlPasar([M('a', {})]), '')
+})
+
+test('deudaAlPasar: la última nota no vacía', () => {
+  assert.equal(deudaAlPasar([M('a', { deuda: 'enviar boceto' }), M('b', {})]), 'enviar boceto')
+  assert.equal(deudaAlPasar([M('a', {})]), '')
+})
+
+test('📸 foto en vez de botón: sigue por "foto" SOLO si esa salida tiene línea', () => {
+  const preg = M('preg', { botones: [{ title: 'Transferencia' }, { title: 'Tarjeta' }] })
+  assert.equal(puertoDeEntrante(preg, { esFoto: true, conFoto: true }), 'foto')
+  assert.equal(puertoDeEntrante(preg, { esFoto: true, conFoto: false }), 'otra')
+  assert.equal(puertoDeEntrante(preg, { texto: '¿cuánto cuesta?', conFoto: true }), 'otra')
 })
 test('recetaAFlujo: disparador con los anuncios, un mensaje por paso, la pregunta con botones, fin; válido', () => {
   const receta = { id: 'r_1', nombre: 'DBZ', activa: true, pasos: [{ tipo: 'respuesta', respuestaId: 'r1' }], pregunta: { texto: '¿Cuál?', botones: [{ title: '1' }] } }
@@ -219,10 +232,11 @@ test('caminoLineal sigue dando lo mismo que antes (contrato de la Fase A)', () =
 })
 
 test('evaluarCondicion: temperatura, tiene_venta, bandeja, hora (rango normal y rango que cruza medianoche)', () => {
-  const base = { temperatura: 'caliente', tieneVenta: false, estado: 'pendiente', ahora: new Date('2026-09-15T15:30:00-05:00') }
+  const base = { ultimoEntranteAt: '2026-09-15T15:10:00-05:00', etapa: 'esperando_pago', tieneVenta: false, estado: 'pendiente', ahora: new Date('2026-09-15T15:30:00-05:00') }
   assert.equal(evaluarCondicion(C('c', { campo: 'temperatura', valor: 'Caliente' }), base), true)
   assert.equal(evaluarCondicion(C('c', { campo: 'temperatura', valor: 'frio' }), base), false)
-  assert.equal(evaluarCondicion(C('c', { campo: 'temperatura', valor: '' }), { ...base, temperatura: '' }), false)
+  assert.equal(evaluarCondicion(C('c', { campo: 'temperatura', valor: '' }), base), false)
+  assert.equal(evaluarCondicion(C('c', { campo: 'etapa', valor: 'esperando pago' }), base), true)
   assert.equal(evaluarCondicion(C('c', { campo: 'tiene_venta', valor: 'no' }), base), true)
   assert.equal(evaluarCondicion(C('c', { campo: 'tiene_venta', valor: 'sí' }), { ...base, tieneVenta: true }), true)
   assert.equal(evaluarCondicion(C('c', { campo: 'bandeja', valor: 'PENDIENTE' }), base), true)

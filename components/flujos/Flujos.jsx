@@ -45,7 +45,7 @@ let contadorIds = 0
 const nuevoIdLocal = (pre) => `${pre}${Date.now().toString(36).slice(-5)}${(++contadorIds).toString(36)}`
 
 const DATOS_NUEVOS = {
-  mensaje: () => ({ origen: 'texto', texto: '', adjuntos: [], botones: [], esperarRespuesta: false, citarUltimaRespuesta: false, temperatura: '' }),
+  mensaje: () => ({ origen: 'texto', texto: '', adjuntos: [], botones: [], esperarRespuesta: false, citarUltimaRespuesta: false, etapa: '', deuda: '' }),
   condicion: () => ({ campo: 'temperatura', valor: '' }),
   fin: () => ({}),
 }

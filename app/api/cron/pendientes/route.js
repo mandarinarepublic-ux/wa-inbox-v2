@@ -67,7 +67,9 @@ export async function GET(req) {
     return NextResponse.json({ ok: false, error: 'sin contactos' }, { status: 500 })
   }
 
-  const aAvisar = chatsQueAvisar(contactos, ahora)
+  // Los contactos internos (equipo, taller, proveedores) no cuentan como clientes
+  // esperando (port desde IND, diseño 2026-09-22).
+  const aAvisar = chatsQueAvisar(contactos.filter(c => c.tipoContacto !== 'interno'), ahora)
   if (!aAvisar.length) {
     // `sin-pendientes` cubre bandeja vacía de verdad Y todo lo que está dentro del
     // enfriamiento de 30 min — ambos son "no toca avisar todavía". `fuera-de-horario`

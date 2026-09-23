@@ -3,10 +3,10 @@ import assert from 'node:assert'
 import { correrTanda, filaDeEstado } from '../lib/flujo-motor.js'
 
 const D = (datos) => ({ id: 'd', tipo: 'disparador', pos: { x: 0, y: 0 }, datos })
-const M = (id, datos) => ({ id, tipo: 'mensaje', pos: { x: 0, y: 0 }, datos: { origen: 'texto', texto: 'hola ' + id, adjuntos: [], botones: [], esperarRespuesta: false, citarUltimaRespuesta: false, temperatura: '', ...datos } })
+const M = (id, datos) => ({ id, tipo: 'mensaje', pos: { x: 0, y: 0 }, datos: { origen: 'texto', texto: 'hola ' + id, adjuntos: [], botones: [], esperarRespuesta: false, citarUltimaRespuesta: false, etapa: '', ...datos } })
 const F = { id: 'f', tipo: 'fin', pos: { x: 0, y: 0 }, datos: {} }
 const L = (de, a, puerto = 'siguiente', esperaMin = 0) => ({ id: `${de}-${puerto}-${a}`, de, puerto, a, esperaMin })
-const contacto = { telefono: '593999000111', nombre: 'Ana', alias: '', phoneId: '1024077200794372', temperatura: '', tieneVenta: false, estado: 'pendiente', ultimoEntranteAt: '2026-09-15T09:00:00Z' }
+const contacto = { telefono: '593999000111', nombre: 'Ana', alias: '', phoneId: '1024077200794372', etapa: '', tieneVenta: false, estado: 'pendiente', ultimoEntranteAt: '2026-09-15T09:00:00Z' }
 const flujo = (grafo) => ({ flujo_id: 'f1', nombre: 'X', grafo_vivo: grafo })
 const desdeD = { nodoId: 'd', puerto: 'siguiente' }
 
@@ -17,7 +17,7 @@ function depsFalsas() {
     guardarEstado: async (f) => { reg.orden.push('estado'); reg.estado = f },
     borrarEstado: async () => { reg.orden.push('borrar'); reg.borrados++ },
     registrarPasos: async (a) => { reg.pasos.push(a) },
-    setTemperatura: async (_t, temp) => { reg.temps.push(temp) },
+    setEtapa: async (_t, etapa) => { reg.temps.push(etapa) },
     avisar: async (t) => { reg.avisos.push(t) },
     ahora: () => new Date('2026-09-15T10:00:00Z'),
     cuenta: 'MANDI',
@@ -37,13 +37,13 @@ test('filaDeEstado: la parada del motor puro → fila de inbox.flujo_estado', ()
 
 test('correrTanda: disparo lineal → manda citando el entrante, registra pasos, temperatura, borra estado', async () => {
   const { deps, reg } = depsFalsas()
-  const grafo = { nodos: [D({ tipo: 'organico' }), M('a', { temperatura: 'caliente' }), M('b', {}), F], lineas: [L('d', 'a'), L('a', 'b'), L('b', 'f')] }
+  const grafo = { nodos: [D({ tipo: 'organico' }), M('a', { etapa: 'cotizando' }), M('b', {}), F], lineas: [L('d', 'a'), L('a', 'b'), L('b', 'f')] }
   const r = await correrTanda(deps, { flujo: flujo(grafo), desde: desdeD, esDisparo: true, contacto, wamidEntrante: 'w-in', ultimoWamid: 'w-in', respuestas: [] })
   assert.equal(r.salieron, 2)
   assert.equal(reg.enviadas[0].ContextoId, 'w-in')
   assert.equal(reg.enviadas[1].ContextoId, undefined)
   assert.deepEqual(reg.pasos[0].nodoIds, ['a', 'b', 'f'])
-  assert.deepEqual(reg.temps, ['caliente'])
+  assert.deepEqual(reg.temps, ['cotizando'])
   assert.equal(reg.estado, null)
   assert.equal(reg.borrados, 1)
 })
@@ -73,7 +73,7 @@ test('correrTanda: la Condición se evalúa con el contacto y sigue por la rama 
     nodos: [D({ tipo: 'organico' }), { id: 'c', tipo: 'condicion', pos: { x: 0, y: 0 }, datos: { campo: 'temperatura', valor: 'caliente' } }, M('si', {}), M('no', {}), F],
     lineas: [L('d', 'c'), L('c', 'si', 'si'), L('c', 'no', 'no'), L('si', 'f'), L('no', 'f')],
   }
-  await correrTanda(deps, { flujo: flujo(grafo), desde: desdeD, esDisparo: true, contacto: { ...contacto, temperatura: 'caliente' }, wamidEntrante: 'w', ultimoWamid: 'w', respuestas: [] })
+  await correrTanda(deps, { flujo: flujo(grafo), desde: desdeD, esDisparo: true, contacto: { ...contacto, ultimoEntranteAt: '2026-09-15T09:45:00Z' }, wamidEntrante: 'w', ultimoWamid: 'w', respuestas: [] })
   assert.equal(reg.enviadas[0].Mensaje, 'hola si')
 })
 
@@ -98,8 +98,8 @@ test('correrTanda: camino roto → no manda, borra estado; un fallo en pasos o t
 
   const dos = depsFalsas()
   dos.deps.registrarPasos = () => { throw new Error('base caída') }
-  dos.deps.setTemperatura = async () => { throw new Error('base caída') }
-  const grafo = { nodos: [D({ tipo: 'organico' }), M('a', { temperatura: 'tibio' }), F], lineas: [L('d', 'a'), L('a', 'f')] }
+  dos.deps.setEtapa = async () => { throw new Error('base caída') }
+  const grafo = { nodos: [D({ tipo: 'organico' }), M('a', { etapa: 'esperando_pago' }), F], lineas: [L('d', 'a'), L('a', 'f')] }
   const r2 = await correrTanda(dos.deps, { flujo: flujo(grafo), desde: desdeD, esDisparo: true, contacto, wamidEntrante: 'w', ultimoWamid: 'w', respuestas: [] })
   assert.equal(r2.salieron, 1)
 })

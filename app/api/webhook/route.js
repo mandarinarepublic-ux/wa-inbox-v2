@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { waitUntil } from '@vercel/functions'
-import { registrarContactoEntrante, getContactos, updateEstado, updateModoIA, marcarPush, marcarReceta, registrarAnuncioVisto, reclamarAvisoAnuncio, liberarAvisoAnuncio, updateTemperatura } from '@/lib/contactos'
+import { registrarContactoEntrante, getContactos, updateEstado, updateModoIA, marcarPush, marcarReceta, registrarAnuncioVisto, reclamarAvisoAnuncio, liberarAvisoAnuncio, updateEtapa, updateDeuda } from '@/lib/contactos'
 import { decidirReceta, piezasDeReceta, textoAvisoAnuncioNuevo, esc } from '@/lib/recetas'
 import { elegirFlujo, caminoLineal, decidirEntranteEnFlujo, elegirFlujoPorBoton, tituloBotonTocado, nodoDisparador } from '@/lib/flujo'
 import { correrTanda } from '@/lib/flujo-motor'
@@ -76,6 +76,10 @@ const MSG_ESPERA = 'Permíteme un momento por favor 🧡'
 async function escalarASoporte(origin, phone, name, canal) {
   await updateModoIA(phone, 'HUMANO')
     .catch(e => console.error('[webhook IA] modoIA HUMANO:', e.message))
+  // 📌 🎧 (port desde IND): "Permíteme un momento" es una promesa al cliente.
+  // Queda anotada hasta que una persona cumpla; no pisa un 📌 del vendedor.
+  await updateDeuda(phone, 'IA: mandó foto', 'ia', { noPisar: true })
+    .catch(e => console.error('[webhook IA] 📌 derivación:', e.message))
   await enviarSaliente(origin, { Telefono: phone, Nombre: name || '', Mensaje: MSG_ESPERA, Canal: canal })
 }
 
@@ -331,7 +335,8 @@ async function procesar(nuevos, origin) {
     guardarEstado: guardarEstadoFlujo,
     borrarEstado: borrarEstadoFlujo,
     registrarPasos,
-    setTemperatura: updateTemperatura,
+    setEtapa: (tel, etapa) => updateEtapa(tel, etapa, 'flujo', { soloSiVacia: true }),
+    setDeuda: (tel, nota) => updateDeuda(tel, nota, 'auto', { noPisar: true }),
     avisar: (texto) => enviarTelegram(texto),
     ahora: () => new Date(),
     cuenta: CUENTA,
@@ -341,7 +346,7 @@ async function procesar(nuevos, origin) {
     const c = contactos.find(x => tail9(x.telefono) === tail9(m.telefono)) || null
     return {
       telefono: m.telefono, nombre: m.nombre, alias: c?.alias || '', phoneId: m.phoneId,
-      temperatura: c?.temperatura || '', tieneVenta: Boolean(c?.idVenta), estado: c?.estado || 'pendiente',
+      etapa: c?.etapa || '', tieneVenta: Boolean(c?.idVenta), estado: c?.estado || 'pendiente',
       // El snapshot es de ANTES de este mensaje: el último entrante es ESTE, ahora.
       ultimoEntranteAt: new Date().toISOString(),
     }
@@ -364,6 +369,7 @@ async function procesar(nuevos, origin) {
     const entrante = {
       botonId: m.raw?.interactive?.button_reply?.id || '',
       texto: ['text', 'interactive', 'button'].includes(tipoCrudo) ? m.contenido : '',
+      esFoto: tipoCrudo === 'image',
     }
     const d = decidirEntranteEnFlujo({ estado, flujo, entrante, ahora: new Date() })
     if (d.accion === 'borrar') {

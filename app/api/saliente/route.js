@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { guardarMensajeSupabase } from '@/lib/inbox-supabase'
-import { limpiarPush } from '@/lib/contactos'
+import { waitUntil } from '@vercel/functions'
+import { limpiarPush, revisarPromesa, marcarRespuestaHumana } from '@/lib/contactos'
 import { borrarEstadoFlujo } from '@/lib/flujos'
 import { parseLinkpago, crearLinkPago, mensajeLinkPago } from '@/lib/dlocal'
 import { resolverMediaId, invalidarMediaId, esErrorDeMediaId, urlLiviana, META_PHONE_ID } from '@/lib/media-id'
@@ -424,6 +425,16 @@ export async function POST(req) {
       // salen con auto:true y no pasan por acá.
       await borrarEstadoFlujo(telSal)
         .catch(e => console.error('[/api/saliente] borrar estado de flujo:', e.message))
+      // 📌 🤖 (port desde IND): una promesa escrita por una persona ("ya le reviso",
+      // "hoy sale") prende 📌; una foto/video/documento ≤15 min después apaga el 📌
+      // automático. Las plantillas no cuentan. En segundo plano: no retrasa el envío.
+      if (body.TipoMensaje !== 'template') {
+        waitUntil(revisarPromesa(telSal, { tipo, texto: contenido })
+          .catch(e => console.error('[/api/saliente] 📌 promesa:', e.message)))
+      }
+      // Escribió una PERSONA: base de la reactivación (los automáticos no cuentan).
+      waitUntil(marcarRespuestaHumana(telSal)
+        .catch(e => console.error('[/api/saliente] marcar respuesta humana:', e.message)))
     }
 
     // citaOmitida = el mensaje SÍ se envió, pero sin la cita. La UI lo avisa.

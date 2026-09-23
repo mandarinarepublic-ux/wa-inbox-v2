@@ -13,7 +13,7 @@ import React, { useState } from 'react'
 import { MAX_BOTONES, MAX_TITULO } from '@/lib/recetas'
 import { MAX_ESPERA_MIN, MAX_ESPERA_SEG, MAX_PAUSA_TANDA_SEG } from '@/lib/flujo'
 import { adjuntosDeRespuesta } from '@/lib/adjuntos-respuesta'
-import { EMOJI_TEMP } from './nodos'
+import { EMOJI_ETAPA } from './nodos'
 
 const BORDE = '#1e2d3d'
 const FONDO_CAMPO = '#080d14'
@@ -264,13 +264,21 @@ function EditorMensaje({ datos, respuestas, onCambiar }) {
         </Casilla>
       </Bloque>
 
-      <Bloque titulo="TEMPERATURA AL LLEGAR ACÁ">
-        <select value={datos?.temperatura || ''} onChange={(e) => onCambiar({ temperatura: e.target.value })} style={estiloCampo}>
+      <Bloque titulo="ETAPA AL LLEGAR ACÁ">
+        {/* Solo se pone si el chat no tiene etapa: el flujo nunca pisa al vendedor.
+            La temperatura ya no se pone desde un flujo (port desde IND, 23-sep-2026). */}
+        <select value={datos?.etapa || ''} onChange={(e) => onCambiar({ etapa: e.target.value })} style={estiloCampo}>
           <option value="">— no la cambia —</option>
-          <option value="caliente">{EMOJI_TEMP.caliente} Caliente</option>
-          <option value="tibio">{EMOJI_TEMP.tibio} Tibio</option>
-          <option value="frio">{EMOJI_TEMP.frio} Frío</option>
+          <option value="cotizando">{EMOJI_ETAPA.cotizando} Cotizando (mandó su idea)</option>
+          <option value="esperando_pago">{EMOJI_ETAPA.esperando_pago} Esperando pago</option>
         </select>
+      </Bloque>
+
+      <Bloque titulo="📌 LE DEBEMOS AL LLEGAR ACÁ">
+        {/* Si este mensaje le PROMETE algo al cliente, anótalo: queda 📌 🤖 hasta que
+            una persona cumpla. No pisa un 📌 que ya exista. Vacío = no anota nada. */}
+        <input value={datos?.deuda || ''} onChange={(e) => onCambiar({ deuda: e.target.value.slice(0, 60) })}
+          placeholder="ej: enviar boceto" style={estiloCampo} />
       </Bloque>
     </>
   )
@@ -279,7 +287,8 @@ function EditorMensaje({ datos, respuestas, onCambiar }) {
 // ── Condición ─────────────────────────────────────────────────────────────────
 
 const PISTA_CONDICION = {
-  temperatura: 'caliente · tibio · frio',
+  temperatura: 'caliente (<1 h) · tibio (1–6 h) · frio (6–24 h) · dormido (>24 h)',
+  etapa: 'cotizando · esperando_pago · falta_pedido · postventa',
   tiene_venta: 'si · no',
   hora: '09:00-18:00 (hora de Ecuador)',
   bandeja: 'pendiente · atendido · soporte · descartado',
@@ -291,7 +300,8 @@ function EditorCondicion({ datos, onCambiar }) {
     <>
       <Bloque titulo="QUÉ MIRA">
         <select value={campo} onChange={(e) => onCambiar({ campo: e.target.value })} style={estiloCampo}>
-          <option value="temperatura">Temperatura del cliente</option>
+          <option value="temperatura">Temperatura (tiempo desde su último mensaje)</option>
+          <option value="etapa">Etapa de la venta</option>
           <option value="tiene_venta">Tiene venta</option>
           <option value="hora">Hora (Ecuador)</option>
           <option value="bandeja">Bandeja</option>

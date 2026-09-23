@@ -30,10 +30,11 @@ export const COLORES = {
 const ICONOS = { disparador: '📣', mensaje: '💬', condicion: '🔀', fin: '🔴' }
 const NOMBRES = { disparador: 'Disparador', mensaje: 'Mensaje', condicion: 'Condición', fin: 'Fin' }
 
-export const EMOJI_TEMP = { caliente: '🔥', tibio: '🌤️', frio: '❄️' }
+export const EMOJI_ETAPA = { cotizando: '💬', esperando_pago: '💳' }
 
 const CAMPOS_CONDICION = {
   temperatura: 'Temperatura',
+  etapa: 'Etapa',
   tiene_venta: 'Tiene venta',
   hora: 'Hora (Ecuador)',
   bandeja: 'Bandeja',
@@ -47,6 +48,7 @@ const recortar = (s, n = 90) => {
 /** El texto que se pinta debajo de cada puerto de salida. */
 export function etiquetaDePuerto(nodo, puerto) {
   if (puerto === 'otra') return 'Otra respuesta'
+  if (puerto === 'foto') return '📸 Manda foto'
   if (puerto === 'respuesta') return 'Respuesta'
   if (puerto === 'si') return 'sí'
   if (puerto === 'no') return 'no'
@@ -200,7 +202,8 @@ function NodoMensaje({ id, data, selected }) {
 
   const marcas = []
   if (nAdjuntos) marcas.push(`📎 ${nAdjuntos}`)
-  if (data?.temperatura && EMOJI_TEMP[data.temperatura]) marcas.push(EMOJI_TEMP[data.temperatura])
+  if (data?.etapa && EMOJI_ETAPA[data.etapa]) marcas.push(EMOJI_ETAPA[data.etapa])
+  if (String(data?.deuda || '').trim()) marcas.push('📌')
   if (data?.esperarRespuesta) marcas.push('✋ espera respuesta')
   if (data?.citarUltimaRespuesta) marcas.push('↩ cita')
 
