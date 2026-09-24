@@ -1,4 +1,4 @@
-# HANDOFF 23-sep-2026 — Port a MANDI de la gestión de chats de IND (etapas 0, 1 y 2)
+# HANDOFF 23-sep-2026 — Port a MANDI de la gestión de chats de IND (etapas 0 a 3 — port completo)
 
 Diseño original (IND): `ind-inbox-next/docs/superpowers/specs/2026-09-22-gestion-chats-ind-design.md`
 Estado de IND: `ind-inbox-next/docs/HANDOFF-2026-09-22-gestion-chats.md`
@@ -11,6 +11,7 @@ Estado de IND: `ind-inbox-next/docs/HANDOFF-2026-09-22-gestion-chats.md`
 | `1559761` | **Etapa 1 (sin cambios de pantalla).** Flujos con etapa/📌/📸 (motor copiado de IND, era idéntico); 📌 🤖 por promesa en `/api/saliente`; `ultimo_humano_at`; al cortar la IA por una foto (`escalarASoporte`) se prende 📌 🎧 "IA: mandó foto"; `/api/pedidos-chat` (para la etapa 2); CAPI: 💳/🛒 se SUMAN a 🔥/SOPORTE; internos fuera de CAPI y Telegram. |
 | `88c31a0` | La etapa de un flujo solo avanza (💬 → 💳) y nunca pisa a una persona (también en IND, `52cdcaf`). |
 | _(etapa 2)_ | **Pantalla.** Bandeja 🔴🟢⚫ por FILA (cliente × número) con freno al 🟢; etapa 💬💳🛒🔁, 📌, 🤫, 🏷️ en la cabecera; filtros combinables (`lib/filtro-chats.js`, `components/FiltrosLista.jsx`) memorizados; chips por fila (temperatura AUTOMÁTICA por la ventana de ESE número, etapa, 📌, pedido 🏭📦🚚); ⏰ por `alertaVentanaCierra`. Fuera 🔥🌤️❄️ manual, 💰 Venta y 🎧 Soporte. `/api/contactos/estado`: VENTA → 🛒, SOPORTE → 🔴 + 📌 "Soporte" (humano), `temperatura` se ignora. CAPI: solo 💳/🛒. Cron de seguimientos por temperatura retirado (las 3 reglas estaban apagadas) y su tarjeta de AUTOS también. Plan: `docs/superpowers/plans/2026-09-23-mandi-etapa2-pantalla.md`. |
+| _(etapa 3)_ | **Reactivación** (`lib/reactivacion.js`, copiada de IND): toques a las 3/12/20 h del último mensaje del cliente, solo 💬/💳, solo si escribió una PERSONA hace ≥3 h, 08:00–22:00, sin 📌/🤫/pedido/interno. Propio de MANDI: el estado que cuenta es la bandeja del NÚMERO por el que escribió (`getEstadoBandejaSupabase`, leída solo para candidatos); no escribe si el agente lleva el chat o lo despertaría (`camino !== 'texto'`); textos 💬 = los 3 de temperatura de Rodrigo. Reserva condicional antes de enviar; el entrante reinicia el contador. Editable en AUTOS. **APAGADA** hasta que Rodrigo la prenda. |
 
 **Datos:**
 - 12 chats en bandeja VENTA/SOPORTE con el último mensaje del cliente sin contestar → PENDIENTE; VENTA sin pedido → etapa 🛒; SOPORTE → 📌 "Soporte".
@@ -18,6 +19,7 @@ Estado de IND: `ind-inbox-next/docs/HANDOFF-2026-09-22-gestion-chats.md`
 
 ## Todavía NO
 - La columna `conversaciones.temperatura` sigue en la base (congelada) y el `/dashboard` todavía la cuenta como "🌡️ Temperatura de leads" — igual que en IND. Retirar las columnas viejas en los dos cuando se confirme que nada las lee.
-- `automatizaciones.config.seguimientos` (MANDI) quedó en la base con `activo:true` y las 3 reglas apagadas: el cron ya no la lee.
+- `automatizaciones.config.seguimientos` (MANDI) quedó en la base con `activo:true` y las 3 reglas apagadas: el cron ya no la lee. OJO: `seguimientos.solo_ia_apagada` SÍ se sigue leyendo (camino-seguimiento) — con `false` la reactivación se salta los chats donde el agente está activo.
+- Reactivación sin prueba en vivo: al prenderla, mirar la respuesta del cron (`/api/cron/seguimientos?key=CRON_SECRET`) y `reactivacion_n` en la base. El 23-sep había 1 solo candidato (las etapas se empezaron a marcar ese día).
 - **Etapa 3 (reactivación):** no escribir si `camino-seguimiento` da 'despertar' (el agente lleva el chat); la reserva debe mirar `bandeja` del número, no `conversaciones.estado`; textos propios de Mandarina.
 - Inbox social FB/IG: fuera por ahora.

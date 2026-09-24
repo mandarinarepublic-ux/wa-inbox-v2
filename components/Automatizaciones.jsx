@@ -112,6 +112,26 @@ export default function Automatizaciones({ active }) {
     { [bloque]: { activo: valor } },
     prev => ({ ...prev, [bloque]: { ...(prev?.[bloque] || {}), activo: valor } }))
 
+  // 🔄 Reactivación (port desde IND). El interruptor manda el bloque COMPLETO: el
+  // merge del servidor es de un nivel y un patch con solo {activo} borraría horas y textos.
+  const togReactivacion = (valor) => guardarInterruptor(
+    { reactivacion: { ...(config?.reactivacion || {}), activo: valor } },
+    prev => ({ ...prev, reactivacion: { ...(prev?.reactivacion || {}), activo: valor } }))
+  // Horarios editables (se acotan en el servidor: lib/reactivacion.js parametrosReactivacion).
+  const setCampoReact = (campo, valor) => setConfig(prev => ({ ...prev, reactivacion: { ...(prev?.reactivacion || {}), [campo]: valor } }))
+  const setHoraToque = (i, valor) => setConfig(prev => {
+    const r = prev?.reactivacion || {}
+    const horas = [...(Array.isArray(r.horas) ? r.horas : [3, 12, 20])]
+    horas[i] = valor === '' ? '' : Number(valor)
+    return { ...prev, reactivacion: { ...r, horas } }
+  })
+  const setTextoReact = (etapa, i, texto) => setConfig(prev => {
+    const r = prev?.reactivacion || {}
+    const lista = [...((r.textos || {})[etapa] || ['', '', ''])]
+    lista[i] = texto
+    return { ...prev, reactivacion: { ...r, textos: { ...(r.textos || {}), [etapa]: lista } } }
+  })
+
   // Cortafuegos de MANDI AGENT, por canal. Patch plano: el merge del servidor es
   // de un nivel y con booleanos eso es exactamente lo que queremos (el canal
   // hermano se conserva solo).
@@ -160,6 +180,9 @@ export default function Automatizaciones({ active }) {
 
   const sn = config?.saludo_nuevo || {}
   const sr = config?.saludo_reactivacion || {}
+  const ra = config?.reactivacion || {}
+  const inputNum = { width: 56, background: '#080d14', border: '1px solid #1e2d3d', borderRadius: 8, color: ORANGE, fontSize: 14, fontWeight: 800, padding: '6px 8px', textAlign: 'center', fontFamily: 'Outfit,sans-serif', outline: 'none', margin: '0 6px' }
+  const inputTxt = { width: '100%', background: '#080d14', border: '1px solid #1e2d3d', borderRadius: 10, color: '#e2e8f0', fontSize: 13, padding: '10px 12px', fontFamily: 'Outfit,sans-serif', resize: 'vertical', outline: 'none', boxSizing: 'border-box' }
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', height: '100%', background: '#080d14' }}>
@@ -269,9 +292,63 @@ export default function Automatizaciones({ active }) {
             </>)}
           </Card>
 
-          {/* Seguimiento por temperatura: retirado el 23-sep-2026 (port desde IND). La
-              temperatura ya es automática; la reactivación de chats callados llega en la
-              etapa 3 con horarios y textos editables acá. */}
+          {/* ── 🔄 REACTIVACIÓN por etapa (cron cada hora). Reemplaza al seguimiento
+              por temperatura, retirado el 23-sep-2026 (port desde IND). ── */}
+          <Card>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 14 }}>
+              <div style={{ fontSize: 26 }}>🔄</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 15, fontWeight: 800, color: '#e2e8f0' }}>Reactivación de clientes callados</div>
+                <div style={{ fontSize: 12, color: '#64748b', marginTop: 3 }}>
+                  Le escribe solo a un cliente en <b style={{ color: '#94a3b8' }}>💬 Cotizando o 💳 Esperando pago</b> que no contestó después de nuestro mensaje:
+                  solo si ya lo atendió una <b style={{ color: '#94a3b8' }}>persona</b> (no un flujo ni la IA) y el chat está 🟢 en ese número. <b style={{ color: '#94a3b8' }}>Nunca</b> de noche, ni con 📌, 🤫, pedido creado, contacto interno o con MANDI AGENT llevando el chat.
+                  Se corta apenas el cliente escribe. Usa <code>{'{nombre}'}</code> para el nombre de pila.
+                </div>
+              </div>
+              <Switch on={!!ra.activo} onClick={() => togReactivacion(!ra.activo)} />
+            </div>
+            {/* Horarios editables */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+              {[0, 1, 2].map(i => (
+                <label key={i} style={{ fontSize: 11, color: '#94a3b8' }}>
+                  Toque {i + 1}: a las
+                  <input type="number" min={1} max={23} value={(ra.horas || [3, 12, 20])[i] ?? ''} onChange={e => setHoraToque(i, e.target.value)} style={inputNum} />
+                  h de su último mensaje
+                </label>
+              ))}
+              <label style={{ fontSize: 11, color: '#94a3b8' }}>
+                Esperar al menos
+                <input type="number" min={1} max={12} value={ra.silencio_min_h ?? 3} onChange={e => setCampoReact('silencio_min_h', Number(e.target.value))} style={inputNum} />
+                h desde que escribió el vendedor
+              </label>
+              <label style={{ fontSize: 11, color: '#94a3b8' }}>
+                Separar los toques
+                <input type="number" min={2} max={12} value={ra.entre_toques_h ?? 4} onChange={e => setCampoReact('entre_toques_h', Number(e.target.value))} style={inputNum} />
+                h como mínimo
+              </label>
+              <label style={{ fontSize: 11, color: '#94a3b8' }}>
+                Solo entre las
+                <input type="number" min={6} max={12} value={ra.hora_desde ?? 8} onChange={e => setCampoReact('hora_desde', Number(e.target.value))} style={inputNum} />
+                y las
+                <input type="number" min={14} max={22} value={ra.hora_hasta ?? 22} onChange={e => setCampoReact('hora_hasta', Number(e.target.value))} style={inputNum} />
+                h (Ecuador)
+              </label>
+            </div>
+            <div style={{ fontSize: 11, color: '#64748b', marginTop: 6 }}>Límites de seguridad: nunca antes de las 06:00 ni después de las 22:00, y nunca más de 3 toques por ventana. Deja un texto vacío para no mandar ese toque.</div>
+            {[['cotizando', '💬 Cotizando'], ['esperando_pago', '💳 Esperando pago']].map(([etapa, titulo]) => (
+              <div key={etapa} style={{ marginTop: 12 }}>
+                <div style={{ fontSize: 12, fontWeight: 800, color: '#e2e8f0', marginBottom: 6 }}>{titulo}</div>
+                {(ra.horas || [3, 12, 20]).map((h, i) => (
+                  <div key={i} style={{ marginBottom: 8 }}>
+                    <div style={{ fontSize: 11, color: '#64748b', marginBottom: 3 }}>Toque {i + 1} · a las {h} h</div>
+                    <textarea value={((ra.textos || {})[etapa] || [])[i] || ''} onChange={e => setTextoReact(etapa, i, e.target.value)}
+                      rows={2} style={inputTxt} />
+                  </div>
+                ))}
+              </div>
+            ))}
+            <div style={{ fontSize: 11, color: '#64748b', marginTop: 6 }}>Los horarios y textos se guardan con el botón Guardar de abajo.</div>
+          </Card>
 
           {/* ── ANUNCIOS VISTOS (antes "Bienvenida por anuncio"; el editor de
               recetas se fue a FLUJOS — spec §5/§7) ── */}
