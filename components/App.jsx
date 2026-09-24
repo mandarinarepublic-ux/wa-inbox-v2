@@ -1686,15 +1686,18 @@ export default function App() {
       pendingRef.current[telefono] = [...(pendingRef.current[telefono] || []), tmpMsg]
       // Dar tiempo a React para renderizar el tmpMsg antes de hacer el fetch
       await new Promise(r => setTimeout(r, 0))
-      const [result] = await Promise.all([
-        sendReply(telefono, nombre, t, citaId, canal),
-        changeStatus(telefono, estadoDestino),
-      ])
+      // ☠️ Atendido SOLO si salió. Antes se marcaba EN PARALELO al envío: si Meta lo
+      // rechazaba (o la base no contestaba, como en la caída del 23-sep) el chat
+      // salía de Pendientes sin que al cliente le llegara nada, y ningún webhook lo
+      // devuelve porque un rechazo al enviar no genera acuse. Igual que IND.
+      const result = await sendReply(telefono, nombre, t, citaId, canal).catch(() => null)
+      if (result && result.ok !== false) changeStatus(telefono, estadoDestino)
       // El mensaje salió, pero Meta rechazó la cita (mensaje viejo). Se avisa en vez
       // de que el vendedor crea que respondió citando y el cliente vea un texto suelto.
+      // `result` null = la llamada ni respondió: también se avisa.
       setToast(result?.citaOmitida
         ? { ok: true, msg: '✓ Enviado, pero SIN la cita: WhatsApp ya no reconoce ese mensaje' }
-        : result)
+        : (result || { ok: false, error: 'No se pudo enviar' }))
       setTimeout(() => setToast(null), 4000)
       setTimeout(load, 4000)
     })
@@ -1712,8 +1715,10 @@ export default function App() {
     const canal    = canalDeEnvio()
     const estadoDestino = estadoAlResponder(currentStatus)
     return encolar(telefono, async () => {
-      await enviarTextoSuelto(telefono, nombre, t, canal)
-      changeStatus(telefono, estadoDestino)
+      // Atendido SOLO si salió (ver handleSend).
+      const r = await enviarTextoSuelto(telefono, nombre, t, canal).catch(() => null)
+      if (r && r.ok !== false) changeStatus(telefono, estadoDestino)
+      else { setToast(r || { ok: false, error: 'No se pudo enviar' }); setTimeout(() => setToast(null), 4000) }
       setTimeout(load, 4000)
     })
   }
@@ -1980,7 +1985,9 @@ export default function App() {
         }
       }
       setImgResult({ ok: allOk, error: sendErr })
-      await changeStatus(telefono, estadoDestino)
+      // Solo si TODAS salieron: si una foto se cayó, el cliente quedó a medias y el
+      // chat tiene que seguir en PENDIENTES. Igual que IND.
+      if (allOk) await changeStatus(telefono, estadoDestino)
       })
       setTimeout(() => { setImgFiles([]); setImgResult(null); setIsVideo(false); setIsAudio(false); setIsDoc(false); setAvisoAudio(''); setImgProgress(0); if (fileRef.current) fileRef.current.value = '' }, 1500)
       setTimeout(load, 4000)
@@ -2145,8 +2152,9 @@ export default function App() {
     // Toda la respuesta rápida es UNA tarea: nada puede meterse entre su texto y
     // sus fotos, ni entre una foto y la siguiente.
     return encolar(telefono, async () => {
-      // Solo para el candado de abajo: saber si la respuesta salió COMPLETA. (El
-      // estado del chat sigue igual que antes: MANDI no lo condiciona a esto.)
+      // Si CUALQUIER pieza de la respuesta rápida falla, el chat no puede quedar
+      // como atendido: al cliente le llegó media respuesta o ninguna. Lo usa
+      // también el candado de abajo (lib/respuesta-repetida.js).
       let todoOk = true
       try {
       const botones = (reply.botones || []).filter(Boolean).slice(0, 3)
@@ -2189,7 +2197,8 @@ export default function App() {
         if (i < adjuntos.length - 1) await new Promise(r => setTimeout(r, 150))
       }
 
-      changeStatus(telefono, estadoDestino)
+      if (todoOk) changeStatus(telefono, estadoDestino)
+      else { setToast({ ok: false, error: 'La respuesta rápida no salió completa' }); setTimeout(() => setToast(null), 4000) }
       setTimeout(load, 4000)
       } catch (e) {
         todoOk = false
