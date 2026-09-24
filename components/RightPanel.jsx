@@ -413,6 +413,10 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
   // índice a propósito — antes el panel esperaba a que terminara una para dejar
   // mandar otra, y con 5 fotos eso eran 40 segundos de brazos cruzados.
   const [sending,       setSending]       = useState({})
+  // El candado del botón, que se cierra en el MISMO clic (ver handleSendQuick).
+  // Va acá arriba con los demás hooks: después de un `return` condicional,
+  // React se rompe al cambiar de chat.
+  const enVueloRef    = useRef(new Set())
   const [editAlias,     setEditAlias]     = useState(false)
   const [aliasInput,    setAliasInput]    = useState('')
 
@@ -687,10 +691,21 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
   // vendedor puede mandar otra respuesta rápida (o escribir) mientras las fotos
   // de la anterior siguen saliendo. El único bloqueo que queda es el doble clic
   // sobre LA MISMA respuesta.
+  //
+  // ☠️ El candado de verdad (que no salga DOS veces) vive en App.handleQuickReply,
+  // que comparten este panel y el cajón del celular. Acá solo se cuida el "⏳"
+  // del botón: con `sending` (estado) un segundo clic rápido llegaba antes de que
+  // React lo pintara, y su `finally` borraba el "⏳" mientras la primera todavía
+  // salía — el botón parecía libre y daban ganas de apretar otra vez. El ref se
+  // cierra en el mismo clic.
   const handleSendQuick = (idx) => {
-    if (sending[idx]) return
+    if (sending[idx] || enVueloRef.current.has(idx)) return
+    enVueloRef.current.add(idx)
     const marcar = (v) => setSending(prev => ({ ...prev, [idx]: v }))
-    const soltar = () => setSending(prev => { const n = { ...prev }; delete n[idx]; return n })
+    const soltar = () => {
+      enVueloRef.current.delete(idx)
+      setSending(prev => { const n = { ...prev }; delete n[idx]; return n })
+    }
     marcar('⏳')
     Promise.resolve(
       onQuickReply(replies[idx], (hechas, total) => marcar(total > 1 ? `${hechas}/${total}` : '⏳')),
