@@ -233,6 +233,10 @@ llama Meta por el dominio público.
   de red: un `.catch` que solo miraba errores de red dejó LINKPAGO **7 días muerto**.
 - **El orden de los adjuntos es el que ve el cliente.** Los documentos entran
   ÚLTIMOS, después de las fotos.
+- **Los crons se autorizan en UN solo lugar: `lib/cron-auth.js`.** Con `CRON_SECRET`
+  (está en producción en los dos) solo vale el Bearer que Vercel manda solo, o `?key=`.
+  ☠️ Nunca decidir con la cabecera `x-vercel-cron`: la manda cualquiera (24-sep-2026,
+  seguimientos y flujos se podían disparar desde afuera). Hay prueba guardia.
 - **Las plantillas son de la WABA, no de la marca.** Mover un número reinicia la
   ventana de 24h y hay que migrar `phone_id` en Supabase.
 
