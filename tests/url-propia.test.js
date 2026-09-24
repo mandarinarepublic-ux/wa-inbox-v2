@@ -18,6 +18,10 @@ test('ningún cron arma la dirección con req.url (la del despliegue protegido)'
   for (const ruta of ['seguimientos', 'flujos']) {
     const fuente = readFileSync(new URL(`../app/api/cron/${ruta}/route.js`, import.meta.url), 'utf8')
     assert.ok(!/new URL\(req\.url\)\.origin/.test(fuente), `cron ${ruta} vuelve a usar req.url`)
-    assert.ok(/urlPropia\(\)/.test(fuente), `cron ${ruta} no usa urlPropia()`)
+    // Solo exige urlPropia() si el cron se llama a sí mismo (seguimientos quedó
+    // vacío el 23-sep hasta la reactivación de la etapa 3).
+    if (/enviarSaliente|responderConIA|fetch\(/.test(fuente)) {
+      assert.ok(/urlPropia\(\)/.test(fuente), `cron ${ruta} no usa urlPropia()`)
+    }
   }
 })

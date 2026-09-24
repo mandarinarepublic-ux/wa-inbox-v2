@@ -66,3 +66,11 @@ test('I7: si los datos van en el mismo mensaje, no es promesa', () => {
     assert.equal(detectarPromesa(t), null, t)
   }
 })
+
+test('23-sep: el plural también promete ("mañana le enviamos…")', () => {
+  for (const t of ['Mañana le enviamos las fotos de su camiseta', 'Hoy te mandamos la guía', 'Le enviamos en un rato el boceto']) {
+    assert.ok(detectarPromesa(t), t)
+  }
+  // Pasado, no promesa.
+  assert.equal(detectarPromesa('Ayer le enviamos la guía por correo'), null)
+})

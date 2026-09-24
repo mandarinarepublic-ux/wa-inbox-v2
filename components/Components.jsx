@@ -117,8 +117,24 @@ function IABadge({ modoIA }) {
 }
 
 // ── CONTACT ROW ──────────────────────────────────────────────────
-const TEMP_ICON = { caliente: '🔥', tibio: '🌤️', frio: '❄️' }
-export function ContactRow({ conv, isActive, onClick, search = '', estado, modoIA, temp = '', alerta = false, msgSnippet = null, colorCanal = '', etiquetaCanal = '' }) {
+// Chips de gestión (temperatura automática, etapa, 📌, 🤫, 🏷️, pedido, ⏰): los arma
+// chipsDeChat() de lib/gestion.js; acá solo se pintan.
+function FilaChips({ chips }) {
+  if (!chips?.length) return null
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+      {chips.map(ch => (
+        <span key={ch.key} title={ch.titulo} style={{
+          fontSize: 9.5, fontWeight: 700, lineHeight: 1.2, whiteSpace: 'nowrap',
+          color: ch.color, background: `${ch.color}1a`, border: `1px solid ${ch.color}55`,
+          borderRadius: 6, padding: '2px 6px', maxWidth: 170, overflow: 'hidden', textOverflow: 'ellipsis',
+          animation: ch.pulso ? 'pulse 2s infinite' : 'none',
+        }}>{ch.texto}</span>
+      ))}
+    </div>
+  )
+}
+export function ContactRow({ conv, isActive, onClick, search = '', estado, modoIA, chips = [], msgSnippet = null, colorCanal = '', etiquetaCanal = '' }) {
   const [hovered, setHovered] = useState(false)
   const searching = String(search || '').trim().length > 0
   const info = ESTADO_INFO[estado] || null
@@ -176,14 +192,13 @@ export function ContactRow({ conv, isActive, onClick, search = '', estado, modoI
                   borderRadius: 6, padding: '1px 6px', flexShrink: 0,
                 }}>{etiquetaCanal}</span>
               )}
-              {alerta && <span title="🔥 Caliente — cerca de cerrar la ventana de 24h" style={{ fontSize: 12, animation: 'pulse 2s infinite' }}>⏰</span>}
-              {temp && TEMP_ICON[temp] && <span title={`Lead ${temp}`} style={{ fontSize: 12 }}>{TEMP_ICON[temp]}</span>}
               <IABadge modoIA={modoIA} />
               <span style={{ fontSize: 11, color: '#94a3b8' }}>
                 {fmtTime(conv.last?.timestamp)}
               </span>
             </div>
           </div>
+          <FilaChips chips={chips} />
           {msgSnippet != null ? (
             // Búsqueda por MENSAJE: mostrar el fragmento que coincide + bandeja
             <div style={{ marginTop: 4 }}>

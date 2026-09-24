@@ -1,13 +1,18 @@
 'use client'
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
 import dynamic from 'next/dynamic'
-import { fetchInboxSync, fetchHilo, buscarEnMensajes, sendReply, updateContact, updateTemperatura, isDemo, sendInteractiveButtons, toggleIAMode, sendVideo, sendDocumento, sendAudio, enviarAudioUrl, enviarDocumentoUrl, sendImageFile, precacheMedia, setCanalActivo, getCanalActivo, reenviarPieza } from '@/lib/api-client'
+import { fetchInboxSync, fetchHilo, buscarEnMensajes, sendReply, updateContact, updateEtapa, updateDeuda, updateSinAutomaticos, updateTipoContacto, fetchPedidosChat, isDemo, sendInteractiveButtons, toggleIAMode, sendVideo, sendDocumento, sendAudio, enviarAudioUrl, enviarDocumentoUrl, sendImageFile, precacheMedia, setCanalActivo, getCanalActivo, reenviarPieza } from '@/lib/api-client'
 import { buildConvs, fmtDate, parseDate } from '@/lib/utils'
 import { Spinner, Avatar, ContactRow, MessageBubble, Toast } from '@/components/Components'
 import RightPanel from '@/components/RightPanel'
 import SetupModal from '@/components/SetupModal'
 import GuideModal from '@/components/GuideModal'
 import { CANALES, CANAL_GENERAL, CANAL_POR_DEFECTO, colorDeCanal, canalDePhoneId, phoneIdDeCanal, etiquetaDePhoneId } from '@/lib/canales'
+import { ETAPAS, chipsDeChat, alertaVentanaCierra, necesitaConfirmarAtendido } from '@/lib/gestion'
+import { FILTRO_INICIAL, prepararVista, alternar, pasaFiltro, conteos } from '@/lib/filtro-chats'
+import { sumarOverride, aplicarOverrides } from '@/lib/overrides'
+import { etiquetaPedido, etapaVigente, tail9 } from '@/lib/etiqueta-crm'
+import FiltrosLista from '@/components/FiltrosLista'
 import { hilosDelCanal } from '@/lib/hilos'
 
 import SocialInbox from '@/components/SocialInbox'
@@ -53,15 +58,35 @@ const ANCHO_MAX = 680
 const ANCHO_PEDIDO     = anchoPanelPedido()   // hoy 560 → 800 px internos
 const ANCHO_MIN_PEDIDO = anchoPanelMinimo()   // hoy 538 → 769 px internos, justo sobre el corte
 
-// ── Dos ejes de estado ────────────────────────────────────────────
-// Eje 1 (bandeja): pendiente / atendido / soporte / archivado — casi todo automático.
-// Eje 2 (temperatura del lead): caliente / tibio / frio — 100% MANUAL, nada la cambia sola.
-const TEMPERATURAS = [
-  { key:'caliente', icon:'🔥', label:'Caliente', color:'#f97316' },
-  { key:'tibio',    icon:'🌤️', label:'Tibio',    color:'#fbbf24' },
-  { key:'frio',     icon:'❄️', label:'Frío',     color:'#38bdf8' },
+// ── Capas de gestión (port desde IND, 23-sep-2026) ───────────────────
+// Bandeja 🔴🟢⚫ POR FILA (cliente × número) · temperatura AUTOMÁTICA por fila
+// (lib/temperatura.js) · etapa 💬💳🛒🔁 · 📌 le debemos · 🤫 · 🏷️ interno. Un
+// mensaje del cliente SOLO mueve la bandeja. Fuera la temperatura manual y las
+// bandejas 💰 Venta y 🎧 Soporte (decisión de Rodrigo).
+const BANDEJAS = [
+  { key:'pendiente', icon:'🔴', label:'Pendiente', color:'#f87171' },
+  { key:'atendido',  icon:'🟢', label:'Atendido',  color:'#4ade80' },
+  { key:'archivado', icon:'⚫', label:'Archivar',  color:'#94a3b8' },
 ]
-const TEMP_META = Object.fromEntries(TEMPERATURAS.map(t => [t.key, t]))
+const cortoBoton = (s, n = 18) => (String(s).length > n ? String(s).slice(0, n - 1) + '…' : String(s))
+
+// Botón de la cabecera del chat (bandeja, etapa, 📌, 🤫, 🏷️): mismo estilo para todos.
+function BotonEje({ on, color, onClick, title, icon, label }) {
+  return (
+    <button onClick={onClick} title={title} style={{
+      padding:'4px 6px', fontWeight: on ? 800 : 600, flexShrink:0,
+      background: on ? `${color}22` : 'transparent',
+      border: `${on ? 2 : 1}px solid ${on ? color : '#1e2d3d'}`,
+      color: on ? color : '#475569',
+      borderRadius:7, cursor:'pointer', fontFamily:'inherit', transition:'all .15s',
+      boxShadow: on ? `0 0 8px ${color}44` : 'none',
+    }}>
+      <span className="hide-mobile" style={{ fontSize:10 }}>{icon} {label}</span>
+      <span className="show-mobile" style={{ fontSize:14 }}>{icon}</span>
+    </button>
+  )
+}
+const Separador = () => <span style={{ width:1, alignSelf:'stretch', background:'#1e2d3d', margin:'2px 2px', flexShrink:0 }} />
 
 // La caja de texto arranca en UNA línea y se estira sola. Los números salen de
 // fontSize 14 × lineHeight 1.5 = 21px por línea, más 11px de aire arriba y abajo
@@ -73,15 +98,12 @@ const CAJA_AIRE      = 11
 const CAJA_ALTO_MIN  = 44                                      // zona táctil, no se negocia
 const CAJA_ALTO_MAX  = CAJA_LINEA * 6 + CAJA_AIRE * 2          // 148px ≈ 6 líneas
 
-// La ventana de 24h de Meta arranca en el ÚLTIMO mensaje del cliente. A partir de ahí,
-// un lead 🔥 caliente que se acerca a las 24h de silencio se resalta con ⏰ (hay que
-// cerrarlo antes de que Meta bloquee el mensaje gratis). Umbral por defecto: 20h.
+// La ventana de 24h de Meta arranca en el ÚLTIMO mensaje del cliente.
 const VENTANA_MS = 24 * 60 * 60 * 1000
-const ALERTA_CALIENTE_MS = 20 * 60 * 60 * 1000
 
-// Al RESPONDER, la bandeja pasa a 'atendido' salvo que sea un carril deliberado (soporte).
-// La TEMPERATURA (Eje 2) nunca se toca al responder: es otro campo.
-const estadoAlResponder = (actual) => (actual === 'soporte' ? 'soporte' : 'atendido')
+// Al RESPONDER una persona, la bandeja pasa a 'atendido'. Siempre: 🎧 Soporte ya no
+// es bandeja (port desde IND; la derivación de la IA es 🔴 + 📌 🎧).
+const estadoAlResponder = () => 'atendido'
 
 async function toJpeg(file) {
   return new Promise((resolve) => {
@@ -268,7 +290,7 @@ export default function App() {
   // archivo por encima del chat. Ojo: NO es el `arrastrando` de acá abajo, que
   // es el del asa del panel derecho.
   const [soltarAqui,   setSoltarAqui]   = useState(false)
-  const [filter,       setFilter]       = useState('pendiente')
+  const [filtro,       setFiltro]       = useState(FILTRO_INICIAL)
   const [searchMode,   setSearchMode]   = useState('contacto') // 'contacto' | 'mensaje'
   const [msgHits,      setMsgHits]      = useState(null)        // búsqueda por mensaje (server-side): mensajes que casan en TODO el historial
   // Ancho del panel derecho (notas / respuestas rápidas), redimensionable con el mouse
@@ -316,7 +338,7 @@ export default function App() {
   const [refreshKey, setRefreshKey] = useState(0)
   const [refrescando, setRefrescando] = useState(false)
   const localStatusRef = useRef({}) // { telefono: { estado, expiresAt } }
-  const localTempRef   = useRef({}) // { telefono: { temperatura, expiresAt } } — override optimista Eje 2
+  const localCamposRef = useRef({}) // overrides optimistas de etapa/📌/🤫/tipo (lib/overrides.js)
   const alertadosRef   = useRef(new Set()) // claves `${tel}:${ultimoEntranteAt}` ya avisadas (1 alerta/ventana)
 
   // Mensajes optimistas pendientes (por teléfono) hasta que Make los registre en la hoja
@@ -490,13 +512,8 @@ export default function App() {
           ctMap[tel] = { ...ctMap[tel], estado: override.estado }
         }
       })
-      // Igual para la temperatura (Eje 2): que el poll no pise un cambio recién hecho.
-      Object.entries(localTempRef.current).forEach(([tel, override]) => {
-        if (override.expiresAt > now && ctMap[tel]) {
-          ctMap[tel] = { ...ctMap[tel], temperatura: override.temperatura }
-        }
-      })
-      setContacts(ctMap)
+      // Igual para etapa/📌/🤫/tipo: que el poll no pise un cambio recién hecho.
+      setContacts(aplicarOverrides(ctMap, localCamposRef.current, now))
     }
     setLastSync(new Date())
     setLoading(false)
@@ -850,11 +867,11 @@ export default function App() {
   // Cambiar de bandeja CIERRA el chat abierto: si no, al terminar de escribirle a un
   // cliente y pasar a "Pendientes" quedaba en pantalla la conversación anterior, que
   // ya no pertenece a esa bandeja. Se deja el panel del medio en blanco para elegir.
-  const cambiarFiltro = (key) => {
+  const cambiarFiltro = (dim, valor) => {
     // Cierra el chat abierto → el PEDIDO MANUAL se perdería igual que al saltar
     // a otro cliente. Sin el formulario abierto esto no pregunta nada.
     if (!puedoDejarLaConversacion(null)) return
-    setFilter(key)
+    setFiltro(f => alternar(f, dim, valor))
     setActive(null)
     activeRef.current = null
     setCitando(null)
@@ -1253,26 +1270,24 @@ export default function App() {
     openConv(conv.telefono)
   }, [convs])
 
-  // ── Alerta de leads 🔥 calientes cerca del cierre de la ventana de 24h ──
-  // Dispara una notificación del navegador por lead y por ventana. El permiso ya no
-  // se pide acá: Chrome silencia los pedidos sin gesto del usuario, así que ahora lo
-  // pide el botón 🔔 (PushToggle) dentro de su click.
+  // ── ⏰ Ventana de 24 h por cerrarse en chats con algo en juego (💬 💳 📌) ──
+  // Una notificación por FILA y por ventana. El permiso lo pide el botón 🔔.
+  // Por FILA, no por persona: la ventana es de cada número, y el último entrante
+  // de la persona mezcla los dos (el error que mató 9 mensajes en agosto).
   useEffect(() => {
     const now = Date.now()
-    Object.entries(contacts).forEach(([tel, c]) => {
-      if ((c?.temperatura || '') !== 'caliente') return
-      const ent = c?.ultimoEntranteAt ? new Date(c.ultimoEntranteAt).getTime() : 0
-      if (!ent) return
-      const ms = now - ent
-      if (ms < ALERTA_CALIENTE_MS || ms >= VENTANA_MS) return
-      const key = `${tel}:${ent}` // 1 alerta por ventana (mismo entrante = misma ventana)
+    convs.forEach(conv => {
+      const g = datosGestion(conv)
+      if (!alertaVentanaCierra(g, now)) return
+      const ent = new Date(g.ultimoEntranteAt).getTime()
+      const key = `${conv.telefono}|${conv.phoneId || ''}:${ent}` // 1 alerta por ventana y número
       if (alertadosRef.current.has(key)) return
       alertadosRef.current.add(key)
-      const nombre = c.alias || (convs.find(x => x.telefono === tel)?.nombre) || tel
-      const horas  = Math.max(0, Math.ceil((VENTANA_MS - ms) / 3600000))
-      notificar('🔥 Lead caliente por enfriarse', `${nombre}: se cierra la ventana de 24h en ~${horas}h. Escríbele ya.`, `caliente-${key}`)
+      const nombre = contacts[conv.telefono]?.alias || conv.nombre || conv.telefono
+      const horas  = Math.max(0, Math.ceil((VENTANA_MS - (now - ent)) / 3600000))
+      notificar('⏰ Se cierra la ventana de 24 h', `${nombre}: te quedan ~${horas} h para escribirle gratis.`, `ventana-${key}`)
     })
-  }, [contacts, convs])
+  }, [contacts, convs]) // eslint-disable-line react-hooks/exhaustive-deps -- datosGestion lee contacts/convs
 
   // ── Derived state ─────────────────────────────────────────────
   // La conversación abierta se identifica por (teléfono, número), no solo por
@@ -1343,8 +1358,6 @@ export default function App() {
 
   const demo        = isDemo()
 
-  // "Venta" = tiene un PEDIDO CREADO (idVenta en col H, lo setea CREAR PEDIDO).
-  const hasVenta  = (tel) => String(contacts[tel]?.idVenta || '').trim() !== ''
   // El estado de flujo (pendiente/atendido/…) es INDEPENDIENTE de tener venta.
   // Así un cliente con venta que vuelve a escribir aparece en PENDIENTE (para atenderlo)
   // y a la vez sigue en la pestaña 💰 Ventas (que filtra por idVenta, ver abajo).
@@ -1381,8 +1394,36 @@ export default function App() {
     // (búsqueda de mensajes, mensajes optimistas todavía sin confirmar).
     return conv.estadoBandeja || getStatus(conv.telefono)
   }
-  // Eje 2: temperatura del lead ('' = sin clasificar).
-  const getTemp = (tel) => contacts[tel]?.temperatura || ''
+  // ── Gestión de la FILA (port desde IND) ─────────────────────────────────
+  // Todo por fila: el estado es el de la bandeja de ESE número y la temperatura sale
+  // del último mensaje del cliente POR ESE número (la ventana de WhatsApp es por par).
+  const [ahora, setAhora] = useState(() => Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setAhora(Date.now()), 60000)
+    return () => clearInterval(id)
+  }, [])
+  // Etiqueta CRM (🏭 📦 🚚 💳): al cargar y cada 5 min, fuera de la ruta caliente.
+  const [pedidosChat, setPedidosChat] = useState({})
+  useEffect(() => {
+    let vivo = true
+    const traer = () => fetchPedidosChat().then(p => { if (vivo && p) setPedidosChat(p) })
+    traer()
+    const id = setInterval(traer, 5 * 60 * 1000)
+    return () => { vivo = false; clearInterval(id) }
+  }, [])
+  const datosGestion = (conv) => {
+    const tel = conv.telefono
+    const ct = contacts[tel] || {}
+    const pedido = pedidosChat[tail9(tel)] || null
+    return {
+      telefono: tel, estado: estadoFila(conv),
+      ultimoEntranteAt: conv?.last?.ultimoEntranteCanal || conv?.ultimoEntranteCanal || ct.ultimoEntranteAt,
+      etapa: etapaVigente(ct.etapa, ct.etapaAt, pedido), etapaPor: ct.etapaPor,
+      deudaAt: ct.deudaAt, deudaNota: ct.deudaNota, deudaPor: ct.deudaPor,
+      sinAutomaticos: ct.sinAutomaticos, tipoContacto: ct.tipoContacto,
+      pedido: etiquetaPedido(pedido, ahora),
+    }
+  }
 
   // Ventana de 24h: ms transcurridos desde el último mensaje del cliente.
   //
@@ -1398,14 +1439,10 @@ export default function App() {
     const t = conv?.last?.ultimoEntranteCanal || contacts[tel]?.ultimoEntranteAt
     return t ? (Date.now() - new Date(t).getTime()) : Infinity
   }
-  // 🔥 caliente que se acerca al cierre de la ventana (entre el umbral y las 24h) → ⏰.
-  const alertaVentana = (tel, conv = null) => {
-    if (getTemp(tel) !== 'caliente') return false
-    const ms = silencioMs(tel, conv)
-    return ms >= ALERTA_CALIENTE_MS && ms < VENTANA_MS
-  }
+  // ⏰ la ventana de ESTA fila se cierra con algo en juego (💬 💳 📌).
+  const alertaVentana = (conv) => alertaVentanaCierra(datosGestion(conv), Date.now())
   // Horas que faltan para cerrar la ventana de 24h (para el texto del aviso).
-  const horasParaCierre = (tel) => Math.max(0, Math.ceil((VENTANA_MS - silencioMs(tel)) / 3600000))
+  const horasParaCierre = (conv) => Math.max(0, Math.ceil((VENTANA_MS - silencioMs(conv.telefono, conv)) / 3600000))
 
   // Búsqueda tolerante de teléfono: ignora espacios/guiones y el prefijo de país.
   // Ecuador: 0987498489 (local) == 593987498489 (internacional) == +593 98 749 8489.
@@ -1455,58 +1492,24 @@ export default function App() {
                  alias.includes(q) ||
                  phoneMatch(c.telefono, search)
         })
-  // Pestaña "Ventas": entra por DOS caminos, y los dos hacen falta.
-  //
-  //   1. Tiene un PEDIDO CREADO (`idVenta`) — automático, lo pone el pedido.
-  //   2. Está marcado a mano en 💰 Venta en proceso — la etapa del embudo.
-  //
-  // El segundo se había perdido: el rediseño de estados en 2 ejes (18-jul, 6c7fb5a)
-  // lo quitó dando por hecho que "venta = tiene pedido". Pero así se trabaja de
-  // verdad acá: 🔥 Caliente → 💰 Venta en proceso → 🟢 Atendido o ⚫ Archivado
-  // cuando el pedido ya se entregó. Sin el paso del medio no hay dónde poner al
-  // cliente que ya dijo que sí pero cuyo pedido todavía no existe en el CRM.
-  //
-  // Se conservan los dos porque miden cosas distintas: uno es "hay plata
-  // comprometida en el sistema", el otro es "estoy cerrando esto ahora".
-  const esVentaActiva = (tel) => (hasVenta(tel) || getStatus(tel) === 'venta') && getStatus(tel) !== 'archivado'
-  // Filtros: bandeja (estado), temperatura (Eje 2), o venta (idVenta). Un solo filtro
-  // activo a la vez. Al BUSCAR mostramos TODOS los resultados sin importar el filtro.
-  const esTemp = (key) => TEMP_META[key] !== undefined
-  // El tope vuelve a 100 al cambiar de bandeja, de línea o al buscar: cada
-  // lista empieza de cero y nadie hereda el "ver más" de otra.
-  useEffect(() => { setTope(100) }, [filter, search, linea])
+  // El tope vuelve a 100 al cambiar de filtro, de línea o al buscar.
+  useEffect(() => { setTope(100) }, [filtro, search, linea])
 
-  const filtered = ordenarBandeja(
-    isSearching
-      ? searched
-      : searched.filter(c =>
-          filter === 'venta' ? esVentaActiva(c.telefono)
-          : esTemp(filter)   ? getTemp(c.telefono) === filter
-          // Por CONVERSACIÓN, no por persona: en GENERAL la fila de REPUBLIC puede
-          // estar atendida y la de MANDI seguir pendiente. Con el estado por
-          // persona, contestar por un número escondía la conversación del otro.
-          :                    estadoFila(c) === filter
-        ),
-    isSearching ? '' : filter,
-    (tel) => contacts[tel]?.ultimoEntranteAt || null,
-  )
-  const counts = {
-    // Los contadores usan `estadoFila`, IGUAL que el filtro de arriba. Si uno
-    // contara por persona y el otro por conversación, el botón diría un número y
-    // debajo se verían otras filas — y ese desajuste es exactamente lo que rompe
-    // la garantía "si esa bandeja está vacía, contesté a todos".
-    pendiente:  searched.filter(c => estadoFila(c) === 'pendiente').length,
-    atendido:   searched.filter(c => estadoFila(c) === 'atendido').length,
-    soporte:    searched.filter(c => estadoFila(c) === 'soporte').length,
-    archivado:  searched.filter(c => estadoFila(c) === 'archivado').length,
-    venta:      searched.filter(c => esVentaActiva(c.telefono)).length,
-    // Temperaturas (Eje 2)
-    caliente:   searched.filter(c => getTemp(c.telefono) === 'caliente').length,
-    tibio:      searched.filter(c => getTemp(c.telefono) === 'tibio').length,
-    frio:       searched.filter(c => getTemp(c.telefono) === 'frio').length,
-    // Calientes que se acercan a las 24h → para el aviso ⏰.
-    alerta:     searched.filter(c => alertaVentana(c.telefono, c)).length,
-  }
+  // Filtros COMBINABLES por FILA (lib/filtro-chats.js), memorizados: con miles de
+  // filas, recalcular en cada tecla hace que las letras tarden (ya pasó). El orden
+  // de 🔴 sigue siendo el FIFO de MANDI (lib/orden-bandeja.js).
+  /* eslint-disable react-hooks/exhaustive-deps -- datosGestion/estadoFila leen exactamente estas dependencias */
+  const { filtered, counts, totalPendientes } = useMemo(() => {
+    const vistas = searched.map(c => ({ ...prepararVista(datosGestion(c), ahora), _conv: c }))
+    const lista = isSearching ? searched : vistas.filter(v => pasaFiltro(v, filtro)).map(v => v._conv)
+    return {
+      filtered: ordenarBandeja(lista, isSearching ? '' : (filtro.bandeja === 'pendiente' ? 'pendiente' : ''),
+        (tel) => contacts[tel]?.ultimoEntranteAt || null),
+      counts: conteos(vistas, filtro),
+      totalPendientes: vistas.filter(v => v.estado === 'pendiente').length,
+    }
+  }, [convs, search, searchMode, msgHits, contacts, pedidosChat, ahora, filtro])
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   const lastMsg      = activeConv?.last
   const lastIncoming = activeConv ? [...activeConv.msgs].reverse().find(m => m.direccion === 'ENTRANTE') : null
@@ -1606,20 +1609,53 @@ export default function App() {
     }
   }
 
-  // ── Cambiar TEMPERATURA del lead (Eje 2) — 100% manual ────────
-  // Clic en la temperatura activa la QUITA (toggle). Nada más la toca.
-  const changeTemperatura = async (telefono, temp) => {
-    const actual = contacts[telefono]?.temperatura || ''
-    const nueva  = actual === temp ? '' : temp
-    localTempRef.current[telefono] = { temperatura: nueva, expiresAt: Date.now() + 15000 }
-    setContacts(prev => ({ ...prev, [telefono]: { ...(prev[telefono] || {}), temperatura: nueva } }))
-    const res = await updateTemperatura(telefono, nueva)
+  // ── Gestión: etapa, 📌, 🤫, tipo — optimista con override de 35 s ──────
+  const cambiarCampos = async (telefono, campos, llamada, msgError) => {
+    const antes = contacts[telefono] || {}
+    localCamposRef.current = sumarOverride(localCamposRef.current, telefono, campos)
+    setContacts(prev => ({ ...prev, [telefono]: { ...(prev[telefono] || {}), ...campos } }))
+    const res = await llamada()
     if (res && res.ok === false) {
-      delete localTempRef.current[telefono]
-      setContacts(prev => ({ ...prev, [telefono]: { ...(prev[telefono] || {}), temperatura: actual } }))
-      setToast({ ok: false, msg: '✗ No se pudo cambiar la temperatura — reintenta' })
+      const o = localCamposRef.current[telefono]
+      if (o) {
+        const restantes = Object.fromEntries(Object.entries(o.campos).filter(([k]) => !(k in campos)))
+        if (Object.keys(restantes).length) localCamposRef.current[telefono] = { ...o, campos: restantes }
+        else delete localCamposRef.current[telefono]
+      }
+      const revertir = Object.fromEntries(Object.keys(campos).map(k => [k, antes[k]]))
+      setContacts(prev => ({ ...prev, [telefono]: { ...(prev[telefono] || {}), ...revertir } }))
+      setToast({ ok: false, msg: `✗ ${msgError} — reintenta` })
       setTimeout(() => setToast(null), 4000)
     }
+  }
+  // Clic en la etapa activa la QUITA.
+  const cambiarEtapa = (conv, etapa) => {
+    const telefono = conv.telefono
+    const nueva = datosGestion(conv).etapa === etapa ? '' : etapa
+    cambiarCampos(telefono,
+      { etapa: nueva, etapaPor: nueva ? 'humano' : '', etapaAt: nueva ? new Date().toISOString() : null },
+      () => updateEtapa(telefono, nueva), 'No se pudo cambiar la etapa')
+  }
+  // 📌 prendido → preguntar si ya cumpliste; apagado → pedir la nota.
+  const cambiarDeuda = (telefono) => {
+    const c = contacts[telefono] || {}
+    if (c.deudaAt) {
+      if (!window.confirm(`¿Ya cumpliste?\n\n📌 ${c.deudaNota || 'Le debemos algo'}`)) return
+      cambiarCampos(telefono, { deudaAt: null, deudaNota: '', deudaPor: '' }, () => updateDeuda(telefono, ''), 'No se pudo apagar el 📌')
+      return
+    }
+    const nota = window.prompt('¿Qué le debemos al cliente? (foto, precio, guía, respuesta…)', '')
+    if (!nota || !nota.trim()) return
+    cambiarCampos(telefono, { deudaAt: new Date().toISOString(), deudaNota: nota.trim(), deudaPor: 'humano' },
+      () => updateDeuda(telefono, nota.trim()), 'No se pudo prender el 📌')
+  }
+  const cambiarSinAutomaticos = (telefono) => {
+    const on = !contacts[telefono]?.sinAutomaticos
+    cambiarCampos(telefono, { sinAutomaticos: on }, () => updateSinAutomaticos(telefono, on), 'No se pudo cambiar 🤫')
+  }
+  const cambiarTipoContacto = (telefono) => {
+    const tipo = contacts[telefono]?.tipoContacto === 'interno' ? 'cliente' : 'interno'
+    cambiarCampos(telefono, { tipoContacto: tipo }, () => updateTipoContacto(telefono, tipo), 'No se pudo cambiar el tipo de contacto')
   }
 
   // ── Actualizar alias/contacto ─────────────────────────────────
@@ -2365,7 +2401,8 @@ export default function App() {
   // Cuántos envíos hay saliendo o esperando turno en el chat abierto.
   const enFila = activeConv ? (colaLen[activeConv.telefono] || 0) : 0
   const currentStatus  = currentContact?.estado || 'pendiente'
-  const currentStatusView = activeConv ? getStatus(activeConv.telefono) : 'pendiente'
+  // El estado de la FILA abierta (bandeja de ESE número), igual que en la lista.
+  const currentStatusView = activeConv ? estadoFila(activeConv) : 'pendiente'
   const displayName    = (tel) => contacts[tel]?.alias || convs.find(c=>c.telefono===tel)?.nombre || tel
 
   return (
@@ -2544,7 +2581,7 @@ export default function App() {
                   <div style={{ fontSize:13, fontWeight:800, color:'#e2e8f0' }}>Mandarina Inbox</div>
                   <div style={{ fontSize:10, fontWeight:700, color:demo?'#f59e0b':'#25d366', display:'flex', alignItems:'center', gap:3, marginTop:1 }}>
                     <span style={{ animation:'pulse 2s infinite', display:'inline-block', width:5, height:5, borderRadius:'50%', background:'currentColor' }} />
-                    {demo ? 'Demo' : `En vivo · ${counts.pendiente} pendiente${counts.pendiente===1?'':'s'}`}
+                    {demo ? 'Demo' : `En vivo · ${totalPendientes} pendiente${totalPendientes===1?'':'s'}`}
                   </div>
                 </div>
               </div>
@@ -2583,43 +2620,8 @@ export default function App() {
                 }}>{label}</button>
               ))}
             </div>
-            {/* Fila 1 — BANDEJA (estado de conversación) + Ventas */}
-            <div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>
-              {[
-                { key:'pendiente', label:'🔴 Pendientes', color:'#f87171' },
-                { key:'atendido',  label:'🟢 Atendidos',  color:'#4ade80' },
-                { key:'venta',     label:'💰 Ventas',     color:'#10b981' },
-                { key:'soporte',   label:'🎧 Soporte',    color:'#a78bfa' },
-                { key:'archivado', label:'⚫ Archivados', color:'#64748b' },
-              ].map(({ key, label, color }) => (
-                <button key={key} onClick={() => cambiarFiltro(key)} style={{
-                  flex:1, padding:'5px 2px', fontSize:9, fontWeight:700,
-                  background:filter===key?`${color}18`:'transparent',
-                  border:`1px solid ${filter===key?color+'40':'#1a2d40'}`,
-                  color:filter===key?color:'#334155',
-                  borderRadius:7, cursor:'pointer', fontFamily:'inherit', transition:'all .15s',
-                }}>
-                  {label}
-                  {counts[key]>0 && <span style={{ marginLeft:3, background:filter===key?color:'#1a2d40', color:filter===key?'#080d14':'#475569', borderRadius:10, padding:'0 4px', fontSize:8, fontWeight:800 }}>{counts[key]}</span>}
-                </button>
-              ))}
-            </div>
-            {/* Fila 2 — TEMPERATURA del lead (Eje 2, manual) */}
-            <div style={{ display:'flex', gap:4, marginTop:5 }}>
-              {TEMPERATURAS.map(({ key, icon, label, color }) => (
-                <button key={key} onClick={() => cambiarFiltro(key)} style={{
-                  flex:1, padding:'5px 2px', fontSize:9, fontWeight:700,
-                  background:filter===key?`${color}18`:'transparent',
-                  border:`1px solid ${filter===key?color+'40':'#1a2d40'}`,
-                  color:filter===key?color:'#334155',
-                  borderRadius:7, cursor:'pointer', fontFamily:'inherit', transition:'all .15s',
-                }}>
-                  {icon} {label}
-                  {key==='caliente' && counts.alerta>0 && <span title={`${counts.alerta} caliente(s) cerca de cerrar la ventana de 24h`} style={{ marginLeft:3 }}>⏰</span>}
-                  {counts[key]>0 && <span style={{ marginLeft:3, background:filter===key?color:'#1a2d40', color:filter===key?'#080d14':'#475569', borderRadius:10, padding:'0 4px', fontSize:8, fontWeight:800 }}>{counts[key]}</span>}
-                </button>
-              ))}
-            </div>
+            {/* ── Filtros combinables (port desde IND) ── */}
+            <FiltrosLista filtro={filtro} conteos={counts} onCambiar={cambiarFiltro} />
           </div>
 
           <div style={{ flex:1, overflowY:'auto', minHeight:0 }}>
@@ -2631,7 +2633,7 @@ export default function App() {
               <div style={{ padding:28, textAlign:'center', color:'#2a3f55', fontSize:12 }}>
                 {isSearching
                   ? (searchingMsgs ? `Ningún mensaje dice "${search.trim()}"` : `Sin resultados para "${search.trim()}"`)
-                  : `Sin conversaciones ${({pendiente:'pendientes',atendido:'atendidas',venta:'con venta',soporte:'en soporte',archivado:'archivadas',caliente:'🔥 calientes',tibio:'🌤️ tibias',frio:'❄️ frías'})[filter]||''}`}
+                  : 'Sin conversaciones con estos filtros'}
               </div>
             ) : (<>
               {isSearching && (
@@ -2657,8 +2659,7 @@ export default function App() {
                   search={search}
                   estado={estadoFila(conv)}
                   modoIA={getModoIA(conv.telefono)}
-                  temp={getTemp(conv.telefono)}
-                  alerta={alertaVentana(conv.telefono, conv)}
+                  chips={chipsDeChat(datosGestion(conv), ahora)}
                   msgSnippet={searchingMsgs ? matchSnippet(conv) : null}
                   // El color y la etiqueta salen del canal DE LA FILA, que ahora
                   // es un hecho y no una deducción: la lista viene de
@@ -2760,49 +2761,51 @@ export default function App() {
                     animation: refrescando ? 'spin .8s linear infinite' : 'none',
                   }}>↻</button>
 
-                {/* ── Eje 1: BANDEJA (estado de conversación) ── */}
-                {[
-                  { s:'pendiente', icon:'🔴', label:'Pendiente', shortLabel:'🔴', activeColor:'#f87171' },
-                  { s:'atendido',  icon:'🟢', label:'Atendido',  shortLabel:'🟢', activeColor:'#4ade80' },
-                  { s:'venta',     icon:'💰', label:'Venta en proceso', shortLabel:'💰', activeColor:'#10b981' },
-                  { s:'soporte',   icon:'🎧', label:'Soporte',   shortLabel:'🎧', activeColor:'#a78bfa' },
-                  { s:'archivado', icon:'⚫', label:'Archivar',  shortLabel:'⚫', activeColor:'#94a3b8' },
-                ].map(({ s, icon, label, shortLabel, activeColor }) => (
-                  <button key={s} onClick={() => changeStatus(activeConv.telefono, s)} title={label} style={{
-                    padding:'4px 6px', fontWeight: currentStatusView===s ? 800 : 600, flexShrink:0,
-                    background: currentStatusView===s ? `${activeColor}22` : 'transparent',
-                    border: `${currentStatusView===s ? 2 : 1}px solid ${currentStatusView===s ? activeColor : '#1e2d3d'}`,
-                    color: currentStatusView===s ? activeColor : '#475569',
-                    borderRadius:7, cursor:'pointer', fontFamily:'inherit', transition:'all .15s',
-                    boxShadow: currentStatusView===s ? `0 0 8px ${activeColor}44` : 'none',
-                  }}>
-                    <span className="hide-mobile" style={{ fontSize:10 }}>{icon} {label}</span>
-                    <span className="show-mobile" style={{ fontSize:14 }}>{shortLabel}</span>
-                  </button>
+                {/* ── Bandeja de ESTA fila: de quién es el turno ── */}
+                {BANDEJAS.map(({ key, icon, label, color }) => (
+                  <BotonEje key={key} on={currentStatusView===key} color={color} icon={icon} label={label} title={label}
+                    onClick={() => {
+                      // Freno: marcar 🟢 a mano con el cliente hablando de último.
+                      if (key === 'atendido' && currentStatusView !== 'atendido') {
+                        const ultimo = activeConv.msgs[activeConv.msgs.length - 1]
+                        if (necesitaConfirmarAtendido(ultimo?.direccion) &&
+                            !window.confirm('El cliente escribió de último. ¿Lo contestaste por otro lado?')) return
+                      }
+                      changeStatus(activeConv.telefono, key)
+                    }} />
                 ))}
+                <Separador />
 
-                {/* separador entre ejes */}
-                <span style={{ width:1, alignSelf:'stretch', background:'#1e2d3d', margin:'2px 2px', flexShrink:0 }} />
-
-                {/* ── Eje 2: TEMPERATURA del lead (manual, clic de nuevo = quitar) ── */}
-                {TEMPERATURAS.map(({ key, icon, label, color }) => {
-                  const tempActual = getTemp(activeConv.telefono)
-                  const on = tempActual === key
+                {/* ── Etapa de la venta (clic de nuevo = quitar) ── */}
+                {Object.entries(ETAPAS).map(([key, e]) => {
+                  const on = datosGestion(activeConv).etapa === key
                   return (
-                    <button key={key} onClick={() => changeTemperatura(activeConv.telefono, key)}
-                      title={on ? `${label} — clic para quitar` : `Marcar ${label}`} style={{
-                        padding:'4px 6px', fontWeight: on ? 800 : 600, flexShrink:0,
-                        background: on ? `${color}22` : 'transparent',
-                        border: `${on ? 2 : 1}px solid ${on ? color : '#1e2d3d'}`,
-                        color: on ? color : '#475569',
-                        borderRadius:7, cursor:'pointer', fontFamily:'inherit', transition:'all .15s',
-                        boxShadow: on ? `0 0 8px ${color}44` : 'none',
-                      }}>
-                      <span className="hide-mobile" style={{ fontSize:10 }}>{icon} {label}</span>
-                      <span className="show-mobile" style={{ fontSize:14 }}>{icon}</span>
-                    </button>
+                    <BotonEje key={key} on={on} color={e.color} icon={e.icon} label={e.label}
+                      title={on ? `${e.label} — clic para quitar` : `Marcar ${e.label}`}
+                      onClick={() => cambiarEtapa(activeConv, key)} />
                   )
                 })}
+                <Separador />
+
+                {/* ── 📌 le debemos · 🤫 sin automáticos · 🏷️ interno ── */}
+                {(() => {
+                  const ct = contacts[activeConv.telefono] || {}
+                  return (
+                    <>
+                      <BotonEje on={Boolean(ct.deudaAt)} color={ct.deudaAt ? '#fbbf24' : '#94a3b8'}
+                        icon={ct.deudaPor === 'ia' ? '📌🎧' : '📌'}
+                        label={ct.deudaAt ? cortoBoton(ct.deudaNota || 'Le debemos') : 'Le debemos'}
+                        title={ct.deudaAt ? `Le debemos: ${ct.deudaNota || 'algo'} — clic cuando cumplas` : 'Anotar algo que le prometiste al cliente'}
+                        onClick={() => cambiarDeuda(activeConv.telefono)} />
+                      <BotonEje on={Boolean(ct.sinAutomaticos)} color="#94a3b8" icon="🤫" label="Sin automáticos"
+                        title={ct.sinAutomaticos ? 'No le llegan mensajes automáticos — clic para permitirlos' : 'Que el sistema no le escriba solo'}
+                        onClick={() => cambiarSinAutomaticos(activeConv.telefono)} />
+                      <BotonEje on={ct.tipoContacto === 'interno'} color="#94a3b8" icon="🏷️" label="Interno"
+                        title={ct.tipoContacto === 'interno' ? 'Contacto interno o proveedor — clic para volverlo cliente' : 'Marcar como contacto interno o proveedor'}
+                        onClick={() => cambiarTipoContacto(activeConv.telefono)} />
+                    </>
+                  )
+                })()}
 
                 {/* ── TOGGLE AGENTE IA ── */}
                 {(() => {
@@ -2836,10 +2839,10 @@ export default function App() {
               </div>
             </div>
 
-            {/* ⏰ Alerta: lead 🔥 caliente cerca de cerrar la ventana de 24h */}
-            {alertaVentana(activeConv.telefono) && (
+            {/* ⏰ Se cierra la ventana de 24 h de ESTA fila con algo en juego (💬 💳 📌) */}
+            {alertaVentana(activeConv) && (
               <div style={{ padding:'7px 14px', background:'rgba(249,115,22,.12)', borderBottom:'1px solid rgba(249,115,22,.3)', color:'#fb923c', fontSize:12, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', gap:8, flexWrap:'wrap' }}>
-                <span>⏰ 🔥 Lead caliente — se cierra la ventana de 24h en ~{horasParaCierre(activeConv.telefono)}h. Escríbele ya para no perderla.</span>
+                <span>⏰ Se cierra la ventana de 24 h en ~{horasParaCierre(activeConv)} h y hay algo en juego (💬 💳 📌). Escríbele ya.</span>
               </div>
             )}
 
