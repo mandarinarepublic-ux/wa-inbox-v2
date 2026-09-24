@@ -8,6 +8,7 @@ import {
 } from '@/lib/inbox-supabase'
 import { agruparFallos, textoAvisoFallidos } from '@/lib/entregas-fallidas'
 import { CANALES } from '@/lib/canales'
+import { autorizadoCron } from '@/lib/cron-auth'
 
 // Aviso de mensajes que NO le llegaron al cliente. Lo llama Vercel Cron (vercel.json).
 //
@@ -38,16 +39,8 @@ const BASE_URL = String(process.env.INBOX_URL || 'https://inbox.apps.mandarinaec
 // aprenda a ignorarlo.
 const VENTANA_INICIAL_MIN = 60
 
-function autorizado(req) {
-  const secret = process.env.CRON_SECRET
-  const auth = req.headers.get('authorization') || ''
-  const keyQ = new URL(req.url).searchParams.get('key')
-  // Mismo criterio que /api/cron/pendientes: con secreto configurado manda el
-  // secreto —que Vercel manda solo en los crons de verdad—; sin secreto, la
-  // cabecera `x-vercel-cron` es lo único que hay.
-  if (secret) return auth === `Bearer ${secret}` || keyQ === secret
-  return req.headers.get('x-vercel-cron') != null
-}
+// Quién puede disparar este cron: una sola regla para todos (lib/cron-auth.js).
+const autorizado = (req) => autorizadoCron(req)
 
 /**
  * Mantiene al día `conversaciones.bsuid`: el identificador con el que Meta va a

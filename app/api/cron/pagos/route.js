@@ -6,6 +6,7 @@ import {
   setMarcaAvisoPagosSupabase,
 } from '@/lib/inbox-supabase'
 import { textoAvisoPagos } from '@/lib/pagos-sin-pedido'
+import { autorizadoCron } from '@/lib/cron-auth'
 
 // Aviso diario de POSIBLES pagos sin pedido. Lo llama Vercel Cron (vercel.json).
 //
@@ -32,13 +33,8 @@ const BASE_URL = String(process.env.INBOX_URL || 'https://inbox.apps.mandarinaec
 // primer aviso de historia vieja es la mejor forma de que se aprenda a ignorarlo.
 const VENTANA_INICIAL_HORAS = 48
 
-function autorizado(req) {
-  const secret = process.env.CRON_SECRET
-  const auth = req.headers.get('authorization') || ''
-  const keyQ = new URL(req.url).searchParams.get('key')
-  if (!secret) return true              // sin secreto configurado, abierto como los otros crons
-  return auth === `Bearer ${secret}` || keyQ === secret
-}
+// Quién puede disparar este cron: una sola regla para todos (lib/cron-auth.js).
+const autorizado = (req) => autorizadoCron(req)
 
 export async function GET(req) {
   try {

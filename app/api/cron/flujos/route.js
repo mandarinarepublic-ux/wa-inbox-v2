@@ -10,6 +10,7 @@ import { correrTanda } from '@/lib/flujo-motor'
 import { enviarSaliente } from '@/lib/responder-ia'
 import { enviarTelegram } from '@/lib/telegram'
 import { CUENTA } from '@/lib/supabase'
+import { autorizadoCron } from '@/lib/cron-auth'
 
 // Cron de FLUJOS (Fase B): sigue las esperas en las líneas que ya se cumplieron
 // y limpia los estados que caducaron sin respuesta. Cada 5 min (vercel.json).
@@ -22,15 +23,8 @@ export const maxDuration = 60
 
 const tail9 = (s) => String(s || '').replace(/\D/g, '').replace(/^593/, '').replace(/^0+/, '').slice(-9)
 
-function autorizado(req) {
-  const secret = process.env.CRON_SECRET
-  const auth = req.headers.get('authorization') || ''
-  const isVercelCron = req.headers.get('x-vercel-cron') != null // Vercel lo pone solo en crons reales
-  const keyQ = new URL(req.url).searchParams.get('key')
-  if (isVercelCron) return true
-  if (secret && (auth === `Bearer ${secret}` || keyQ === secret)) return true
-  return false
-}
+// Quién puede disparar este cron: una sola regla para todos (lib/cron-auth.js).
+const autorizado = (req) => autorizadoCron(req)
 
 export async function GET(req) {
   if (!autorizado(req)) return NextResponse.json({ error: 'no autorizado' }, { status: 401 })

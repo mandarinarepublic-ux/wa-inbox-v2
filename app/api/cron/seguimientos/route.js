@@ -5,6 +5,7 @@ import { getAutomatizaciones } from '@/lib/automatizaciones'
 import { decidirReactivacion } from '@/lib/reactivacion'
 import { tail9 } from '@/lib/etiqueta-crm'
 import { enviarSaliente } from '@/lib/responder-ia'
+import { autorizadoCron } from '@/lib/cron-auth'
 
 // Cron de REACTIVACIÓN por etapa (Vercel Cron cada hora, ver vercel.json).
 // Port desde IND, etapa 3 (23-sep-2026). La regla entera vive en
@@ -25,15 +26,8 @@ import { enviarSaliente } from '@/lib/responder-ia'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-function autorizado(req) {
-  const secret = process.env.CRON_SECRET
-  const auth = req.headers.get('authorization') || ''
-  const isVercelCron = req.headers.get('x-vercel-cron') != null // Vercel lo pone solo en crons reales
-  const keyQ = new URL(req.url).searchParams.get('key')
-  if (isVercelCron) return true
-  if (secret && (auth === `Bearer ${secret}` || keyQ === secret)) return true
-  return false
-}
+// Quién puede disparar este cron: una sola regla para todos (lib/cron-auth.js).
+const autorizado = (req) => autorizadoCron(req)
 
 export async function GET(req) {
   if (!autorizado(req)) {

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getContactos, marcarAvisoTelegram } from '@/lib/contactos'
 import { enviarTelegram, telegramConfigurado } from '@/lib/telegram'
 import { chatsQueAvisar, textoAviso, enHorarioLaboral, partirPorAntiguedad } from '@/lib/pendientes'
+import { autorizadoCron } from '@/lib/cron-auth'
 
 // Recordatorio de chats sin contestar, por Telegram. Lo llama Vercel Cron cada
 // 5 min (ver vercel.json).
@@ -26,18 +27,8 @@ const BASE_URL = String(process.env.INBOX_URL || 'https://inbox.apps.mandarinaec
   .replace(/[^\x21-\x7E]/g, '')   // por si la variable llega con BOM desde PowerShell
   .replace(/\/+$/, '')            // sin barra final: el link ya la pone
 
-function autorizado(req) {
-  const secret = process.env.CRON_SECRET
-  const auth = req.headers.get('authorization') || ''
-  const keyQ = new URL(req.url).searchParams.get('key')
-  // ⚠️ La cabecera `x-vercel-cron` NO alcanza por sí sola cuando hay secreto: no
-  // está documentada como imposible de falsificar, y aceptarla primero dejaba la
-  // ruta abierta a cualquiera que supiera el path. Con secreto configurado manda
-  // el secreto —que Vercel manda solo en los crons de verdad—; sin secreto, la
-  // cabecera es lo único que hay y ahí sí vale.
-  if (secret) return auth === `Bearer ${secret}` || keyQ === secret
-  return req.headers.get('x-vercel-cron') != null
-}
+// Quién puede disparar este cron: una sola regla para todos (lib/cron-auth.js).
+const autorizado = (req) => autorizadoCron(req)
 
 export async function GET(req) {
   if (!autorizado(req)) {
