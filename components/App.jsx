@@ -937,6 +937,17 @@ export default function App() {
     } else if (vaAChat && !eraChat && id !== CANAL_GENERAL) {
       setCanalActivo(id)
       setCanalArmado(id)        // idem: MANDI/REPUBLIC mandan sobre lo armado, no al revés
+      // ☠️ Volver de CONTACTOS/AUTOS/SOCIAL/FLUJOS a un número se trata IGUAL que
+      // saltar de un número a otro. Antes esta rama no soltaba el chat ni la
+      // lista: REPUBLIC → chat X → AUTOS → MANDI mostraba el hilo de X en MANDI
+      // mientras la respuesta salía por REPUBLIC (auditoría 25-sep).
+      setActive(null); activeRef.current = null
+      setActiveCanal(''); activeCanalRef.current = ''
+      setCitando(null)
+      setConvs([]); setContacts({})
+      hilosRef.current = {}
+      pendingRef.current = {}
+      setTimeout(load, 0)
     } else if (id === CANAL_GENERAL) {
       // EN GENERAL SE CONVERSA. Es la cola única y es donde se trabaja:
       //

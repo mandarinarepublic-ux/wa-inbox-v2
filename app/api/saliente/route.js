@@ -247,6 +247,19 @@ function construir(body) {
 export async function POST(req) {
   try {
     const body = await req.json()
+    // ☠️ Un `Canal` que VINO pero no es ninguno de nuestros números no se manda
+    // por MANDI "por defecto": es una pestaña con el bundle viejo (25-sep: el
+    // phone_id anterior de REPUBLIC quedó horneado en pestañas abiertas) o un
+    // bug. Mandarlo por el principal era contestarle al cliente por el número
+    // equivocado sin que nadie se enterara. Sin `Canal` sigue el principal:
+    // crons y llamadas viejas que nunca lo pasaron.
+    const canalPedido = String(body?.Canal || '').trim()
+    if (canalPedido && !CANALES_VALIDOS.has(canalPedido)) {
+      return NextResponse.json(
+        { ok: false, error: 'Número de salida desconocido. Recarga el inbox (Ctrl+Shift+R) y vuelve a enviar.', canal: canalPedido },
+        { status: 409 }
+      )
+    }
     const canal = canalDe(body)   // numero por el que sale este mensaje
 
     // ── LINKPAGO<monto> ───────────────────────────────────────────────────────
