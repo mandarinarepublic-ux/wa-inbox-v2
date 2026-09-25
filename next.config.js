@@ -6,6 +6,11 @@ const nextConfig = {
   // está bajando. El revisor corre con `npm test`, en la compu, gratis.
   // ⚠️ Esto NO lo desactiva: si alguien sube sin correr `npm test`, no hay red.
   eslint: { ignoreDuringBuilds: true },
+  // El commit con el que se compiló ESTE bundle, horneado en el navegador. El
+  // servidor manda el suyo en cada /api/inbox-sync: si difieren, la pestaña
+  // corre código viejo y se le pide recargar (25-sep-2026: pestañas abiertas
+  // desde antes del cambio de número de REPUBLIC pedían el phone_id viejo).
+  env: { BUILD_CLIENTE: process.env.VERCEL_GIT_COMMIT_SHA || '' },
   // Las PÁGINAS del host viejo se mandan al dominio nuevo, porque la cookie de
   // sesión solo viaja a *.apps.mandarinaec.com y ahí nunca llegaría. Si alguien
   // se quedara en el host viejo cuando el candado bloquee, caería en un bucle de

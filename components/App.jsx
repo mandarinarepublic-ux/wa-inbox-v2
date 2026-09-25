@@ -1,7 +1,7 @@
 'use client'
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
 import dynamic from 'next/dynamic'
-import { fetchInboxSync, fetchHilo, buscarEnMensajes, sendReply, updateContact, updateEtapa, updateDeuda, updateSinAutomaticos, updateTipoContacto, fetchPedidosChat, isDemo, sendInteractiveButtons, toggleIAMode, sendVideo, sendDocumento, sendAudio, enviarAudioUrl, enviarDocumentoUrl, sendImageFile, precacheMedia, setCanalActivo, getCanalActivo, reenviarPieza } from '@/lib/api-client'
+import { fetchInboxSync, fetchHilo, buscarEnMensajes, sendReply, updateContact, updateEtapa, updateDeuda, updateSinAutomaticos, updateTipoContacto, fetchPedidosChat, isDemo, sendInteractiveButtons, toggleIAMode, sendVideo, sendDocumento, sendAudio, enviarAudioUrl, enviarDocumentoUrl, sendImageFile, precacheMedia, setCanalActivo, getCanalActivo, reenviarPieza, hayVersionNueva } from '@/lib/api-client'
 import { buildConvs, fmtDate, parseDate } from '@/lib/utils'
 import { Spinner, Avatar, ContactRow, MessageBubble, Toast } from '@/components/Components'
 import RightPanel from '@/components/RightPanel'
@@ -241,6 +241,7 @@ export default function App() {
   // botones de número y sumarlos contaría a esa persona dos veces. `null` = todavía
   // no llegó del servidor (ver el badge de GENERAL más abajo).
   const [pendientesTotal, setPendientesTotal] = useState(null)
+  const [versionNueva, setVersionNueva] = useState(false)
   // Las dos pestañas de número Y la de GENERAL comparten la vista de chat de
   // abajo: sin CANAL_GENERAL acá, la pestaña 📥 GENERAL se ve en blanco porque
   // ninguna de las otras vistas (SOCIAL/CONTACTOS/AUTO) se enciende para ella.
@@ -405,6 +406,20 @@ export default function App() {
     // null (error) → se conservan los datos previos, no parpadea a blanco.
     const enGeneral = lineaRef.current === CANAL_GENERAL
     const sync   = await fetchInboxSync(enGeneral)
+    if (hayVersionNueva()) setVersionNueva(true)
+    // ☠️ Respuesta ATRASADA: si durante el `await` el vendedor cambió de pestaña,
+    // esta respuesta es de la pestaña anterior (GENERAL trae los dos números) y
+    // pintarla MEZCLA chats hasta el siguiente ciclo. Se tira entera; la pestaña
+    // nueva ya pidió la suya (`cambiarLinea` → `setTimeout(load, 0)`).
+    // `canalPedido` es el filtro con el que el BACKEND respondió ('' = GENERAL).
+    if (sync && typeof sync.canalPedido === 'string') {
+      const ahoraGeneral = lineaRef.current === CANAL_GENERAL
+      // Se compara contra lo que `fetchInboxSync` pediría AHORA (CANAL_ACTIVO), no
+      // contra la pestaña: si esos dos se desalinearan por otro camino, comparar
+      // con la pestaña tiraría TODAS las respuestas y la lista quedaría congelada.
+      const esperado = ahoraGeneral ? '' : (getCanalActivo() || '')
+      if (sync.canalPedido !== esperado) return
+    }
     const lista  = sync?.lista ?? null
     const rows   = sync?.rows ?? null
     const ctList = sync?.contactos ?? null
@@ -1189,6 +1204,9 @@ export default function App() {
     // El módulo de envíos sigue leyendo CANAL_ACTIVO cuando quien llama no pasa
     // canal explícito (CONTACTOS, plantillas), así que se mantiene al día.
     setCanalActivo(canalDePhoneId(canalConv) || CANAL_POR_DEFECTO)
+    // El ◉ de GENERAL dice "el chat abierto es de este número": sin esto quedaba
+    // marcado el número de la última PESTAÑA visitada, no el del chat.
+    setCanalArmado(canalDePhoneId(canalConv) || CANAL_POR_DEFECTO)
     setActive(telefono)
     activeRef.current = telefono
     setShowSidebar(false)
@@ -1241,7 +1259,14 @@ export default function App() {
   useEffect(() => {
     if (typeof window === 'undefined') return
     const tel = new URLSearchParams(window.location.search).get('tel')
-    if (tel) pedidoRef.current = tel
+    if (tel) {
+      pedidoRef.current = tel
+      // Se consume UNA vez: si se queda en la URL, cada recarga de esa ventana
+      // (o el celular reviviendo la app) vuelve a saltar a ese chat.
+      const u = new URL(window.location.href)
+      u.searchParams.delete('tel')
+      window.history.replaceState(window.history.state, '', u.toString())
+    }
     if (!('serviceWorker' in navigator)) return
     const onMsg = (ev) => {
       if (ev.data?.tipo === 'abrir-chat' && ev.data.tel) pedidoRef.current = ev.data.tel
@@ -1257,6 +1282,18 @@ export default function App() {
     const t9 = String(pedido).replace(/\D/g, '').slice(-9)
     const conv = convs.find(c => String(c.telefono).replace(/\D/g, '').slice(-9) === t9)
     if (!conv) return          // aún no llegó en este ciclo: reintenta al siguiente
+    // En GENERAL NO se cambia de pestaña (misma regla que openConv): se abre la
+    // fila del número por el que llegó lo MÁS RECIENTE de ese cliente. En GENERAL
+    // hay una fila por cliente y número, cada una con su `phoneId`. Antes un aviso
+    // de un cliente de REPUBLIC sacaba al vendedor de la cola única, y como la
+    // pestaña se recuerda, la app quedaba arrancando en REPUBLIC.
+    if (lineaRef.current === CANAL_GENERAL) {
+      const filas = convs.filter(c => String(c.telefono).replace(/\D/g, '').slice(-9) === t9)
+      const fila = filas.reduce((x, y) => (parseDate(y.last?.timestamp) > parseDate(x.last?.timestamp) ? y : x), filas[0])
+      pedidoRef.current = null
+      openConv(fila.telefono, fila.phoneId || '')
+      return
+    }
     // Mismo motivo que en abrirChatDesdeContactos: el destino es el canal DE
     // ESTE CONTACTO, no `CANAL_POR_DEFECTO` a ciegas.
     const canalDestino = canalDePhoneId(phoneIdDe(conv.telefono)) || CANAL_POR_DEFECTO
@@ -2410,6 +2447,16 @@ export default function App() {
       {/* Va lo primero y fuera de todo layout: es fixed y tiene que verse aunque
           la pantalla esté en cualquier pestaña o con el cajón móvil abierto. */}
       <AvisoSesion />
+      {versionNueva && (
+        <button onClick={() => window.location.reload()} style={{
+          position:'fixed', top:8, left:'50%', transform:'translateX(-50%)', zIndex:9999,
+          background:'#25d366', color:'#06231a', border:'none', borderRadius:20,
+          padding:'8px 16px', fontWeight:700, fontSize:13, cursor:'pointer',
+          boxShadow:'0 4px 14px rgba(0,0,0,.4)', fontFamily:'inherit',
+        }}>
+          🔄 Hay una versión nueva del inbox · toca para recargar
+        </button>
+      )}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap');
         *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }

@@ -70,7 +70,7 @@ export async function GET(req) {
       contarPendientesTotalSupabase().catch(() => null),
     ])
     // `v` va en el cuerpo: de ahí lo toma el cliente para la próxima vuelta.
-    return NextResponse.json({ lista, rows, contactos, pendientes, pendientesTotal, v: etagActual }, {
+    return NextResponse.json({ lista, rows, contactos, pendientes, pendientesTotal, v: etagActual, build: process.env.VERCEL_GIT_COMMIT_SHA || '' }, {
       // Cache COMPARTIDO en el edge, corto (5s) para no agregar latencia visible al
       // vendedor: varias pestañas que pollean dentro de la misma ventana comparten
       // UNA ejecución de origen. stale-while-revalidate sirve al instante y revalida.
