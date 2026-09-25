@@ -567,7 +567,9 @@ export default function App() {
       else { load(); start() }
     }
     load()
-    start()
+    // Si la app se abrió ya oculta (pestaña de fondo, celular bloqueado), no se
+    // arranca el poll: antes corría igual hasta el primer cambio de visibilidad.
+    if (!document.hidden) start()
     document.addEventListener('visibilitychange', onVisibility)
     return () => { stop(); document.removeEventListener('visibilitychange', onVisibility) }
   }, [load, active])
