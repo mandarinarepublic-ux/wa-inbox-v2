@@ -414,7 +414,15 @@ export default function App() {
     const sync   = await fetchInboxSync(enGeneral)
     if (miTurno < syncAplicadoRef.current) return
     syncAplicadoRef.current = miTurno
-    if (hayVersionNueva()) setVersionNueva(true)
+    // Versión nueva: si no estás en medio de nada (sin chat abierto, sin borrador
+    // y sin envíos en vuelo) se recarga SOLA, sin preguntar. Si estás trabajando,
+    // queda un aviso chico en la esquina y no se interrumpe nada.
+    if (hayVersionNueva()) {
+      const libre = !activeRef.current && !String(taRef.current?.value || '').trim() &&
+        Object.keys(pendingRef.current).length === 0
+      if (libre) { window.location.reload(); return }
+      setVersionNueva(true)
+    }
     // ☠️ Respuesta ATRASADA: si durante el `await` el vendedor cambió de pestaña,
     // esta respuesta es de la pestaña anterior (GENERAL trae los dos números) y
     // pintarla MEZCLA chats hasta el siguiente ciclo. Se tira entera; la pestaña
@@ -2457,13 +2465,13 @@ export default function App() {
           la pantalla esté en cualquier pestaña o con el cajón móvil abierto. */}
       <AvisoSesion />
       {versionNueva && (
-        <button onClick={() => window.location.reload()} style={{
-          position:'fixed', top:8, left:'50%', transform:'translateX(-50%)', zIndex:9999,
-          background:'#25d366', color:'#06231a', border:'none', borderRadius:20,
-          padding:'8px 16px', fontWeight:700, fontSize:13, cursor:'pointer',
-          boxShadow:'0 4px 14px rgba(0,0,0,.4)', fontFamily:'inherit',
+        <button onClick={() => window.location.reload()} title="Hay una versión nueva del inbox. Se recarga sola cuando cierres el chat; o toca para recargar ya." style={{
+          position:'fixed', bottom:10, left:10, zIndex:9999,
+          background:'rgba(37,211,102,.14)', color:'#25d366', border:'1px solid rgba(37,211,102,.35)',
+          borderRadius:14, padding:'3px 10px', fontWeight:600, fontSize:11, cursor:'pointer',
+          fontFamily:'inherit',
         }}>
-          🔄 Hay una versión nueva del inbox · toca para recargar
+          🔄 versión nueva
         </button>
       )}
       <style>{`
