@@ -5,8 +5,8 @@
 // puede leerlo), pero la app sí lo tiene en ejecución: esta ruta es la forma de
 // preguntarle a la Graph API por el estado real de un número sin conocer el token.
 //
-// SOLO LECTURA. No registra, no suscribe, no toca nada. Es la hermana de la
-// misma ruta en ind-inbox-next, sin las acciones.
+// La lectura por defecto no toca nada. Las acciones que escriben (borrar-numero y
+// el registro en Cloud API) van aparte, cada una con su guarda.
 //
 // Seguridad: no está en lib/rutas-publicas.js, así que el candado exige sesión
 // del CRM. Sin cookie devuelve 401.
@@ -104,6 +104,41 @@ export async function GET(req) {
     return Response.json({ canal: canal.id, antes, borrado, despues })
   }
 
+  // ── Paso de REPUBLIC a Cloud API pura (25-sep-2026, autorizado por Rodrigo) ──
+  // La coexistencia no se pudo reconectar. Orden: en el celular se apaga la
+  // verificación en dos pasos y se ELIMINA la cuenta de WhatsApp Business; luego
+  //   ?accion=pedir-codigo&metodo=SMS|VOICE  → Meta manda el código al chip
+  //   ?accion=verificar-codigo&codigo=123456
+  //   ?accion=registrar&pin=<6 dígitos>      → el PIN pasa a ser la verificación
+  //                                            en dos pasos del número: GUARDARLO.
+  // Meta permite 10 `register` por número cada 72 h: no reintentar a ciegas.
+  // Cada paso relee el número después, para no fiarse del 200.
+  const accion = url.searchParams.get('accion') || ''
+  if (['pedir-codigo', 'verificar-codigo', 'registrar'].includes(accion)) {
+    const leer = () =>
+      graph(`/${canal.phoneId}?fields=id,display_phone_number,platform_type,status,is_on_biz_app,code_verification_status,throughput,health_status`)
+    const antes = await leer()
+    if (antes?.platform_type === 'CLOUD_API') {
+      return Response.json({ error: 'El número ya está en Cloud API, no hay nada que registrar', antes }, { status: 409 })
+    }
+    let resultado
+    if (accion === 'pedir-codigo') {
+      const metodo = url.searchParams.get('metodo') === 'VOICE' ? 'VOICE' : 'SMS'
+      resultado = await graph(`/${canal.phoneId}/request_code?code_method=${metodo}&language=es`, 'POST')
+    } else if (accion === 'verificar-codigo') {
+      const codigo = (url.searchParams.get('codigo') || '').replace(/\D/g, '')
+      if (codigo.length !== 6) return Response.json({ error: 'El código debe tener 6 dígitos' }, { status: 400 })
+      resultado = await graph(`/${canal.phoneId}/verify_code?code=${codigo}`, 'POST')
+    } else {
+      const pin = url.searchParams.get('pin') || ''
+      if (!/^\d{6}$/.test(pin)) return Response.json({ error: 'El PIN debe tener 6 dígitos' }, { status: 400 })
+      resultado = await graph(`/${canal.phoneId}/register?messaging_product=whatsapp&pin=${pin}`, 'POST')
+      // Sin la app suscrita a la WABA no llega ni un webhook, aunque el número quede sano.
+      resultado = { register: resultado, suscribir: await graph(`/${canal.wabaId}/subscribed_apps`, 'POST') }
+    }
+    return Response.json({ canal: canal.id, accion, antes, resultado, despues: await leer() })
+  }
+
   const [waba, apps, numero, plantillas] = await Promise.all([
     graph(`/${canal.wabaId}?fields=id,name,status,account_review_status,business_verification_status,ownership_type,currency`),
     graph(`/${canal.wabaId}/subscribed_apps`),
@@ -113,7 +148,7 @@ export async function GET(req) {
     graph(
       `/${canal.phoneId}?fields=id,display_phone_number,verified_name,quality_rating,` +
         `platform_type,status,is_on_biz_app,last_onboarded_time,name_status,` +
-        `code_verification_status,throughput,messaging_limit_tier,account_mode`
+        `code_verification_status,throughput,messaging_limit_tier,account_mode,health_status`
     ),
     graph(`/${canal.wabaId}/message_templates?fields=name,status,language&limit=50`),
   ])
