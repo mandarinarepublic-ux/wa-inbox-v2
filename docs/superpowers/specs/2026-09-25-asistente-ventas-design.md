@@ -1,6 +1,6 @@
 # Asistente de ventas dentro del inbox (MANDI) — diseño
 
-**Fecha:** 25-sep-2026 · **Repo:** `wa-inbox-next` (MANDI) · **Estado:** diseño, pendiente de revisión
+**Fecha:** 25-sep-2026 · **Repo:** `wa-inbox-next` (MANDI) · **Estado:** ARCHIVADO el 25-sep-2026. Rodrigo prefirió no pagar API: el "cerebro" es Claude Code en la terminal, con la skill `ventas-mandi` y `scripts/enviar-lote.mjs`.
 **Prototipo navegable:** https://claude.ai/artifact/3pPeLPY2Kpq95et9hdL71Y
 
 ## 1. Para qué
