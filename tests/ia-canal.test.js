@@ -4,7 +4,7 @@ import { iaActivaEnCanal, decidirIA } from '../lib/ia-canal.js'
 
 // Los phone_id por defecto de lib/canales.js (sin env en las pruebas).
 const MANDI    = '1024077200794372'
-const REPUBLIC = '118582961194601'
+const REPUBLIC = '1367772133078101'
 
 test('sin config, la IA esta activa en los dos canales', () => {
   assert.equal(iaActivaEnCanal(null, MANDI), true)

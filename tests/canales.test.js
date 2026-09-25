@@ -17,9 +17,12 @@ test('cada canal declara su WABA', () => {
   }
 })
 
-test('dos canales distintos no comparten WABA', () => {
-  const wabas = CANALES.map(c => String(c.wabaId))
-  assert.equal(new Set(wabas).size, wabas.length, 'hay canales apuntando a la misma WABA')
+// Desde el 25-sep-2026 MANDI y REPUBLIC comparten WABA (REPUBLIC dejó la
+// coexistencia y entró como Cloud API pura en la de MANDI). Lo que no pueden
+// compartir es el NÚMERO: el phone_id es lo que separa los canales.
+test('dos canales distintos no comparten número', () => {
+  const phones = CANALES.map(c => String(c.phoneId))
+  assert.equal(new Set(phones).size, phones.length, 'hay canales apuntando al mismo número')
 })
 
 test('wabaIdDePhoneId resuelve el número de MANDI', () => {
@@ -27,7 +30,7 @@ test('wabaIdDePhoneId resuelve el número de MANDI', () => {
 })
 
 test('wabaIdDePhoneId resuelve el número de REPUBLIC', () => {
-  assert.equal(wabaIdDePhoneId('118582961194601'), '110133805380815')
+  assert.equal(wabaIdDePhoneId('1367772133078101'), '1250794910496982')
 })
 
 test('wabaIdDePhoneId devuelve null si el número no es nuestro', () => {
