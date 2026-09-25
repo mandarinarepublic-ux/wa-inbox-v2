@@ -1,0 +1,11 @@
+#!/bin/sh
+# Pre-commit: pruebas + lint antes de cada commit (~16 s). Se activa una vez por
+# clon con:  git config core.hooksPath .githooks
+# Saltarlo (`--no-verify`) solo si el commit NO toca código (docs).
+echo "▶ npm test (pruebas + lint)…"
+npm test --silent >/tmp/precommit-test.log 2>&1 || {
+  tail -40 /tmp/precommit-test.log
+  echo "✖ Las pruebas o el lint fallaron: commit cancelado."
+  exit 1
+}
+echo "✔ pruebas y lint en verde"

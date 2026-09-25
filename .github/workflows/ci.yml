@@ -1,0 +1,20 @@
+# CI — la red que no depende de acordarse (auditoría 25-sep-2026).
+# Vercel publica igual cada push a main; esto no lo frena, pero si las pruebas
+# o el lint fallan, GitHub avisa por correo en ~1 minuto con el commit culpable.
+name: pruebas
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  pruebas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
