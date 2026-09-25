@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { hostPermitidoParaProxy, llevaToken } from '@/lib/fuente-media'
 
 // Proxy de medios de WhatsApp/Meta.
 // Las MediaURL de Meta (lookaside.fbsbx.com / graph.facebook.com) NO son públicas:
@@ -22,7 +23,15 @@ export async function GET(req) {
         headers: { Authorization: `Bearer ${META_TOKEN}` },
       })
       if (!metaRes.ok) {
-        return NextResponse.json({ error: 'media lookup failed', status: metaRes.status }, { status: 502 })
+        // Un 4xx de Meta es definitivo (media_id caducado o de un número borrado):
+        // 404 cacheable para que el navegador no lo vuelva a pedir en cada ciclo.
+        // 502 queda solo para fallas de Meta o de red, que sí vale reintentar.
+        const definitivo = metaRes.status >= 400 && metaRes.status < 500
+        console.warn(`[/api/media] lookup ${id} → ${metaRes.status}`)
+        return NextResponse.json(
+          { error: 'media no disponible', status: metaRes.status },
+          { status: definitivo ? 404 : 502, headers: definitivo ? { 'Cache-Control': 'public, max-age=86400' } : {} }
+        )
       }
       const meta = await metaRes.json()
       mediaUrl = meta.url
@@ -31,10 +40,20 @@ export async function GET(req) {
     if (!mediaUrl) {
       return NextResponse.json({ error: 'falta id o url' }, { status: 400 })
     }
+    // ☠️ Sin esta lista, `?url=https://cualquier-sitio` recibía el META_TOKEN en la
+    // cabecera (auditoría 25-sep). Y el token solo viaja a la API de Meta, no a su CDN.
+    if (!hostPermitidoParaProxy(mediaUrl)) {
+      return NextResponse.json({ error: 'host no permitido' }, { status: 400 })
+    }
 
-    const bin = await fetch(mediaUrl, { headers: { Authorization: `Bearer ${META_TOKEN}` } })
+    const bin = await fetch(mediaUrl, llevaToken(mediaUrl) ? { headers: { Authorization: `Bearer ${META_TOKEN}` } } : {})
     if (!bin.ok) {
-      return NextResponse.json({ error: 'download failed', status: bin.status }, { status: 502 })
+      const definitivo = bin.status >= 400 && bin.status < 500
+      console.warn(`[/api/media] descarga → ${bin.status}`)
+      return NextResponse.json(
+        { error: 'media no disponible', status: bin.status },
+        { status: definitivo ? 404 : 502, headers: definitivo ? { 'Cache-Control': 'public, max-age=86400' } : {} }
+      )
     }
 
     const contentType = bin.headers.get('content-type') || 'application/octet-stream'

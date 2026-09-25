@@ -4,6 +4,7 @@ import { colorFor, initialsFor, fmtTime, parseDate, hashWamid } from '@/lib/util
 import { partirEnlaces } from '@/lib/enlaces'
 import { resumenDeLista } from '@/lib/resumen-lista'
 import { puedeReenviar } from '@/lib/reenvio'
+import { fuenteDeMedia } from '@/lib/fuente-media'
 
 // ── SPINNER ──────────────────────────────────────────────────────
 export function Spinner({ size = 24 }) {
@@ -419,20 +420,24 @@ function MediaContent({ tipo, mediaUrl, mediaId }) {
   const t   = String(tipo || '').toLowerCase()
   const has = !!(url || mediaId) // entrante directo de Meta trae solo mediaId (sin url)
 
-  // Fuente: con MediaID (entrante de Meta) o URL de Meta → proxy /api/media (usa el
-  // token server-side). Drive → vista. Cualquier otra URL pública → directa.
-  const isMeta = /lookaside\.fbsbx\.com|graph\.facebook\.com/i.test(url)
-  const src = mediaId
-    ? `/api/media?id=${encodeURIComponent(mediaId)}`
-    : isMeta
-      ? `/api/media?url=${encodeURIComponent(url)}`
-      : (url.includes('drive.google.com/uc') ? url.replace('export=download', 'export=view') : url)
+  // Fuente: la copia archivada PRIMERO, el media_id de Meta solo si no hay copia
+  // (lib/fuente-media.js explica los 266 errores que esto quitó).
+  const src = fuenteDeMedia({ mediaUrl: url, mediaId })
+  const [fallo, setFallo] = useState(false)
 
   // Acepta tipos en inglés (Make/legacy) y español (webhook directo de Meta).
   const isImage    = ['image', 'imagen', 'sticker'].includes(t) || !!url.match(/\.(jpg|jpeg|png|webp|gif)(\?|$)/i)
   const isAudio    = t === 'audio' || !!url.match(/\.(ogg|mp3|aac|m4a|opus)(\?|$)/i)
   const isVideo    = t === 'video' || !!url.match(/\.(mp4|mov|webm)(\?|$)/i)
   const isDocument = ['document', 'documento'].includes(t) || !!url.match(/\.(pdf|doc|docx|xls|xlsx)(\?|$)/i)
+
+  // Una foto que ya no existe en ningún lado se DICE, no se esconde: una burbuja
+  // vacía parece un mensaje sin contenido y hace dudar de si el cliente mandó algo.
+  if (has && isImage && fallo) return (
+    <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 6, fontStyle: 'italic' }}>
+      📷 Foto no disponible (Meta ya no la guarda)
+    </div>
+  )
 
   if (has && isImage) return (
     <>
@@ -450,7 +455,7 @@ function MediaContent({ tipo, mediaUrl, mediaId }) {
           border: '1px solid rgba(255,255,255,.06)',
           cursor: 'zoom-in',
         }}
-        onError={e => { e.currentTarget.style.display = 'none' }}
+        onError={() => setFallo(true)}
       />
       {verFoto && <VisorFoto src={src} onCerrar={() => setVerFoto(false)} />}
     </>
@@ -640,9 +645,7 @@ function QuotedMessage({ contextoId, allMsgs, esReaccion = false }) {
       {isImage && cited.mediaUrl ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <img
-            src={/lookaside\.fbsbx\.com|graph\.facebook\.com/i.test(cited.mediaUrl)
-              ? (cited.mediaId ? `/api/media?id=${encodeURIComponent(cited.mediaId)}` : `/api/media?url=${encodeURIComponent(cited.mediaUrl)}`)
-              : cited.mediaUrl}
+            src={fuenteDeMedia({ mediaUrl: cited.mediaUrl, mediaId: cited.mediaId })}
             alt="img citada"
             style={{ width: 36, height: 36, borderRadius: 5, objectFit: 'cover', flexShrink: 0 }}
             onError={e => { e.currentTarget.style.display = 'none' }}
