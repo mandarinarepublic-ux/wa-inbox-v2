@@ -160,10 +160,39 @@ export async function GET(req) {
     return Response.json({ canal: canal.id, businessId, conectado_a_la_waba: conectados?.data || conectados, propios: propios?.data || propios, de_clientes: clientes?.data || clientes })
   }
 
+  // ?accion=wabas-catalogos → qué catálogo tiene conectado CADA WABA del negocio.
+  // Meta deja un catálogo en una sola WABA: sirve para encontrar dónde está. Lectura.
+  if (accion === 'wabas-catalogos') {
+    const dueno = await graph(`/${canal.wabaId}?fields=owner_business_info`)
+    const businessId = dueno?.owner_business_info?.id
+    const campos = 'id,name,product_catalogs{id,name},phone_numbers{id,display_phone_number}'
+    const [propias, clientes] = await Promise.all([
+      graph(`/${businessId}/owned_whatsapp_business_accounts?fields=${campos}&limit=50`),
+      graph(`/${businessId}/client_whatsapp_business_accounts?fields=${campos}&limit=50`),
+    ])
+    return Response.json({ businessId, propias: propias?.data || propias, clientes: clientes?.data || clientes })
+  }
+
   // ?accion=conectar-catalogo&catalogo=<id> → cambia el catálogo de la WABA.
   // ⚠️ Meta permite UNO por WABA y la WABA es COMPARTIDA (MANDI + REPUBLIC):
   // cambiarlo acá lo cambia para los dos números. Solo acepta catálogos propios
   // del negocio; desconecta el anterior y relee para no fiarse del 200.
+  // ?accion=soltar-catalogo&waba=<id>&catalogo=<id> → desvincula un catálogo de
+  // OTRA WABA del mismo negocio (para poder moverlo). Solo WABAs propias.
+  if (accion === 'soltar-catalogo') {
+    const wabaOtra = url.searchParams.get('waba') || ''
+    const cat = url.searchParams.get('catalogo') || ''
+    const dueno = await graph(`/${canal.wabaId}?fields=owner_business_info`)
+    const businessId = dueno?.owner_business_info?.id
+    const propias = await graph(`/${businessId}/owned_whatsapp_business_accounts?fields=id&limit=50`)
+    if (!(propias?.data || []).some((w) => w.id === wabaOtra)) {
+      return Response.json({ error: 'Esa WABA no es propia del negocio', wabaOtra }, { status: 400 })
+    }
+    const soltar = await graph(`/${wabaOtra}/product_catalogs?catalog_id=${cat}`, 'DELETE')
+    const despues = await graph(`/${wabaOtra}/product_catalogs?fields=id,name`)
+    return Response.json({ wabaOtra, soltar, despues: despues?.data || despues })
+  }
+
   if (accion === 'conectar-catalogo') {
     const nuevo = url.searchParams.get('catalogo') || ''
     const dueno = await graph(`/${canal.wabaId}?fields=owner_business_info`)
