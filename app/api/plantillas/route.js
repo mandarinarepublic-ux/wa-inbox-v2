@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getWabaId, GRAPH } from '@/lib/whatsapp'
 import { wabaIdDePhoneId } from '@/lib/canales'
+import { armarPlantilla } from '@/lib/plantilla-nueva'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -34,6 +35,7 @@ function simplificar(t) {
     language: t.language,
     category: t.category,
     status: t.status,
+    rejectedReason: t.rejected_reason && t.rejected_reason !== 'NONE' ? t.rejected_reason : '',
     header: header ? {
       format: headerFormat,                 // TEXT | IMAGE | VIDEO | DOCUMENT
       text: headerFormat === 'TEXT' ? (header.text || '') : '',
@@ -58,16 +60,19 @@ export async function GET(req) {
   if (!wabaId) return NextResponse.json({ ok: false, needsEnv: 'META_WABA_ID', wabaError: wabaErr, templates: [] })
   try {
     const url = `${GRAPH}/${wabaId}/message_templates` +
-      `?fields=name,status,category,language,components&limit=200`
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${META_TOKEN}` } })
+      `?fields=name,status,category,language,components,rejected_reason&limit=200`
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${META_TOKEN}` }, cache: 'no-store' })
     const data = await res.json().catch(() => ({}))
     if (!res.ok) {
       const msg = data?.error?.message || `HTTP ${res.status}`
       console.error('[/api/plantillas] Meta:', msg)
       return NextResponse.json({ ok: false, error: msg, templates: [] }, { status: 502 })
     }
+    // `?todas=1` → también las pendientes y rechazadas (pantalla /admin/plantillas);
+    // el selector del chat sigue viendo solo las aprobadas, las únicas que se envían.
+    const todas = req.nextUrl.searchParams.get('todas') === '1'
     const templates = (data?.data || [])
-      .filter((t) => String(t.status).toUpperCase() === 'APPROVED')
+      .filter((t) => todas || String(t.status).toUpperCase() === 'APPROVED')
       .map(simplificar)
     // `wabaId` va de vuelta a propósito: es la forma de ver de un vistazo si la
     // lista que estás mirando es la del canal que tienes abierto.
@@ -75,5 +80,42 @@ export async function GET(req) {
   } catch (err) {
     console.error('[/api/plantillas]', err.message)
     return NextResponse.json({ ok: false, error: err.message, templates: [] }, { status: 500 })
+  }
+}
+
+// POST { canal: phoneId, nombre, categoria, idioma, cuerpo, ejemplos[], pie }
+// → crea la plantilla en la WABA DE ESE CANAL y Meta la deja PENDIENTE de revisión.
+//
+// ☠️ Acá NO hay caída a la WABA del token (como en el GET): una plantilla creada
+// en la WABA equivocada no se ve en el canal que la necesita, y no se puede mover.
+// Canal desconocido = error.
+export async function POST(req) {
+  if (!META_TOKEN) return NextResponse.json({ ok: false, error: 'META_TOKEN no está configurado' }, { status: 500 })
+  const datos = await req.json().catch(() => ({}))
+  const wabaId = wabaIdDePhoneId(datos.canal || '')
+  if (!wabaId) return NextResponse.json({ ok: false, error: `Canal desconocido: ${datos.canal || '(vacío)'}` }, { status: 400 })
+
+  const armada = armarPlantilla(datos)
+  if (!armada.ok) return NextResponse.json({ ok: false, errores: armada.errores }, { status: 400 })
+
+  try {
+    const res = await fetch(`${GRAPH}/${wabaId}/message_templates`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${META_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(armada.payload),
+      cache: 'no-store',
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      const e = data?.error || {}
+      const msg = e.error_user_msg || e.message || `HTTP ${res.status}`
+      console.error('[/api/plantillas POST] Meta:', msg, e.code, e.error_subcode)
+      return NextResponse.json({ ok: false, error: msg, code: e.code, subcode: e.error_subcode }, { status: 502 })
+    }
+    // Meta devuelve { id, status: 'PENDING' | 'APPROVED' | 'REJECTED', category }.
+    return NextResponse.json({ ok: true, wabaId, nombre: armada.payload.name, ...data })
+  } catch (err) {
+    console.error('[/api/plantillas POST]', err.message)
+    return NextResponse.json({ ok: false, error: err.message }, { status: 500 })
   }
 }
