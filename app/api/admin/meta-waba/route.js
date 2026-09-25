@@ -145,6 +145,21 @@ export async function GET(req) {
   // y el carrito (`whatsapp_commerce_settings`).
   //   ?accion=comercio                → lee catálogos de la WABA y ajustes del número
   //   ?accion=comercio-activar        → prende catálogo visible + carrito en el número
+  // ?accion=catalogos → TODOS los catálogos del negocio (propios y de clientes),
+  // para elegir cuál conectar a la WABA. Solo lectura.
+  if (accion === 'catalogos') {
+    const dueno = await graph(`/${canal.wabaId}?fields=owner_business_info`)
+    const businessId = dueno?.owner_business_info?.id
+    if (!businessId) return Response.json({ error: 'No se pudo leer el negocio dueño', dueno }, { status: 500 })
+    const campos = 'id,name,product_count,vertical,business{id,name}'
+    const [propios, clientes, conectados] = await Promise.all([
+      graph(`/${businessId}/owned_product_catalogs?fields=${campos}&limit=50`),
+      graph(`/${businessId}/client_product_catalogs?fields=${campos}&limit=50`),
+      graph(`/${canal.wabaId}/product_catalogs?fields=id,name`),
+    ])
+    return Response.json({ canal: canal.id, businessId, conectado_a_la_waba: conectados?.data || conectados, propios: propios?.data || propios, de_clientes: clientes?.data || clientes })
+  }
+
   if (accion === 'comercio' || accion === 'comercio-activar') {
     const leerComercio = () => graph(`/${canal.phoneId}/whatsapp_commerce_settings`)
     const catalogos = await graph(`/${canal.wabaId}/product_catalogs?fields=id,name,product_count`)
