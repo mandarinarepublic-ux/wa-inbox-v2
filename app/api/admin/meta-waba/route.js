@@ -160,6 +160,28 @@ export async function GET(req) {
     return Response.json({ canal: canal.id, businessId, conectado_a_la_waba: conectados?.data || conectados, propios: propios?.data || propios, de_clientes: clientes?.data || clientes })
   }
 
+  // ?accion=conectar-catalogo&catalogo=<id> → cambia el catálogo de la WABA.
+  // ⚠️ Meta permite UNO por WABA y la WABA es COMPARTIDA (MANDI + REPUBLIC):
+  // cambiarlo acá lo cambia para los dos números. Solo acepta catálogos propios
+  // del negocio; desconecta el anterior y relee para no fiarse del 200.
+  if (accion === 'conectar-catalogo') {
+    const nuevo = url.searchParams.get('catalogo') || ''
+    const dueno = await graph(`/${canal.wabaId}?fields=owner_business_info`)
+    const businessId = dueno?.owner_business_info?.id
+    const propios = businessId ? await graph(`/${businessId}/owned_product_catalogs?fields=id,name&limit=50`) : null
+    if (!(propios?.data || []).some((c) => c.id === nuevo)) {
+      return Response.json({ error: 'Ese catálogo no es del negocio', nuevo, propios: propios?.data || propios }, { status: 400 })
+    }
+    const antes = await graph(`/${canal.wabaId}/product_catalogs?fields=id,name`)
+    const desconectados = []
+    for (const c of antes?.data || []) {
+      if (c.id !== nuevo) desconectados.push(await graph(`/${canal.wabaId}/product_catalogs?catalog_id=${c.id}`, 'DELETE'))
+    }
+    const conectar = await graph(`/${canal.wabaId}/product_catalogs?catalog_id=${nuevo}`, 'POST')
+    const despues = await graph(`/${canal.wabaId}/product_catalogs?fields=id,name,product_count`)
+    return Response.json({ canal: canal.id, antes: antes?.data || antes, desconectados, conectar, despues: despues?.data || despues })
+  }
+
   if (accion === 'comercio' || accion === 'comercio-activar') {
     const leerComercio = () => graph(`/${canal.phoneId}/whatsapp_commerce_settings`)
     const catalogos = await graph(`/${canal.wabaId}/product_catalogs?fields=id,name,product_count`)
