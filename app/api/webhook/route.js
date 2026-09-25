@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { waitUntil } from '@vercel/functions'
 import { registrarContactoEntrante, getContactos, updateEstado, updateModoIA, marcarPush, marcarReceta, registrarAnuncioVisto, reclamarAvisoAnuncio, liberarAvisoAnuncio, updateEtapa, updateDeuda } from '@/lib/contactos'
+import { identificadorEntrante, perfilesDeContactos } from '@/lib/cliente-sin-telefono'
 import { decidirReceta, piezasDeReceta, textoAvisoAnuncioNuevo, esc } from '@/lib/recetas'
 import { elegirFlujo, caminoLineal, decidirEntranteEnFlujo, elegirFlujoPorBoton, tituloBotonTocado, nodoDisparador } from '@/lib/flujo'
 import { correrTanda } from '@/lib/flujo-motor'
@@ -533,7 +534,7 @@ async function procesar(nuevos, origin) {
       archivos.push(archivarMedia({ mediaId: m.mediaId, wamid: m.wamid }))
     }
 
-    try { await registrarContactoEntrante(m.telefono, m.nombre, m.telefono) }
+    try { await registrarContactoEntrante(m.telefono, m.nombre, m.telefono, m.username) }
     catch (e) { console.error('[/api/webhook] contacto:', e.message) }
 
     // ── Señales a Meta (Conversions API) ─────────────────────────────────────
@@ -788,8 +789,9 @@ export async function POST(req) {
         // y saber por dónde responder. Meta ya lo manda y se tiraba.
         const phoneId  = value?.metadata?.phone_number_id || ''
         const contacts = value?.contacts || []
-        const nombreDe = {}
-        for (const c of contacts) nombreDe[c.wa_id] = c.profile?.name || ''
+        // Por teléfono (wa_id) o, si el cliente escribe con nombre de usuario y sin
+        // número, por su BSUID (user_id). Ver lib/cliente-sin-telefono.js.
+        const perfiles = perfilesDeContactos(contacts)
 
         // Estados de entrega (✓✓) de mensajes que ENVIAMOS.
         for (const st of value?.statuses || []) {
@@ -798,12 +800,13 @@ export async function POST(req) {
 
         for (const msg of value?.messages || []) {
           if (!marcarNuevo(msg.id)) continue // reintento rápido de Meta → ignorar
-          const telefono = String(msg.from || '')
+          const telefono = identificadorEntrante(msg)   // teléfono, o BSUID si no dio número
           const { tipo, contenido, mediaId, contextoId, referral } = extraer(msg)
           nuevos.push({
             wamid: msg.id || '',
             telefono,
-            nombre: nombreDe[telefono] || '',
+            nombre: perfiles[telefono]?.nombre || '',
+            username: perfiles[telefono]?.username || '',
             tipo, contenido, mediaId, contextoId, referral, phoneId,
             raw: msg, // respaldo: objeto crudo del mensaje tal cual de Meta
             fecha: msg.timestamp ? new Date(Number(msg.timestamp) * 1000).toISOString() : new Date().toISOString(),

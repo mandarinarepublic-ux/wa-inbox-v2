@@ -5,6 +5,7 @@ import { partirEnlaces } from '@/lib/enlaces'
 import { resumenDeLista } from '@/lib/resumen-lista'
 import { puedeReenviar } from '@/lib/reenvio'
 import { fuenteDeMedia } from '@/lib/fuente-media'
+import { etiquetaTelefono } from '@/lib/cliente-sin-telefono'
 
 // ── SPINNER ──────────────────────────────────────────────────────
 export function Spinner({ size = 24 }) {
@@ -204,7 +205,7 @@ export function ContactRow({ conv, isActive, onClick, search = '', estado, modoI
             // Búsqueda por MENSAJE: mostrar el fragmento que coincide + bandeja
             <div style={{ marginTop: 4 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 11, color: '#8899aa', fontFamily: 'monospace' }}>+{conv.telefono}</span>
+                <span style={{ fontSize: 11, color: '#8899aa', fontFamily: 'monospace' }}>{etiquetaTelefono(conv.telefono, conv.username)}</span>
                 {info && (
                   <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: '.04em', color: info.color, background: `${info.color}1e`, border: `1px solid ${info.color}44`, borderRadius: 6, padding: '1px 6px', flexShrink: 0 }}>
                     {info.label}

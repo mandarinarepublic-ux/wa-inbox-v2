@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { destinoMeta, esBsuid } from '@/lib/cliente-sin-telefono'
 import { guardarMensajeSupabase } from '@/lib/inbox-supabase'
 import { waitUntil } from '@vercel/functions'
 import { limpiarPush, revisarPromesa, marcarRespuestaHumana } from '@/lib/contactos'
@@ -37,7 +38,9 @@ const soloDigitos = (s) => String(s || '').replace(/\D/g, '')
 
 // Traduce el body del cliente → { payload Graph, tipo, contenido, mediaUrl, mediaId }
 function construir(body) {
-  const to = soloDigitos(body.Telefono)
+  // A quién: `to` con teléfono (el camino de siempre) o `recipient` con BSUID
+  // (cliente con nombre de usuario, sin número). lib/cliente-sin-telefono.js.
+  const dest = destinoMeta(body.Telefono)
 
   // Plantilla (HSM) — único formato permitido FUERA de la ventana de 24h.
   // El cliente manda: TemplateName, TemplateLang, y (según la plantilla) los
@@ -66,7 +69,7 @@ function construir(body) {
       mediaUrl: '', mediaId: '',
       payload: {
         messaging_product: 'whatsapp',
-        to,
+        ...dest,
         type: 'template',
         template: { name, language: { code }, ...(components.length ? { components } : {}) },
       },
@@ -87,7 +90,7 @@ function construir(body) {
       mediaUrl: '', mediaId: '',
       payload: {
         messaging_product: 'whatsapp',
-        to,
+        ...dest,
         type: 'interactive',
         interactive: {
           type: 'button',
@@ -105,7 +108,7 @@ function construir(body) {
       contenido: '', mediaUrl: '', mediaId: body.VideoMediaId,
       payload: {
         messaging_product: 'whatsapp',
-        to,
+        ...dest,
         type: 'video',
         video: { id: body.VideoMediaId },
       },
@@ -121,7 +124,7 @@ function construir(body) {
       contenido: body.Caption || '', mediaUrl: body.VideoURL, mediaId: '',
       payload: {
         messaging_product: 'whatsapp',
-        to,
+        ...dest,
         type: 'video',
         video: body.Caption ? { link: body.VideoURL, caption: body.Caption } : { link: body.VideoURL },
       },
@@ -147,7 +150,7 @@ function construir(body) {
       contenido: '', mediaUrl: body.AudioURL, mediaId: '',
       payload: {
         messaging_product: 'whatsapp',
-        to,
+        ...dest,
         type: 'audio',
         audio: { link: body.AudioURL },
       },
@@ -173,7 +176,7 @@ function construir(body) {
       mediaUrl: body.DocURL, mediaId: '',
       payload: {
         messaging_product: 'whatsapp',
-        to,
+        ...dest,
         type: 'document',
         document: {
           link: body.DocURL,
@@ -191,7 +194,7 @@ function construir(body) {
       contenido: '', mediaUrl: body.AudioURL || '', mediaId: body.AudioMediaId,
       payload: {
         messaging_product: 'whatsapp',
-        to,
+        ...dest,
         type: 'audio',
         audio: { id: body.AudioMediaId },
       },
@@ -207,7 +210,7 @@ function construir(body) {
       mediaId: body.ImagenMediaId,
       payload: {
         messaging_product: 'whatsapp',
-        to,
+        ...dest,
         type: 'image',
         image: body.Caption
           ? { id: body.ImagenMediaId, caption: body.Caption }
@@ -223,7 +226,7 @@ function construir(body) {
       contenido: body.Caption || '', mediaUrl: body.ImagenURL, mediaId: '',
       payload: {
         messaging_product: 'whatsapp',
-        to,
+        ...dest,
         type: 'image',
         image: body.Caption ? { link: body.ImagenURL, caption: body.Caption } : { link: body.ImagenURL },
       },
@@ -237,7 +240,7 @@ function construir(body) {
     mediaUrl: '', mediaId: '',
     payload: {
       messaging_product: 'whatsapp',
-      to,
+      ...dest,
       type: 'text',
       text: { body: body.Mensaje || '', preview_url: true },
     },
@@ -403,7 +406,8 @@ export async function POST(req) {
 
     // Registrar en MENSAJES (A=ID B=Telefono C=Nombre D=Tipo E=Contenido F=MediaURL
     //  G=Fecha H=Direccion I=MediaID J=RespuestaIA K=FotoIA L=ContextoID M=Botones)
-    const telSal = soloDigitos(body.Telefono)
+    // Con BSUID se guarda el BSUID tal cual (es la clave de su conversación).
+    const telSal = esBsuid(body.Telefono) ? String(body.Telefono).trim() : soloDigitos(body.Telefono)
     const fechaSal = new Date().toISOString()
     // Botones (interactivos) serializados para la columna M / campo Supabase.
     const botonesStr = botones && botones.length ? JSON.stringify(botones) : ''
