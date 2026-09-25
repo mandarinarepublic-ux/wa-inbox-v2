@@ -139,6 +139,23 @@ export async function GET(req) {
     return Response.json({ canal: canal.id, accion, antes, resultado, despues: await leer() })
   }
 
+  // ── Catálogo de WhatsApp (25-sep-2026) ──
+  // El catálogo se conecta a la WABA, no al número: REPUBLIC, al vivir en la WABA
+  // de MANDI, hereda el mismo. Lo que es POR NÚMERO es si se muestra el catálogo
+  // y el carrito (`whatsapp_commerce_settings`).
+  //   ?accion=comercio                → lee catálogos de la WABA y ajustes del número
+  //   ?accion=comercio-activar        → prende catálogo visible + carrito en el número
+  if (accion === 'comercio' || accion === 'comercio-activar') {
+    const leerComercio = () => graph(`/${canal.phoneId}/whatsapp_commerce_settings`)
+    const catalogos = await graph(`/${canal.wabaId}/product_catalogs?fields=id,name,product_count`)
+    const antes = await leerComercio()
+    let resultado = null
+    if (accion === 'comercio-activar') {
+      resultado = await graph(`/${canal.phoneId}/whatsapp_commerce_settings?is_catalog_visible=true&is_cart_enabled=true`, 'POST')
+    }
+    return Response.json({ canal: canal.id, catalogos: catalogos?.data || catalogos, antes, resultado, despues: resultado ? await leerComercio() : undefined })
+  }
+
   const [waba, apps, numero, plantillas] = await Promise.all([
     graph(`/${canal.wabaId}?fields=id,name,status,account_review_status,business_verification_status,ownership_type,currency`),
     graph(`/${canal.wabaId}/subscribed_apps`),
