@@ -1112,15 +1112,14 @@ export default function App() {
     guardadoRef.current = g
   }
 
-  // Y el efecto de guardar SALTA su primera corrida: si no, escribiría el valor
-  // por defecto encima de lo guardado cuando no hay nada que restaurar.
-  const yaGuardeUnaVez = useRef(false)
-  useEffect(() => {
-    if (!yaGuardeUnaVez.current) { yaGuardeUnaVez.current = true; return }
-    if (!LINEAS_RECORDABLES.includes(linea)) return
-    try { localStorage.setItem(LINEA_KEY, linea) } catch { /* modo privado */ }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [linea])
+  // ☠️ Se recuerda SOLO lo que el vendedor ELIGIÓ con un clic en la pestaña.
+  // Antes un efecto guardaba CUALQUIER cambio de `linea`, también los saltos
+  // automáticos (aviso push, CONTACTOS): un solo aviso de un cliente de
+  // REPUBLIC dejaba la app arrancando en REPUBLIC en cada recarga (25-sep).
+  const recordarLinea = (id) => {
+    if (!LINEAS_RECORDABLES.includes(id)) return
+    try { localStorage.setItem(LINEA_KEY, id) } catch { /* modo privado */ }
+  }
 
   // ☠️ La restauración pasa por `cambiarLinea`, NUNCA por `setLinea` a mano.
   // Esa función es la que mueve el canal del módulo de envíos y la que trata a
@@ -2586,7 +2585,7 @@ export default function App() {
             { id:'AUTO',     label:'AUTOS',    icon:'⚙️', color:'#f59e0b', sub:'Reglas' },
             { id:'FLUJOS',   label:'FLUJOS',   icon:'🧭', color:'#a78bfa', sub:'Lienzo' },
           ].map(({ id, label, icon, color, sub, badge = 0, title, armado = false }) => (
-            <button key={id} onClick={() => cambiarLinea(id)} title={title || label} style={{
+            <button key={id} onClick={() => { if (cambiarLinea(id)) recordarLinea(id) }} title={title || label} style={{
               padding:'4px 16px', border:'none', cursor:'pointer', flexShrink:0, whiteSpace:'nowrap',
               background: linea===id ? `${color}15` : 'transparent',
               // Pestaña activa = línea sólida (dónde estás parado). Canal armado
