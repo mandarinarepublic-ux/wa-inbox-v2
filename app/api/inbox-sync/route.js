@@ -35,7 +35,9 @@ export async function GET(req) {
     const etagActual = etagDe(await versionInboxSupabase())
     const etagCliente = new URL(req.url).searchParams.get('v') || req.headers.get('if-none-match')
     if (sinCambios(etagCliente, etagActual)) {
-      return new Response(null, { status: 304, headers: { ETag: etagActual, 'Cache-Control': 'no-store' } })
+      // El commit va también en el 304: con la bandeja quieta casi todo es 304, y sin
+      // esto una pestaña con código viejo nunca se enteraba de que había versión nueva.
+      return new Response(null, { status: 304, headers: { ETag: etagActual, 'Cache-Control': 'no-store', 'X-Build': process.env.VERCEL_GIT_COMMIT_SHA || '' } })
     }
 
     const [lista, rows, contactos, pendientes, pendientesTotal] = await Promise.all([

@@ -11,6 +11,7 @@ import { CANALES, CANAL_GENERAL, CANAL_POR_DEFECTO, colorDeCanal, canalDePhoneId
 import { ETAPAS, chipsDeChat, alertaVentanaCierra, necesitaConfirmarAtendido } from '@/lib/gestion'
 import { FILTRO_INICIAL, prepararVista, alternar, pasaFiltro, conteos } from '@/lib/filtro-chats'
 import { sumarOverride, aplicarOverrides } from '@/lib/overrides'
+import { agregarOptimista, claveOptimista, reconciliarPendientes } from '@/lib/optimista'
 import { etiquetaPedido, etapaVigente, tail9 } from '@/lib/etiqueta-crm'
 import FiltrosLista from '@/components/FiltrosLista'
 import { hilosDelCanal } from '@/lib/hilos'
@@ -242,6 +243,8 @@ export default function App() {
   // no llegó del servidor (ver el badge de GENERAL más abajo).
   const [pendientesTotal, setPendientesTotal] = useState(null)
   const [versionNueva, setVersionNueva] = useState(false)
+  const syncSeqRef = useRef(0)       // última petición de sync que SALIÓ
+  const syncAplicadoRef = useRef(0)  // última que se APLICÓ (ver load)
   // Las dos pestañas de número Y la de GENERAL comparten la vista de chat de
   // abajo: sin CANAL_GENERAL acá, la pestaña 📥 GENERAL se ve en blanco porque
   // ninguna de las otras vistas (SOCIAL/CONTACTOS/AUTO) se enciende para ella.
@@ -405,7 +408,12 @@ export default function App() {
     // UN request por ciclo (antes 3: lista+mensajes+contactos → /api/inbox-sync).
     // null (error) → se conservan los datos previos, no parpadea a blanco.
     const enGeneral = lineaRef.current === CANAL_GENERAL
+    // Varios disparadores piden a la vez (poll, push, después de enviar, refresco):
+    // una respuesta que sale ANTES y llega DESPUÉS no puede pisar una más nueva.
+    const miTurno = ++syncSeqRef.current
     const sync   = await fetchInboxSync(enGeneral)
+    if (miTurno < syncAplicadoRef.current) return
+    syncAplicadoRef.current = miTurno
     if (hayVersionNueva()) setVersionNueva(true)
     // ☠️ Respuesta ATRASADA: si durante el `await` el vendedor cambió de pestaña,
     // esta respuesta es de la pestaña anterior (GENERAL trae los dos números) y
@@ -480,24 +488,8 @@ export default function App() {
       const convsData = buildConvs([...(rows || []), ...hilos, ...(lista || [])], enGeneral)
       // Conservar los mensajes optimistas que Make aún no registró en la hoja, para
       // que no "desaparezcan" entre el envío y el logueo (sensación de "no se envió").
-      const pend = pendingRef.current
-      Object.keys(pend).forEach(tel => {
-        const conv = convsData.find(c => c.telefono === tel)
-        const enHoja = (p) => (conv?.msgs || []).some(
-          m => m.direccion === 'SALIENTE' && String(m.mensaje).trim() === String(p.mensaje).trim()
-        )
-        pend[tel] = pend[tel].filter(p => {
-          const ts = Number(String(p.id).replace('tmp_', '')) || 0
-          return !enHoja(p) && (Date.now() - ts < 90000) // dropear cuando se confirma o tras 90s
-        })
-        if (!pend[tel].length) { delete pend[tel]; return }
-        if (conv) {
-          conv.msgs = [...conv.msgs, ...pend[tel]]
-          conv.last = pend[tel][pend[tel].length - 1]
-        } else {
-          convsData.unshift({ telefono: tel, nombre: pend[tel][0].nombre, msgs: [...pend[tel]], last: pend[tel][pend[tel].length - 1], unread: 0 })
-        }
-      })
+      // Por (teléfono, número): ver lib/optimista.js.
+      reconciliarPendientes(convsData, pendingRef.current)
       // Respetar los cambios de estado recién hechos, IGUAL que se hace abajo con
       // los contactos. Sin esto: marcas ATENDIDO, la fila se apaga, y al siguiente
       // poll (8 s) reaparece pendiente por unos segundos — porque la respuesta
@@ -530,7 +522,9 @@ export default function App() {
       // Igual para etapa/📌/🤫/tipo: que el poll no pise un cambio recién hecho.
       setContacts(aplicarOverrides(ctMap, localCamposRef.current, now))
     }
-    setLastSync(new Date())
+    // Solo si el servidor contestó (datos o 304). Con `null` (error) la lista se
+    // queda congelada, y marcar la hora de AHORA decía "al día" cuando no lo estaba.
+    if (sync) setLastSync(new Date())
     setLoading(false)
   }, [])
 
@@ -1605,14 +1599,18 @@ export default function App() {
     activeCanalRef.current || getCanalActivo() || phoneIdDeCanal(CANAL_POR_DEFECTO)
 
   // ── Cambiar estado de BANDEJA (Eje 1) ─────────────────────────
-  const changeStatus = async (telefono, status) => {
+  // `canalCongelado`: el número por el que salió el envío, congelado al ENCOLAR.
+  // ☠️ Sin él se leía `activeCanalRef` DESPUÉS del `await` del envío: mandabas en
+  // GENERAL, abrías otro chat antes de que terminara, y el ATENDIDO caía en la
+  // fila del OTRO número de ese cliente (auditoría 25-sep).
+  const changeStatus = async (telefono, status, canalCongelado = '') => {
     // Clic en la misma bandeja = sin efecto (también evita el doble-clic sin bloquear
     // un clic legítimo a OTRA bandeja, que antes se tragaba un guard de 3s).
     // El canal de ESTA conversación: el del chat abierto, no el de la pestaña.
     // Es lo que decide CUÁL de las dos conversaciones del cliente se marca — sin
     // esto, darle ATENDIDO por REPUBLIC apagaba también la de MANDI, donde quizá
     // todavía le debes una respuesta.
-    const canalFila = activeCanalRef.current || phoneIdDeCanal(linea) || getCanalActivo()
+    const canalFila = canalCongelado || activeCanalRef.current || phoneIdDeCanal(linea) || getCanalActivo()
     const convFila = convs.find(c => c.telefono === telefono && (!canalFila || !c.phoneId || c.phoneId === canalFila))
     const estadoActual = convFila?.estadoBandeja || contacts[telefono]?.estado || 'pendiente'
     if (estadoActual === status) return
@@ -1762,11 +1760,8 @@ export default function App() {
         direccion: 'SALIENTE', timestamp: new Date().toISOString(), estado: 'enviado',
         contextoId: citaId,   // para que la burbuja optimista ya muestre la cita
       }
-      setConvs(prev => prev.map(c =>
-        c.telefono === telefono ? { ...c, msgs: [...c.msgs, tmpMsg], last: tmpMsg } : c
-      ))
       // Registrar como pendiente para que sobreviva a los polls hasta que se registre
-      pendingRef.current[telefono] = [...(pendingRef.current[telefono] || []), tmpMsg]
+      pintarOptimista(telefono, canal, tmpMsg)
       // Dar tiempo a React para renderizar el tmpMsg antes de hacer el fetch
       await new Promise(r => setTimeout(r, 0))
       // ☠️ Atendido SOLO si salió. Antes se marcaba EN PARALELO al envío: si Meta lo
@@ -1774,7 +1769,7 @@ export default function App() {
       // salía de Pendientes sin que al cliente le llegara nada, y ningún webhook lo
       // devuelve porque un rechazo al enviar no genera acuse. Igual que IND.
       const result = await sendReply(telefono, nombre, t, citaId, canal).catch(() => null)
-      if (result && result.ok !== false) changeStatus(telefono, estadoDestino)
+      if (result && result.ok !== false) changeStatus(telefono, estadoDestino, canal)
       // El mensaje salió, pero Meta rechazó la cita (mensaje viejo). Se avisa en vez
       // de que el vendedor crea que respondió citando y el cliente vea un texto suelto.
       // `result` null = la llamada ni respondió: también se avisa.
@@ -1800,7 +1795,7 @@ export default function App() {
     return encolar(telefono, async () => {
       // Atendido SOLO si salió (ver handleSend).
       const r = await enviarTextoSuelto(telefono, nombre, t, canal).catch(() => null)
-      if (r && r.ok !== false) changeStatus(telefono, estadoDestino)
+      if (r && r.ok !== false) changeStatus(telefono, estadoDestino, canal)
       else { setToast(r || { ok: false, error: 'No se pudo enviar' }); setTimeout(() => setToast(null), 4000) }
       setTimeout(load, 4000)
     })
@@ -2070,7 +2065,7 @@ export default function App() {
       setImgResult({ ok: allOk, error: sendErr })
       // Solo si TODAS salieron: si una foto se cayó, el cliente quedó a medias y el
       // chat tiene que seguir en PENDIENTES. Igual que IND.
-      if (allOk) await changeStatus(telefono, estadoDestino)
+      if (allOk) await changeStatus(telefono, estadoDestino, canal)
       })
       setTimeout(() => { setImgFiles([]); setImgResult(null); setIsVideo(false); setIsAudio(false); setIsDoc(false); setAvisoAudio(''); setImgProgress(0); if (fileRef.current) fileRef.current.value = '' }, 1500)
       setTimeout(load, 4000)
@@ -2150,14 +2145,20 @@ export default function App() {
   // `canal` viaja congelado igual que `telefono`: esta función corre DENTRO de la
   // tarea encolada, o sea cuando le toca salir, y para entonces el canal activo
   // del módulo puede ser el del chat que el vendedor abrió mientras tanto.
+  // Burbuja optimista por (teléfono, NÚMERO): ver lib/optimista.js.
+  const pintarOptimista = (telefono, canal, tmpMsg) => {
+    setConvs(prev => agregarOptimista(prev, telefono, canal, tmpMsg))
+    const k = claveOptimista(telefono, canal)
+    pendingRef.current[k] = [...(pendingRef.current[k] || []), tmpMsg]
+  }
+
   const enviarTextoSuelto = async (telefono, nombre, texto, canal = '', contextoId = '') => {
     const tmpMsg = {
       id: 'tmp_' + Date.now(), telefono, nombre, mensaje: texto,
       direccion: 'SALIENTE', timestamp: new Date().toISOString(), estado: 'enviado',
       contextoId,
     }
-    setConvs(prev => prev.map(c => c.telefono === telefono ? { ...c, msgs: [...c.msgs, tmpMsg], last: tmpMsg } : c))
-    pendingRef.current[telefono] = [...(pendingRef.current[telefono] || []), tmpMsg]
+    pintarOptimista(telefono, canal, tmpMsg)
     return sendReply(telefono, nombre, texto, contextoId, canal)
   }
 
@@ -2248,8 +2249,7 @@ export default function App() {
         // Así el texto optimista coincide con el guardado y la reconciliación descarta el
         // temporal (sin duplicar), mientras la burbuja pinta los botones desde `botones`.
         const tmpMsg = { id: 'tmp_' + Date.now(), telefono, nombre, mensaje: reply.text, botones: validBtns, direccion: 'SALIENTE', timestamp: new Date().toISOString(), estado: 'enviado', contextoId: citaOriginal }
-        setConvs(prev => prev.map(c => c.telefono === telefono ? { ...c, msgs: [...c.msgs, tmpMsg], last: tmpMsg } : c))
-        pendingRef.current[telefono] = [ ...(pendingRef.current[telefono] || []), tmpMsg ]
+        pintarOptimista(telefono, canal, tmpMsg)
         if ((await sendInteractiveButtons(telefono, nombre, reply.text, validBtns, canal, tomarCita()).catch(() => ({ ok: false })))?.ok === false) todoOk = false
         avanzar()
       } else if (reply.text) {
@@ -2280,7 +2280,7 @@ export default function App() {
         if (i < adjuntos.length - 1) await new Promise(r => setTimeout(r, 150))
       }
 
-      if (todoOk) changeStatus(telefono, estadoDestino)
+      if (todoOk) changeStatus(telefono, estadoDestino, canal)
       else { setToast({ ok: false, error: 'La respuesta rápida no salió completa' }); setTimeout(() => setToast(null), 4000) }
       setTimeout(load, 4000)
       } catch (e) {
@@ -2310,7 +2310,7 @@ export default function App() {
     const estadoDestino = estadoAlResponder(currentStatus)
     return encolar(telefono, async () => {
       const ok = await sendImageUrl(telefono, nombre, imageUrl, '', canal)
-      if (ok) changeStatus(telefono, estadoDestino)
+      if (ok) changeStatus(telefono, estadoDestino, canal)
     })
   }
 
@@ -2331,7 +2331,7 @@ export default function App() {
         await enviarTextoSuelto(telefono, nombre, `${p.title}${p.price ? ` — $${p.price}` : ''}`, canal)
       }
       const ok = await sendImageUrl(telefono, nombre, p.image, '', canal)
-      if (ok) changeStatus(telefono, estadoDestino)
+      if (ok) changeStatus(telefono, estadoDestino, canal)
       setTimeout(load, 4000)
     })
   }
@@ -2381,7 +2381,7 @@ export default function App() {
       }
       const res = await subirYEnviarFoto(telefono, nombre, archivo, canal)
       if (res?.ok) {
-        await changeStatus(telefono, estadoDestino)
+        await changeStatus(telefono, estadoDestino, canal)
         setTimeout(load, 4000)
         return { ok: true }
       }
@@ -2431,14 +2431,13 @@ export default function App() {
         mensaje:cuerpo, botones:validBtns,
         direccion:'SALIENTE', timestamp:new Date().toISOString(), estado:'enviado',
       }
-      setConvs(prev=>prev.map(c=>c.telefono===telefono?{...c,msgs:[...c.msgs,tmpMsg],last:tmpMsg}:c))
-      pendingRef.current[telefono] = [...(pendingRef.current[telefono] || []), tmpMsg]
+      pintarOptimista(telefono, canal, tmpMsg)
       const result = await sendInteractiveButtons(telefono, nombre, cuerpo, validBtns, canal)
       setSendingBtns(false)
       setToast(result)
       setTimeout(()=>setToast(null),4000)
       if (result.ok) {
-        await changeStatus(telefono, estadoDestino)
+        await changeStatus(telefono, estadoDestino, canal)
         setTimeout(load,4000)
       }
     })
