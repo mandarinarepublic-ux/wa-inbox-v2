@@ -1217,7 +1217,9 @@ export default function App() {
     activeCanalRef.current = canalConv
     // El módulo de envíos sigue leyendo CANAL_ACTIVO cuando quien llama no pasa
     // canal explícito (CONTACTOS, plantillas), así que se mantiene al día.
-    setCanalActivo(canalDePhoneId(canalConv) || CANAL_POR_DEFECTO)
+    // `false`: abrir un chat no vacía la bandeja → se conservan las versiones y el
+    // siguiente ciclo puede ser un 304 en vez de la lista completa.
+    setCanalActivo(canalDePhoneId(canalConv) || CANAL_POR_DEFECTO, false)
     // El ◉ de GENERAL dice "el chat abierto es de este número": sin esto quedaba
     // marcado el número de la última PESTAÑA visitada, no el del chat.
     setCanalArmado(canalDePhoneId(canalConv) || CANAL_POR_DEFECTO)
