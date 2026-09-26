@@ -1,6 +1,7 @@
 'use client'
 import React, { useState, useEffect, useCallback } from 'react'
 import { getAutomatizaciones, saveAutomatizaciones, getAnuncios, patchAnuncio, getFlujos } from '@/lib/api-client'
+import AnuncioResumen from '@/components/flujos/AnuncioResumen'
 import { elegirFlujo } from '@/lib/flujo'
 import { CANALES } from '@/lib/canales'
 
@@ -404,17 +405,17 @@ export default function Automatizaciones({ active }) {
                 : elegirFlujo({ flujos, sourceId: a.source_id })
               return (
                 <div key={a.source_id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 10, marginBottom: 6, border: `1px solid ${flujo ? '#1e2d3d' : '#f59e0b55'}`, background: flujo ? 'transparent' : '#f59e0b0c' }}>
-                  {a.imagen_url ? <img src={a.imagen_url} alt="" onError={e => { e.currentTarget.style.display = 'none' }} style={{ width: 36, height: 36, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }} /> : <div style={{ width: 36, height: 36, borderRadius: 8, background: '#1e2d3d', flexShrink: 0 }} />}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    {a.fijo
-                      ? <div style={{ fontSize: 13, fontWeight: 800, color: '#e2e8f0' }}>{a.etiqueta}</div>
-                      : <input defaultValue={a.etiqueta || ''} placeholder="Etiqueta (ej. DBZ chaquetas)" maxLength={120}
+                  {a.fijo
+                    ? <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 800, color: '#e2e8f0' }}>{a.etiqueta}</div>
+                        <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{a.titular}</div>
+                      </div>
+                    : <div style={{ flex: 1, minWidth: 0 }}>
+                        <AnuncioResumen a={a} />
+                        <input defaultValue={a.etiqueta || ''} placeholder="Etiqueta propia (opcional, ej. DBZ chaquetas)" maxLength={120}
                           onBlur={e => e.target.value !== (a.etiqueta || '') && guardarEtiqueta(a.source_id, e.target.value)}
-                          style={{ ...selectStyle, width: '100%', fontWeight: 800, color: '#e2e8f0', padding: '4px 6px' }} />}
-                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {a.titular || '(sin titular)'}{a.chats_30d != null ? ` · ${a.chats_30d} chats en 30 días` : ''}{a.ultimo_chat ? ` · último chat ${new Date(a.ultimo_chat).toLocaleString('es-EC', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : ''}
-                    </div>
-                  </div>
+                          style={{ ...selectStyle, width: '100%', fontSize: 11, color: '#e2e8f0', padding: '3px 6px', marginTop: 4 }} />
+                      </div>}
                   <div style={{ fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', flexShrink: 0, color: flujo ? '#25d366' : ORANGE }}>
                     {flujo ? `→ flujo: ${flujo.nombre}` : 'sin flujo'}
                   </div>

@@ -14,6 +14,7 @@ import { MAX_BOTONES, MAX_TITULO } from '@/lib/recetas'
 import { MAX_ESPERA_MIN, MAX_ESPERA_SEG, MAX_PAUSA_TANDA_SEG } from '@/lib/flujo'
 import { adjuntosDeRespuesta } from '@/lib/adjuntos-respuesta'
 import { EMOJI_ETAPA } from './nodos'
+import AnuncioResumen from './AnuncioResumen'
 
 const BORDE = '#1e2d3d'
 const FONDO_CAMPO = '#080d14'
@@ -111,7 +112,7 @@ function EditorDisparador({ datos, anuncios, onCambiar }) {
           {(anuncios || []).length === 0 && (
             <div style={{ fontSize: 11, color: '#64748b' }}>Todavía no hay anuncios vistos.</div>
           )}
-          <div style={{ maxHeight: 260, overflowY: 'auto' }}>
+          <div style={{ maxHeight: 420, overflowY: 'auto' }}>
             {(anuncios || []).map((a) => (
               <label key={a.source_id} style={{
                 display: 'flex', gap: 8, alignItems: 'flex-start', padding: '6px 7px', borderRadius: 8,
@@ -120,12 +121,7 @@ function EditorDisparador({ datos, anuncios, onCambiar }) {
                 marginBottom: 5, cursor: 'pointer',
               }}>
                 <input type="checkbox" checked={sourceIds.includes(String(a.source_id))} onChange={() => alternarAnuncio(a.source_id)} />
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 11, fontWeight: 800, color: '#e2e8f0' }}>{a.etiqueta || `(sin etiqueta) ${a.source_id}`}</div>
-                  <div style={{ fontSize: 10, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {a.titular || '(sin titular)'}{a.chats_30d != null ? ` · ${a.chats_30d} chats en 30 días` : ''}
-                  </div>
-                </div>
+                <AnuncioResumen a={a} />
               </label>
             ))}
           </div>
