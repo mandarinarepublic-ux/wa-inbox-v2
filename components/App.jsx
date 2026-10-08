@@ -1,7 +1,7 @@
 'use client'
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
 import dynamic from 'next/dynamic'
-import { fetchInboxSync, fetchHilo, buscarEnMensajes, sendReply, updateContact, updateEtapa, updateDeuda, updateSinAutomaticos, updateTipoContacto, fetchPedidosChat, isDemo, sendInteractiveButtons, toggleIAMode, sendVideo, sendDocumento, sendAudio, enviarAudioUrl, enviarDocumentoUrl, sendImageFile, precacheMedia, setCanalActivo, getCanalActivo, reenviarPieza, hayVersionNueva } from '@/lib/api-client'
+import { sendReaction, fetchInboxSync, fetchHilo, buscarEnMensajes, sendReply, updateContact, updateEtapa, updateDeuda, updateSinAutomaticos, updateTipoContacto, fetchPedidosChat, isDemo, sendInteractiveButtons, toggleIAMode, sendVideo, sendDocumento, sendAudio, enviarAudioUrl, enviarDocumentoUrl, sendImageFile, precacheMedia, setCanalActivo, getCanalActivo, reenviarPieza, hayVersionNueva } from '@/lib/api-client'
 import { buildConvs, fmtDate, parseDate } from '@/lib/utils'
 import { Spinner, Avatar, ContactRow, MessageBubble, Toast } from '@/components/Components'
 import RightPanel from '@/components/RightPanel'
@@ -26,6 +26,7 @@ import { actualizarNoLeidos, notificar } from '@/lib/notif'
 import { hayQueConfirmarDescarte, AVISO_DESCARTAR_PEDIDO, anchoPanelPedido, anchoPanelMinimo, bytesDeDataUrl, MAX_HOJA_BYTES } from '@/lib/pedido-manual'
 import { decidirArrastre } from '@/lib/arrastre'
 import { ventanaAbierta, pautaAbierta, etiquetaVencePauta } from '@/lib/bandeja'
+import { reaccionesNuestras, seMuestraComoBurbuja, puedeReaccionar, siguienteReaccion } from '@/lib/reacciones'
 import { avisoDeFormato } from '@/lib/audio-nota-voz'
 import { adjuntosDeRespuesta } from '@/lib/adjuntos-respuesta'
 import { citaUnaVez } from '@/lib/cita'
@@ -265,6 +266,8 @@ export default function App() {
   const [showSetup,    setShowSetup]    = useState(false)
   const [showGuide,    setShowGuide]    = useState(false)
   const [toast,        setToast]        = useState(null)
+  // Reacciones que acabamos de mandar y todavía no vuelven del sync: wamid → emoji.
+  const [reaccionLocal, setReaccionLocal] = useState({})
   const [showSidebar,  setShowSidebar]  = useState(true)
   const [showRight,    setShowRight]    = useState(false)
   const [showTplModal, setShowTplModal] = useState(false) // plantilla desde el chat (fuera de 24h)
@@ -2154,6 +2157,25 @@ export default function App() {
     setTimeout(() => setToast(null), 3500)
   }
 
+  // ❤️ Reaccionar a un mensaje del cliente, como en WhatsApp (lib/reacciones.js).
+  // Se pinta al instante y se revierte si Meta la rechaza.
+  const reaccionar = async (msg, emoji) => {
+    if (canalSinResolver()) { avisarCanalSinResolver(); return }
+    const conv = activeConv
+    if (!conv) return
+    const antes = Object.prototype.hasOwnProperty.call(reaccionLocal, msg.id)
+      ? reaccionLocal[msg.id]
+      : (reaccionesNuestras(conv.msgs).get(msg.id) || '')
+    const nuevo = siguienteReaccion(antes, emoji)
+    setReaccionLocal(r => ({ ...r, [msg.id]: nuevo }))
+    const res = await sendReaction(conv.telefono, conv.nombre || '', msg.id, nuevo, canalDeEnvio())
+    if (!res?.ok) {
+      setReaccionLocal(r => ({ ...r, [msg.id]: antes }))
+      setToast({ ok: false, msg: `No se pudo reaccionar: ${res?.error || 'error al enviar'}` })
+      setTimeout(() => setToast(null), 4500)
+    }
+  }
+
   const responderA = (msg) => {
     setCitando(msg)
     requestAnimationFrame(() => {
@@ -2938,8 +2960,14 @@ export default function App() {
                   Trayendo mensajes anteriores…
                 </div>
               )}
-              {activeConv.msgs.map((msg, idx) => {
-                const showDate = idx===0 || parseDate(msg.timestamp).toDateString() !== parseDate(activeConv.msgs[idx-1].timestamp).toDateString()
+              {(() => {
+                // ❤️ Nuestras reacciones se pegan bajo su mensaje en vez de ir sueltas.
+                const mias = reaccionesNuestras(activeConv.msgs)
+                for (const [k, v] of Object.entries(reaccionLocal)) mias.set(k, v)
+                const ids = new Set(activeConv.msgs.map(m => String(m.id)))
+                const visibles = activeConv.msgs.filter(m => seMuestraComoBurbuja(m, ids))
+                return visibles.map((msg, idx) => {
+                const showDate = idx===0 || parseDate(msg.timestamp).toDateString() !== parseDate(visibles[idx-1].timestamp).toDateString()
                 return (
                   <div key={msg.id}>
                     {showDate && (
@@ -2947,10 +2975,13 @@ export default function App() {
                         <span style={{ background:'rgba(255,255,255,.04)', borderRadius:20, padding:'3px 14px', fontSize:11, color:'#475569' }}>{fmtDate(msg.timestamp)}</span>
                       </div>
                     )}
-                    <MessageBubble msg={msg} allMsgs={activeConv.msgs} onResponder={responderA} onAbrirChat={openConv} onReenviar={setReenviando} />
+                    <MessageBubble msg={msg} allMsgs={activeConv.msgs} onResponder={responderA} onAbrirChat={openConv} onReenviar={setReenviando}
+                      reaccion={mias.get(String(msg.id)) || ''}
+                      onReaccionar={windowOpen && puedeReaccionar(msg) ? (emoji) => reaccionar(msg, emoji) : null} />
                   </div>
                 )
-              })}
+              })
+              })()}
               {enFila > 0 && (
                 <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:4 }}>
                   <div style={{ background:'#0d4f3c', borderRadius:'18px 18px 4px 18px', padding:'9px 14px', border:'1px solid rgba(37,211,102,.1)' }}>

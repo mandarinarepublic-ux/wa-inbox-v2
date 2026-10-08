@@ -6,6 +6,7 @@ import { resumenDeLista } from '@/lib/resumen-lista'
 import { puedeReenviar } from '@/lib/reenvio'
 import { fuenteDeMedia } from '@/lib/fuente-media'
 import { etiquetaTelefono } from '@/lib/cliente-sin-telefono'
+import { EMOJIS_REACCION } from '@/lib/reacciones'
 
 // ── SPINNER ──────────────────────────────────────────────────────
 export function Spinner({ size = 24 }) {
@@ -826,7 +827,7 @@ function UbicacionCard({ u }) {
   )
 }
 
-export function MessageBubble({ msg, allMsgs, onResponder, onAbrirChat, onReenviar }) {
+export function MessageBubble({ msg, allMsgs, onResponder, onAbrirChat, onReenviar, reaccion = '', onReaccionar = null }) {
   const [accion, setAccion] = useState(false)
   const [hover, setHover] = useState(false)
   const isMe     = msg.direccion === 'SALIENTE'
@@ -859,6 +860,20 @@ export function MessageBubble({ msg, allMsgs, onResponder, onAbrirChat, onReenvi
       }}>↪</button>
   ) : null
 
+  // ☺ Reaccionar: abre la misma barrita que tocar el mensaje. Afuera de la burbuja,
+  // tenue, igual que ↪ — en el celular basta con tocar el mensaje.
+  const botonReaccionar = onReaccionar ? (
+    <button
+      onClick={(e) => { e.stopPropagation(); setAccion(v => !v) }}
+      title="Reaccionar"
+      style={{
+        alignSelf: 'center', flexShrink: 0, margin: '0 2px',
+        background: 'transparent', border: 'none', cursor: 'pointer',
+        fontSize: 14, lineHeight: 1, padding: 4, color: '#94a3b8',
+        opacity: (hover || accion) ? 1 : 0, transition: 'opacity .15s',
+      }}>☺</button>
+  ) : null
+
   return (
     <div
       onMouseEnter={() => setHover(true)}
@@ -869,7 +884,7 @@ export function MessageBubble({ msg, allMsgs, onResponder, onAbrirChat, onReenvi
     }}>
       {isMe && botonReenviar}
       <div className="msg-bubble"
-        onClick={alTocar}
+        onClick={(e) => { if (!onResponder && onReaccionar && !e.target.closest('a, button, img, video, audio')) setAccion(v => !v); else alTocar(e) }}
         title={onResponder ? 'Toca para responder a este mensaje' : undefined}
         style={{
         maxWidth: '68%',
@@ -879,6 +894,9 @@ export function MessageBubble({ msg, allMsgs, onResponder, onAbrirChat, onReenvi
         boxShadow: '0 2px 8px rgba(0,0,0,.3)',
         border: isMe ? '1px solid rgba(37,211,102,.1)' : '1px solid #1e2d3d',
         cursor: onResponder ? 'pointer' : 'default',
+        position: 'relative',
+        // Deja sitio a la reacción, que cuelga del borde de abajo.
+        marginBottom: reaccion ? 12 : 0,
       }}>
 
         {msg.referral && <ReferralCard referral={msg.referral} />}
@@ -970,6 +988,20 @@ export function MessageBubble({ msg, allMsgs, onResponder, onAbrirChat, onReenvi
         </div>
 
         {/* Aparece SOLO en el mensaje que tocaste. Se va al usarlo o al tocar de nuevo. */}
+        {accion && onReaccionar && (
+          <div style={{ display:'flex', gap:2, justifyContent:'flex-start', marginTop:6, flexWrap:'wrap' }}>
+            {EMOJIS_REACCION.map((e) => (
+              <button key={e}
+                onClick={(ev) => { ev.stopPropagation(); setAccion(false); onReaccionar(e) }}
+                title={reaccion === e ? 'Quitar reacción' : 'Reaccionar'}
+                style={{
+                  background: reaccion === e ? 'rgba(37,211,102,.22)' : 'rgba(255,255,255,.05)',
+                  border: `1px solid ${reaccion === e ? 'rgba(37,211,102,.6)' : '#1e2d3d'}`,
+                  borderRadius: 14, padding: '2px 7px', fontSize: 16, lineHeight: 1.3, cursor: 'pointer',
+                }}>{e}</button>
+            ))}
+          </div>
+        )}
         {accion && onResponder && (
           <div style={{ display:'flex', justifyContent: isMe ? 'flex-start' : 'flex-end', marginTop: 6 }}>
             <button
@@ -981,7 +1013,17 @@ export function MessageBubble({ msg, allMsgs, onResponder, onAbrirChat, onReenvi
               }}>↩ Responder</button>
           </div>
         )}
+
+        {/* ❤️ Nuestra reacción, colgada del borde como en WhatsApp. */}
+        {reaccion && (
+          <span title="Tu reacción" style={{
+            position: 'absolute', bottom: -12, right: 10,
+            background: '#1a2636', border: '1px solid #2a3a4f', borderRadius: 12,
+            padding: '1px 6px', fontSize: 13, lineHeight: 1.4,
+          }}>{reaccion}</span>
+        )}
       </div>
+      {!isMe && botonReaccionar}
       {!isMe && botonReenviar}
     </div>
   )
