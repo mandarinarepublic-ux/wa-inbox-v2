@@ -25,7 +25,7 @@ import AvisoSesion from '@/components/AvisoSesion'
 import { actualizarNoLeidos, notificar } from '@/lib/notif'
 import { hayQueConfirmarDescarte, AVISO_DESCARTAR_PEDIDO, anchoPanelPedido, anchoPanelMinimo, bytesDeDataUrl, MAX_HOJA_BYTES } from '@/lib/pedido-manual'
 import { decidirArrastre } from '@/lib/arrastre'
-import { ventanaAbierta } from '@/lib/bandeja'
+import { ventanaAbierta, pautaAbierta, etiquetaVencePauta } from '@/lib/bandeja'
 import { avisoDeFormato } from '@/lib/audio-nota-voz'
 import { adjuntosDeRespuesta } from '@/lib/adjuntos-respuesta'
 import { citaUnaVez } from '@/lib/cita'
@@ -1333,6 +1333,7 @@ export default function App() {
     convs.forEach(conv => {
       const g = datosGestion(conv)
       if (!alertaVentanaCierra(g, now)) return
+      if (pautaSigueAlCerrar(conv, g)) return // 🎯 la pauta la mantiene abierta: no hay nada que cerrar
       const ent = new Date(g.ultimoEntranteAt).getTime()
       const key = `${conv.telefono}|${conv.phoneId || ''}:${ent}` // 1 alerta por ventana y número
       if (alertadosRef.current.has(key)) return
@@ -1494,7 +1495,16 @@ export default function App() {
     return t ? (Date.now() - new Date(t).getTime()) : Infinity
   }
   // ⏰ la ventana de ESTA fila se cierra con algo en juego (💬 💳 📌).
-  const alertaVentana = (conv) => alertaVentanaCierra(datosGestion(conv), Date.now())
+  // 🎯 ¿La ventana de PAUTA sigue abierta cuando se cierre la de 24 h? Entonces
+  // avisar "se cierra la ventana" es falso: se le puede seguir escribiendo.
+  const pautaSigueAlCerrar = (conv, g) => {
+    const ent = Date.parse(g?.ultimoEntranteAt || '')
+    return Number.isFinite(ent) && pautaAbierta(conv?.pautaVenceEn, ent + VENTANA_MS)
+  }
+  const alertaVentana = (conv) => {
+    const g = datosGestion(conv)
+    return alertaVentanaCierra(g, Date.now()) && !pautaSigueAlCerrar(conv, g)
+  }
   // Horas que faltan para cerrar la ventana de 24h (para el texto del aviso).
   const horasParaCierre = (conv) => Math.max(0, Math.ceil((VENTANA_MS - silencioMs(conv.telefono, conv)) / 3600000))
 
@@ -1585,9 +1595,14 @@ export default function App() {
    * o con fecha corrupta devuelve false. Un falso "cerrada" solo obliga a usar
    * plantilla; un falso "abierta" pierde el mensaje en silencio.
    */
-  const windowOpen = activeConv?.ultimoEntranteCanal
+  const ventana24 = activeConv?.ultimoEntranteCanal
     ? ventanaAbierta(activeConv.ultimoEntranteCanal)
     : (lastIncoming ? ventanaAbierta(lastIncoming.timestamp) : false)
+  // 🎯 Ventana de PAUTA: si el cliente llegó de un anuncio, Meta deja escribirle
+  // texto libre hasta 7 días (probado el 7-oct-2026). El vencimiento lo da Meta y
+  // es POR CANAL, como la de 24 h. Sin dato → no suma nada (ver lib/bandeja.js).
+  const enPauta = !ventana24 && pautaAbierta(activeConv?.pautaVenceEn)
+  const windowOpen = ventana24 || enPauta
 
   /**
    * Por qué número sale lo que se envía AHORA.
@@ -2969,6 +2984,12 @@ export default function App() {
                   Ábrelo desde la pestaña de MANDI o de REPUBLIC, la que corresponda, y contéstale desde ahí.
                 </div>
               ) : (<>
+              {enPauta && (
+                <div title="El cliente llegó de un anuncio: Meta deja escribirle texto libre y gratis hasta que vence esta ventana, aunque ya pasaron 24 h."
+                  style={{ marginBottom:8, padding:'6px 12px', background:'rgba(37,211,102,.06)', border:'1px solid rgba(37,211,102,.2)', borderRadius:8, fontSize:11, color:'#25d366', textAlign:'center' }}>
+                  🎯 Ventana de pauta — puedes escribirle gratis hasta el <b>{etiquetaVencePauta(activeConv?.pautaVenceEn)}</b>
+                </div>
+              )}
               {!windowOpen && lastMsg && (
                 <div style={{ marginBottom:8, padding:'7px 12px', background:'rgba(245,158,11,.08)', border:'1px solid rgba(245,158,11,.2)', borderRadius:8, fontSize:11, color:'#fbbf24', display:'flex', alignItems:'center', justifyContent:'center', gap:10, flexWrap:'wrap' }}>
                   <span>⚠️ Ventana de 24h cerrada — solo plantilla</span>
@@ -3198,6 +3219,7 @@ export default function App() {
                 onSendImage={handleSendAIImage} onSendProducto={handleSendProducto}
                 onUpdateContact={handleUpdateContact}
                 windowOpen={windowOpen}
+                ventanaPautaHasta={enPauta ? activeConv?.pautaVenceEn : null}
                 onPedidoManual={alPedidoManualEscritorio}
                 onVerPedido={alVerPedidoEscritorio}
                 onEnviarHojaPedido={handleEnviarHojaPedido}
@@ -3218,6 +3240,7 @@ export default function App() {
               onSendImage={handleSendAIImage} onSendProducto={handleSendProducto}
               onUpdateContact={handleUpdateContact}
               windowOpen={windowOpen}
+                ventanaPautaHasta={enPauta ? activeConv?.pautaVenceEn : null}
               onPedidoManual={alPedidoManualCajon}
               onVerPedido={alVerPedidoCajon}
               onEnviarHojaPedido={handleEnviarHojaPedido}
