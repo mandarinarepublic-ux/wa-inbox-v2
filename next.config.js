@@ -6,6 +6,16 @@ const nextConfig = {
   // está bajando. El revisor corre con `npm test`, en la compu, gratis.
   // ⚠️ Esto NO lo desactiva: si alguien sube sin correr `npm test`, no hay red.
   eslint: { ignoreDuringBuilds: true },
+  // 🚚 OCR de las guías (lib/guias-registro.js). Tesseract arranca un worker de
+  // Node desde su propia carpeta y carga su .wasm por RUTA: si Next lo empaqueta,
+  // esas rutas no existen en Vercel. Se deja afuera del bundle y se copian sus
+  // archivos a la función que lo usa (y solo a esa).
+  experimental: {
+    serverComponentsExternalPackages: ['tesseract.js', 'tesseract.js-core'],
+    outputFileTracingIncludes: {
+      '/api/guias': ['./node_modules/tesseract.js/**/*', './node_modules/tesseract.js-core/**/*'],
+    },
+  },
   // El commit con el que se compiló ESTE bundle, horneado en el navegador. El
   // servidor manda el suyo en cada /api/inbox-sync: si difieren, la pestaña
   // corre código viejo y se le pide recargar (25-sep-2026: pestañas abiertas
