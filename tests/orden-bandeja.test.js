@@ -65,3 +65,19 @@ test('tolera entradas vacias o basura sin lanzar', () => {
   assert.deepEqual(ordenarBandeja([], 'pendiente', esperandoDesde), [])
   assert.equal(ordenarBandeja([ANA], 'pendiente', null).length, 1)
 })
+
+test('botón ⇅: con nuevosArriba, Pendientes pone arriba al que escribió último', () => {
+  const r = ordenarBandeja([ANA, BETO], 'pendiente', esperandoDesde, { nuevosArriba: true })
+  assert.deepEqual(r.map(c => c.telefono), ['593999000002', '593999000001'])
+})
+
+test('botón ⇅: una fecha rota sigue al fondo también al revés', () => {
+  const roto = { telefono: '593999000004', last: { timestamp: 'no-es-fecha' } }
+  const r = ordenarBandeja([roto, ANA, BETO], 'pendiente', esperandoDesde, { nuevosArriba: true })
+  assert.deepEqual(r.map(c => c.telefono), ['593999000002', '593999000001', '593999000004'])
+})
+
+test('botón ⇅: no toca las otras bandejas', () => {
+  const r = ordenarBandeja([ANA, BETO], 'atendido', esperandoDesde, { nuevosArriba: true })
+  assert.deepEqual(r.map(c => c.telefono), ['593999000002', '593999000001'])
+})

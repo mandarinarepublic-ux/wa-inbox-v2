@@ -300,6 +300,16 @@ export default function App() {
   // es el del asa del panel derecho.
   const [soltarAqui,   setSoltarAqui]   = useState(false)
   const [filtro,       setFiltro]       = useState(FILTRO_INICIAL)
+  // Botón ⇅ de Pendientes: false = cola (el que más espera arriba, como siempre),
+  // true = el que escribió último arriba. Se recuerda en ESTE navegador.
+  const [pendNuevosArriba, setPendNuevosArriba] = useState(false)
+  useEffect(() => {
+    try { setPendNuevosArriba(localStorage.getItem('mandi_pend_nuevos_arriba') === '1') } catch { /* modo privado */ }
+  }, [])
+  const alternarOrdenPend = () => setPendNuevosArriba(v => {
+    try { localStorage.setItem('mandi_pend_nuevos_arriba', v ? '0' : '1') } catch { /* modo privado */ }
+    return !v
+  })
   const [searchMode,   setSearchMode]   = useState('contacto') // 'contacto' | 'mensaje'
   const [msgHits,      setMsgHits]      = useState(null)        // búsqueda por mensaje (server-side): mensajes que casan en TODO el historial
   // Ancho del panel derecho (notas / respuestas rápidas), redimensionable con el mouse
@@ -1572,11 +1582,11 @@ export default function App() {
     const lista = isSearching ? searched : vistas.filter(v => pasaFiltro(v, filtro)).map(v => v._conv)
     return {
       filtered: ordenarBandeja(lista, isSearching ? '' : (filtro.bandeja === 'pendiente' ? 'pendiente' : ''),
-        (tel) => contacts[tel]?.ultimoEntranteAt || null),
+        (tel) => contacts[tel]?.ultimoEntranteAt || null, { nuevosArriba: pendNuevosArriba }),
       counts: conteos(vistas, filtro),
       totalPendientes: vistas.filter(v => v.estado === 'pendiente').length,
     }
-  }, [convs, search, searchMode, msgHits, contacts, pedidosChat, ahora, filtro])
+  }, [convs, search, searchMode, msgHits, contacts, pedidosChat, ahora, filtro, pendNuevosArriba])
   /* eslint-enable react-hooks/exhaustive-deps */
 
   const lastMsg      = activeConv?.last
@@ -2730,6 +2740,18 @@ export default function App() {
             </div>
             {/* ── Filtros combinables (port desde IND) ── */}
             <FiltrosLista filtro={filtro} conteos={counts} onCambiar={cambiarFiltro} />
+            {/* ⇅ Orden de Pendientes (lib/orden-bandeja.js) — solo en esa bandeja */}
+            {filtro.bandeja === 'pendiente' && !isSearching && (
+              <button onClick={alternarOrdenPend}
+                title="Cambiar el orden de Pendientes"
+                style={{
+                  width:'100%', marginTop:8, padding:'5px 8px', fontSize:10, fontWeight:700,
+                  background:'transparent', border:'1px solid #1a2d40', color:'#94a3b8',
+                  borderRadius:7, cursor:'pointer', fontFamily:'inherit',
+                }}>
+                ⇅ {pendNuevosArriba ? 'Más nuevos arriba' : 'Más antiguos arriba'}
+              </button>
+            )}
           </div>
 
           <div style={{ flex:1, overflowY:'auto', minHeight:0 }}>
