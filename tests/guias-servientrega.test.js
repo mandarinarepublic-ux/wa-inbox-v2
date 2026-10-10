@@ -138,3 +138,23 @@ test('dirección parecida: 3 palabras en común sin contar CALLE, ENTRE…', () 
   assert.equal(direccionParecida('piñas centro', 'PINAS AV SUCRE Y 10 DE AGOSTO / SUCRE E/10 DE AGOSTO'), false)
   assert.equal(direccionParecida('Calle principal y entre calles', 'CALLE PRINCIPAL ENTRE CALLES'), false)
 })
+
+// ── "En caso de duda no registres" (10-oct) ─────────────────────────────────
+import { nombreCompatible } from '../lib/guias-servientrega.js'
+
+test('nombre compatible: basta una palabra en común; otro nombre = duda', () => {
+  assert.equal(nombreCompatible('Gabriela Gaon', 'GAON PATINO NATHALY GABRIELA'), true)
+  assert.equal(nombreCompatible('Erika Guerron', 'GUERRON OSORIO ERIKA GEOVANNA'), true)
+  assert.equal(nombreCompatible('Pedro Castillo', 'DANNY FABIAN RODRIGUEZ RIVERA'), false)   // celular de otro
+  assert.equal(nombreCompatible('Danny Rodriguez', ''), true)                              // sin nombre leído: no contradice
+})
+
+test('varios pedidos posibles se informa con cuántos (para no registrar solo)', () => {
+  const ahora = Date.parse('2026-10-09T20:00:00Z')
+  const r = elegirPedido([
+    { pedido_id: 'X1', estado_pedido: 'EN_FABRICA', fecha_pedido: '2026-10-01T00:00:00Z' },
+    { pedido_id: 'X2', estado_pedido: 'DESPACHO',   fecha_pedido: '2026-10-05T00:00:00Z' },
+  ], new Set(), ahora)
+  assert.equal(r.posibles, 2)
+  assert.equal(r.pedido.pedido_id, 'X2')
+})

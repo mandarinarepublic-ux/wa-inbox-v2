@@ -189,7 +189,8 @@ export default function Guias({ active }) {
           Las guías que <b style={{ color: '#94a3b8' }}>Rodri VIP</b> reenvía a este número (últimos {datos?.dias || 30} días).
           "Procesar" lee la foto, encuentra al cliente por celular o nombre y anota la guía en su último pedido
           (EN_FABRICA, DESPACHO o COMPLETADO reciente) y lo pasa a <b style={{ color: '#94a3b8' }}>COMPLETADO</b>.
-          Por nombre solo registra si además coincide el celular (salvo un dígito) o la dirección; si no, te la propone para confirmar.
+          Solo registra sola cuando no hay duda: celular exacto de un solo cliente, nombre que no lo contradice y un solo pedido posible.
+          Ante cualquier duda te propone el pedido y lo confirmas tú con ✅.
           Las que no encuentra quedan en ⚠️ para asignarlas a mano.
         </div>
 
