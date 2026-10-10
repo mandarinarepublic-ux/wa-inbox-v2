@@ -22,6 +22,9 @@ que un parche se aplica DOS VECES y a mano.
 - **Migraciones → x1.** La base es una sola. Registrar en `supabase_migrations.schema_migrations`, nunca en `public`.
 - **Paletas distintas:** MANDI usa verde WhatsApp (`#25d366`); IND usa crema/negro (el objeto `C` en `components/Components.jsx`).
 
+⚠️ **Otro que ya divergió (oct-2026):** `lib/grupos-respuestas.js` tiene 3 grupos en MANDI
+(Datos · Productos · Tallas) y 4 en IND (+ 📦 Postventa). Mismo archivo, distinto contenido.
+
 ☠️ **Ejemplo real de que los nombres divergen:** el filtro de "¿hay algo que
 pintar?" se llama **`esPintable` en MANDI** y **`pintable` en IND**. Es la misma
 función y es la que más veces ha escondido clientes. Nunca copies un parche entre
@@ -220,6 +223,49 @@ con prueba que prohíbe volver a `req.url` en los crons. El webhook NO lo necesi
 llama Meta por el dominio público.
 
 > Un 200 del cron no prueba que salió nada: mirar el CUERPO de la respuesta y los logs.
+
+### 11. Dos cuentas de API no se pueden hablar: llega `unsupported` vacío (oct-2026)
+
+Servientrega (593985009414) le escribe a MANDI y a IND desde un número de **API**. Los
+107 mensajes que mandó entre jul y oct llegaron así, todos:
+
+```
+"type": "unsupported", "unsupported": { "type": "unknown", "raw_type": "unknown" },
+"errors": [{ "code": 131051, "title": "Message type unknown" }]
+```
+
+Sin texto, sin foto, sin media id. **Meta no deja que una cuenta de API le escriba a
+otra** (lo documentan HighLevel y DoubleTick: "API-to-API" → 131051), y **no hay
+endpoint para pedir el contenido después**: lo único que existe es lo que Meta empuja
+en el webhook. Prueba en casa: el número de MANDI le mandó 13 mensajes al 9804 de IND
+y llegaron igual de vacíos.
+
+- **No es un bug nuestro ni se arregla con código.** No gastar tiempo buscándolo.
+- `raw_type: unknown` (no `image`) es la firma: si fuera una foto que no se pudo
+  procesar, diría el tipo.
+- Lo que SÍ llega bien es el **reenvío** desde un celular normal: la guía reenviada por
+  Rodri VIP entra como foto + pie completo. Sobre eso está la sección 🚚 GUÍAS de MANDI
+  (`docs/HANDOFF-2026-10-09-guias-servientrega.md`).
+- La "prueba de los mensajes temporales" no aplica: un número de API no tiene esa opción.
+
+> Antes de afirmar "Meta nos manda vacío", mirar el payload CRUDO en
+> `inbox.webhook_eventos` (no lo guardado en `mensajes`) y confirmar que no llegó una
+> segunda entrega con contenido (trampa #5).
+
+### 12. Guías → CRM: en caso de duda NO se registra (oct-2026)
+
+La sección 🚚 GUÍAS anota la guía en el pedido **y lo pasa a COMPLETADO**: un error se
+paga caro. Regla de Rodrigo: *"en caso de duda no registres la guía, prefiero hacerlo
+a mano"*. Solo se registra sola con celular exacto de UN cliente + nombre que no lo
+contradice + UN pedido posible. Todo lo demás queda con pedido propuesto y botón
+✅ Confirmar. **No relajar esta regla para "registrar más"** sin que Rodrigo lo pida.
+
+- La guía **no imprime la cédula** (la llave real con el CRM): `cedulaValida` está lista
+  por si un día aparece.
+- `fecha_despacho` = la fecha IMPRESA en la guía (OCR). ☠️ Si no se pasa, la base pone
+  `now()` = la hora del clic (pasó con las primeras 23).
+- El CRM tiene celulares con un dígito cambiado respecto a la guía: el emparejado por
+  nombre los encuentra, pero eso es justamente lo que queda "en duda".
 
 ---
 
