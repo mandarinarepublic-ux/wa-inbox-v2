@@ -23,7 +23,7 @@ const ESTADOS = {
   NUEVA:      { icono: '🆕', texto: 'Sin procesar', color: '#38bdf8' },
 }
 
-const METODO = { celular: 'por celular', nombre: 'por nombre', manual: 'a mano', crm: 'desde el CRM' }
+const METODO = { cedula: 'por cédula', celular: 'por celular', nombre: 'por nombre', manual: 'a mano', crm: 'desde el CRM' }
 
 function Asignar({ guia, onListo }) {
   const [q, setQ] = useState(guia.celular || guia.destinatario || '')
@@ -89,6 +89,27 @@ function Asignar({ guia, onListo }) {
   )
 }
 
+// Guía encontrada por nombre sin segunda prueba: un clic para confirmarla.
+function Confirmar({ g, onListo }) {
+  const [guardando, setGuardando] = useState(false)
+  const [error, setError] = useState('')
+  const confirmar = async () => {
+    setGuardando(true); setError('')
+    try { await asignarGuiaAPedido(g.numero_guia, g.pedido_sugerido); onListo() }
+    catch (e) { setError(e.message); setGuardando(false) }
+  }
+  return (
+    <div style={{ marginTop: 6 }}>
+      <button onClick={confirmar} disabled={guardando} style={{
+        padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 800, fontSize: 12,
+        background: `linear-gradient(135deg,${VERDE},#059669)`, color: '#fff', opacity: guardando ? .6 : 1,
+      }}>{guardando ? 'Guardando…' : `✅ Confirmar en ${g.pedido_sugerido}`}</button>
+      <a href={CRM_PEDIDO(g.pedido_sugerido)} target="_blank" rel="noreferrer" style={{ marginLeft: 8, color: '#94a3b8', fontSize: 12 }}>ver pedido</a>
+      {error && <div style={{ color: '#ef4444', fontSize: 12, marginTop: 4 }}>⚠️ {error}</div>}
+    </div>
+  )
+}
+
 function Fila({ g, onRecargar }) {
   const [asignando, setAsignando] = useState(false)
   const e = ESTADOS[g.estado] || ESTADOS.NUEVA
@@ -115,6 +136,7 @@ function Fila({ g, onRecargar }) {
           )}
           {g.estado === 'REGISTRADA' && g.nota && <div style={{ color: '#64748b' }}>{g.nota}</div>}
           {g.estado === 'PENDIENTE' && <div style={{ color: '#f59e0b' }}>{g.motivo}</div>}
+          {g.pedido_sugerido && <Confirmar g={g} onListo={onRecargar} />}
           {g.estado === 'NUEVA' && <div style={{ color: '#64748b' }}>Aprieta "Procesar guías" para leerla.</div>}
         </div>
         {g.estado !== 'REGISTRADA' && (
@@ -166,8 +188,9 @@ export default function Guias({ active }) {
         <div style={{ fontSize: 12, color: '#64748b', marginTop: 4, lineHeight: 1.5 }}>
           Las guías que <b style={{ color: '#94a3b8' }}>Rodri VIP</b> reenvía a este número (últimos {datos?.dias || 30} días).
           "Procesar" lee la foto, encuentra al cliente por celular o nombre y anota la guía en su último pedido
-          (EN_FABRICA, DESPACHO o COMPLETADO reciente). Las que no encuentra quedan en ⚠️ para asignarlas a mano.
-          No cambia el estado del pedido.
+          (EN_FABRICA, DESPACHO o COMPLETADO reciente) y lo pasa a <b style={{ color: '#94a3b8' }}>COMPLETADO</b>.
+          Por nombre solo registra si además coincide el celular (salvo un dígito) o la dirección; si no, te la propone para confirmar.
+          Las que no encuentra quedan en ⚠️ para asignarlas a mano.
         </div>
 
         <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap', alignItems: 'center' }}>

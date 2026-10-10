@@ -111,3 +111,30 @@ test('la bitácora lleva los datos del despacho', () => {
   assert.equal(t, 'SERVIENTREGA #9036647895 📷 · despachada 06-oct 19:20 · PORTOVIEJO · para MARILYN VALENCIA DELGADO (0988817811) · CDLA LA PAZ · auto por nombre')
   assert.equal(textoBitacora({ numero: '1' }), 'SERVIENTREGA #1')
 })
+
+// ── Pruebas de identidad (10-oct): "no puede descuadrar" ────────────────────
+import { cedulaValida, cedulasDeOcr, celularCasiIgual, direccionParecida } from '../lib/guias-servientrega.js'
+
+test('cédula ecuatoriana: dígito verificador; un celular no pasa por cédula', () => {
+  assert.equal(cedulaValida('0944141217'), '0944141217')
+  assert.equal(cedulaValida('1722759527001'), '1722759527')   // RUC persona natural
+  assert.equal(cedulaValida('1313368837 '), '1313368837')
+  assert.equal(cedulaValida('0986091779'), '')                // celular de Danny
+  assert.equal(cedulaValida('0944141218'), '')                // verificador malo
+  assert.deepEqual(cedulasDeOcr(OCR), [])                     // la guía de hoy NO trae cédula
+  assert.deepEqual(cedulasDeOcr('CI: 2300005085\n0986091779'), ['2300005085'])
+})
+
+test('celular casi igual: un dígito de diferencia, no dos', () => {
+  assert.equal(celularCasiIgual('0970766574', '0979766574'), true)    // Erika Guerrón
+  assert.equal(celularCasiIgual('0982128270', '0982128279'), true)    // Byron Serpa
+  assert.equal(celularCasiIgual('0969496462', '0969469462'), false)   // Nahim: 2 dígitos cambiados
+  assert.equal(celularCasiIgual('', '0969469462'), false)
+})
+
+test('dirección parecida: 3 palabras en común sin contar CALLE, ENTRE…', () => {
+  assert.equal(direccionParecida('Cdla 9 de Octubre, Ana Moreno de Safadi 308', 'CIUDADELA 9 DE OCTUBRE ANA MORENO DE SAFADI 308'), true)
+  assert.equal(direccionParecida('Guayaquil: Kennedy norte Mz 302 Villa 10…', 'KENNEDY NORTE MZ 302 VILLA 10 REF CLL MIGUEL H. ALCIVAR'), true)
+  assert.equal(direccionParecida('piñas centro', 'PINAS AV SUCRE Y 10 DE AGOSTO / SUCRE E/10 DE AGOSTO'), false)
+  assert.equal(direccionParecida('Calle principal y entre calles', 'CALLE PRINCIPAL ENTRE CALLES'), false)
+})
