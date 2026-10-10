@@ -93,3 +93,21 @@ test('COMPLETADO reciente sí recibe guía; uno viejo no', () => {
   const cancelado = [{ pedido_id: 'C', estado_pedido: 'CANCELADO', fecha_pedido: '2026-10-08T00:00:00Z' }]
   assert.equal(elegirPedido(cancelado, new Set(), ahora).pedido, null)
 })
+
+// ── Fecha impresa en la guía y bitácora ─────────────────────────────────────
+import { fechaDeGuia, fechaCortaEc, textoBitacora } from '../lib/guias-servientrega.js'
+
+test('la fecha impresa en la guía, en hora de Ecuador', () => {
+  assert.equal(fechaDeGuia(OCR), '2026-10-06T19:20:00-05:00')
+  assert.equal(fechaDeGuia('06 - Dic - 2026 | 8:05'), '2026-12-06T08:05:00-05:00')
+  assert.equal(fechaDeGuia('sin fecha'), '')
+  assert.equal(extraerDeOcr(OCR).fecha, '2026-10-06T19:20:00-05:00')
+  assert.equal(fechaCortaEc('2026-10-06T19:20:00-05:00'), '06-oct 19:20')
+  assert.equal(fechaCortaEc('2026-10-10T03:34:27.913Z'), '09-oct 22:34')   // UTC → Ecuador
+})
+
+test('la bitácora lleva los datos del despacho', () => {
+  const t = textoBitacora({ numero: '9036647895', foto: 'x', fechaGuia: '2026-10-06T19:20:00-05:00', destino: 'PORTOVIEJO', destinatario: 'MARILYN VALENCIA DELGADO', celular: '0988817811', direccion: 'CDLA LA PAZ', metodo: 'nombre' })
+  assert.equal(t, 'SERVIENTREGA #9036647895 📷 · despachada 06-oct 19:20 · PORTOVIEJO · para MARILYN VALENCIA DELGADO (0988817811) · CDLA LA PAZ · auto por nombre')
+  assert.equal(textoBitacora({ numero: '1' }), 'SERVIENTREGA #1')
+})

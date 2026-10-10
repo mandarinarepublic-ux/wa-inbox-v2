@@ -105,6 +105,7 @@ function Fila({ g, onRecargar }) {
             <span style={{ color: '#475569' }}>{fecha(g.fecha_mensaje)}</span>
           </div>
           <div>📍 {g.destino || '—'}{g.destinatario && <> · 👤 {g.destinatario}</>}{g.celular && <> · 📱 {g.celular}</>}</div>
+          {g.fecha_guia && <div>🗓 Despachada {fecha(g.fecha_guia)}</div>}
           {g.estado === 'REGISTRADA' && (
             <div>
               → <a href={CRM_PEDIDO(g.pedido_id)} target="_blank" rel="noreferrer" style={{ color: VERDE, fontWeight: 800 }}>{g.pedido_id}</a>
