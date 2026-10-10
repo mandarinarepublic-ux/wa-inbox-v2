@@ -4,7 +4,6 @@ import { getAutomatizaciones, saveAutomatizaciones, getAnuncios, patchAnuncio, g
 import AnuncioResumen from '@/components/flujos/AnuncioResumen'
 import { elegirFlujo } from '@/lib/flujo'
 import { CANALES } from '@/lib/canales'
-import GuiasServientrega from '@/components/GuiasServientrega'
 
 // ── Pestaña AUTOMATIZACIONES ──────────────────────────────────────────────────
 // Reglas del inbox que se prenden/apagan. Hoy: dos saludos automáticos. Pensada
@@ -197,9 +196,6 @@ export default function Automatizaciones({ active }) {
             Reglas que responden solas por ti. Se aplican cuando la IA está <b style={{ color: '#94a3b8' }}>apagada</b> para ese contacto (si está prendida, la IA se encarga).
           </div>
         </div>
-
-        {/* 🚚 No depende de la configuración: se ve aunque esta no cargue. */}
-        <GuiasServientrega />
 
         {loading && <div style={{ color: '#475569', fontSize: 13, padding: 20 }}>Cargando…</div>}
 

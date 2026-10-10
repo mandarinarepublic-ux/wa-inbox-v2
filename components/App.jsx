@@ -20,6 +20,7 @@ import { hilosDelCanal } from '@/lib/hilos'
 import SocialInbox from '@/components/SocialInbox'
 import Contactos, { PlantillaModal } from '@/components/Contactos'
 import Automatizaciones from '@/components/Automatizaciones'
+import Guias from '@/components/Guias'
 import PushToggle from '@/components/PushToggle'
 import AvisoSesion from '@/components/AvisoSesion'
 import { actualizarNoLeidos, notificar } from '@/lib/notif'
@@ -203,7 +204,7 @@ export default function App() {
   // la misma vista de chat y solo cambia el canal. REPUBLIC antes leía WhatsApp
   // Web con una extensión de Chrome y un launcher en localhost:3098; ahora es
   // Cloud API como MANDI. Ver lib/canales.js.
-  const [linea, setLinea] = useState('MANDI') // 'MANDI' | 'REPUBLIC' | 'SOCIAL' | 'CONTACTOS' | 'AUTO' | 'FLUJOS'
+  const [linea, setLinea] = useState('MANDI') // 'MANDI' | 'REPUBLIC' | 'SOCIAL' | 'CONTACTOS' | 'AUTO' | 'FLUJOS' | 'GUIAS'
   // ☠️ FLUJOS NO SE MONTA HASTA QUE ALGUIEN ENTRA. Las demás pestañas viven
   // montadas detrás con `display:none`, pero esa es justo la forma de que un
   // `next/dynamic` NO ahorre nada: el trozo de React Flow (~150 kB gz) se
@@ -1998,7 +1999,7 @@ export default function App() {
     // Solo con el chat de WhatsApp a la vista: en SOCIAL / CONTACTOS /
     // AUTOMATIZACIONES / FLUJOS el chat sigue montado detrás, y pegar ahí dejaría una
     // foto encolada en una conversación que ni se está viendo.
-    if (!activeConv || ['SOCIAL', 'CONTACTOS', 'AUTO', 'FLUJOS'].includes(linea)) return
+    if (!activeConv || ['SOCIAL', 'CONTACTOS', 'AUTO', 'FLUJOS', 'GUIAS'].includes(linea)) return
     const alPegarEnLaPagina = (e) => {
       const el = e.target
       const escribiendo = el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)
@@ -2644,6 +2645,7 @@ export default function App() {
             { id:'CONTACTOS',label:'CONTACTOS',icon:'👥', color:'#38bdf8', sub:'Directorio' },
             { id:'AUTO',     label:'AUTOS',    icon:'⚙️', color:'#f59e0b', sub:'Reglas' },
             { id:'FLUJOS',   label:'FLUJOS',   icon:'🧭', color:'#a78bfa', sub:'Lienzo' },
+            { id:'GUIAS',    label:'GUÍAS',    icon:'🚚', color:'#10b981', sub:'Servientrega' },
           ].map(({ id, label, icon, color, sub, badge = 0, title, armado = false }) => (
             <button key={id} onClick={() => { if (cambiarLinea(id)) recordarLinea(id) }} title={title || label} style={{
               padding:'4px 16px', border:'none', cursor:'pointer', flexShrink:0, whiteSpace:'nowrap',
@@ -3300,6 +3302,11 @@ export default function App() {
         {/* ══════ FLUJOS ══════ — el lienzo de nodos */}
         <div style={{ flex:1, display: linea === 'FLUJOS' ? 'flex' : 'none', overflow:'hidden', height:'100%' }}>
           {flujosVisitado && <Flujos active={linea === 'FLUJOS'} />}
+        </div>
+
+        {/* 🚚 GUÍAS de Servientrega → CRM (components/Guias.jsx) */}
+        <div style={{ flex:1, display: linea === 'GUIAS' ? 'flex' : 'none', overflow:'hidden', height:'100%' }}>
+          <Guias active={linea === 'GUIAS'} />
         </div>
 
         </div>{/* fin app-shell */}
