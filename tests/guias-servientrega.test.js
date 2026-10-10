@@ -50,7 +50,7 @@ test('mismo nombre: todas las palabras del CRM tienen que estar en la guía', ()
 
 test('elige el pedido abierto más reciente sin guía', () => {
   const pedidos = [
-    { pedido_id: 'A', estado_pedido: 'COMPLETADO', fecha_pedido: '2026-10-05' },
+    { pedido_id: 'A', estado_pedido: 'ENTREGADO',  fecha_pedido: '2026-10-05' },
     { pedido_id: 'B', estado_pedido: 'EN_FABRICA', fecha_pedido: '2026-09-28' },
     { pedido_id: 'C', estado_pedido: 'DESPACHO',   fecha_pedido: '2026-10-01' },
   ]
@@ -60,4 +60,36 @@ test('elige el pedido abierto más reciente sin guía', () => {
   assert.equal(r.pedido, null)
   assert.match(r.motivo, /ya tiene guía/)
   assert.match(elegirPedido([]).motivo, /no tiene pedidos/)
+})
+
+// ── Los 3 casos reales que fallaron en la prueba del 9-oct ──────────────────
+
+test('celular ilegible: el nombre se encuentra encima de la DIRECCIÓN', () => {
+  const ocr = 'E RODRIGO CASTILLO 1\ne QUITO\nE\nE MARILYN VALENCIA DELGADO\n5 osese17en\n+ CDLALA PAZ CALLE QUITO Y CORDOBA EN LA VETERINARIA\n9 PETCENTER'
+  const o = extraerDeOcr(ocr, 'CDLA LA PAZ CALLE QUITO Y CORDOBA EN LA VETERINARIA PET CENTER')
+  assert.deepEqual(o.celulares, [])
+  assert.equal(o.nombre, 'MARILYN VALENCIA DELGADO')
+})
+
+test('línea vacía entre el nombre y el celular', () => {
+  const o = extraerDeOcr('$ RODRIGO CASTILLO 1\ne QUITO\n\no\n\nE NAHIM ALEXANDER ORDENANA\n\n0969496462\n\n+ CIUDADELA 9 DE OCTUBRE')
+  assert.deepEqual(o.celulares, ['0969496462'])
+  assert.equal(o.nombre, 'NAHIM ALEXANDER ORDENANA')
+})
+
+test('nombres casi iguales: una letra de diferencia o un nombre de menos', () => {
+  assert.equal(mismoNombre('Nahin Alexander Ordeñana Fajardo', 'NAHIM ALEXANDER ORDENANA'), true)
+  assert.equal(mismoNombre('Marilyn Alexandra Valencia Delgado', 'MARILYN VALENCIA DELGADO'), true)
+  assert.equal(mismoNombre('María Gabriela Calderón rosas ', 'MARIA GABRIELA CALDERON'), true)
+  assert.equal(mismoNombre('Marilyn Pérez Delgado', 'MARILYN VALENCIA DELGADO'), false)   // solo 2 de 3
+})
+
+test('COMPLETADO reciente sí recibe guía; uno viejo no', () => {
+  const ahora = Date.parse('2026-10-09T20:00:00Z')
+  const reciente = [{ pedido_id: 'M', estado_pedido: 'COMPLETADO', fecha_pedido: '2026-09-14T02:19:56Z' }]
+  assert.equal(elegirPedido(reciente, new Set(), ahora).pedido.pedido_id, 'M')
+  const viejo = [{ pedido_id: 'V', estado_pedido: 'COMPLETADO', fecha_pedido: '2026-07-01T00:00:00Z' }]
+  assert.equal(elegirPedido(viejo, new Set(), ahora).pedido, null)
+  const cancelado = [{ pedido_id: 'C', estado_pedido: 'CANCELADO', fecha_pedido: '2026-10-08T00:00:00Z' }]
+  assert.equal(elegirPedido(cancelado, new Set(), ahora).pedido, null)
 })

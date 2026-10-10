@@ -58,7 +58,7 @@ export default function GuiasServientrega() {
           <div style={{ fontSize: 12, color: '#64748b', marginTop: 3, lineHeight: 1.45 }}>
             Lee las guías que <b style={{ color: '#94a3b8' }}>Rodri VIP</b> reenvía a este chat (foto + texto de Servientrega),
             encuentra al cliente por el celular de la guía y la anota en su último pedido abierto
-            (EN_FABRICA o DESPACHO). No cambia el estado del pedido. Una guía ya registrada no se repite.
+            (EN_FABRICA, DESPACHO o COMPLETADO reciente). Si el celular no cuadra, la busca por nombre. No cambia el estado del pedido. Una guía ya registrada no se repite.
           </div>
         </div>
       </div>
