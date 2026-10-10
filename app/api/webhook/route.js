@@ -5,6 +5,7 @@ import { identificadorEntrante, perfilesDeContactos } from '@/lib/cliente-sin-te
 import { decidirReceta, piezasDeReceta, textoAvisoAnuncioNuevo, esc } from '@/lib/recetas'
 import { elegirFlujo, caminoLineal, decidirEntranteEnFlujo, elegirFlujoPorBoton, tituloBotonTocado, nodoDisparador } from '@/lib/flujo'
 import { correrTanda } from '@/lib/flujo-motor'
+import { mandarEscribiendo } from '@/lib/escribiendo'
 import { getEstadoFlujo, guardarEstadoFlujo, borrarEstadoFlujo, registrarPasos } from '@/lib/flujos'
 import { getRespuestas } from '@/lib/respuestas'
 import { enviarTelegram } from '@/lib/telegram'
@@ -333,6 +334,7 @@ async function procesar(nuevos, origin) {
   // automático: así NO reinicia el enfriamiento del push ni borra el estado.
   const depsFlujo = {
     enviar: (p) => enviarSaliente(origin, p),
+    escribiendo: mandarEscribiendo,
     guardarEstado: guardarEstadoFlujo,
     borrarEstado: borrarEstadoFlujo,
     registrarPasos,

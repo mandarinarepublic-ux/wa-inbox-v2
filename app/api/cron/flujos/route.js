@@ -7,6 +7,7 @@ import { getFlujosPublicadosSupabase } from '@/lib/inbox-supabase'
 import { getEstadosVencidos, borrarEstadosCaducados, borrarEstadoFlujo, guardarEstadoFlujo, registrarPasos } from '@/lib/flujos'
 import { decidirVencido } from '@/lib/flujo'
 import { correrTanda } from '@/lib/flujo-motor'
+import { mandarEscribiendo } from '@/lib/escribiendo'
 import { enviarSaliente } from '@/lib/responder-ia'
 import { enviarTelegram } from '@/lib/telegram'
 import { CUENTA } from '@/lib/supabase'
@@ -50,6 +51,7 @@ export async function GET(req) {
   ])
   const deps = {
     enviar: (p) => enviarSaliente(origin, p),
+    escribiendo: mandarEscribiendo,
     guardarEstado: guardarEstadoFlujo,
     borrarEstado: borrarEstadoFlujo,
     registrarPasos,

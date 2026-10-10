@@ -116,3 +116,46 @@ test('correrTanda: espera las pausas en segundos ANTES de cada pieza y no manda 
   assert.ok(reg.enviadas.every(p => !('_esperaSeg' in p)))
   assert.equal(reg.enviadas[0].ContextoId, 'w')
 })
+
+test('correrTanda: en cada pausa manda "escribiendo…" sobre el mensaje del cliente, renovado cada 20 s', async () => {
+  const { deps, reg } = depsFalsas()
+  deps.dormir = async (ms) => { reg.orden.push(`dormir ${ms}`) }
+  deps.escribiendo = async (a) => { reg.orden.push(`escribiendo ${a.wamid} ${a.phoneId}`); return { ok: true } }
+  const grafo = { nodos: [D({ tipo: 'organico' }), M('a', {}), M('b', {}), M('c', {}), F], lineas: [{ ...L('d', 'a'), esperaSeg: 5 }, L('a', 'b'), { ...L('b', 'c'), esperaSeg: 25 }, L('c', 'f')] }
+  await correrTanda(deps, { flujo: flujo(grafo), desde: desdeD, esDisparo: true, contacto, wamidEntrante: 'w-in', ultimoWamid: 'w-in', respuestas: [] })
+  await new Promise((r) => setImmediate(r))
+  const e = `escribiendo w-in ${contacto.phoneId}`
+  assert.deepEqual(reg.orden.filter(x => x !== 'borrar'), [
+    e, 'dormir 5000', 'enviar',
+    'enviar',                                   // sin pausa → sin "escribiendo…"
+    e, 'dormir 20000', e, 'dormir 5000', 'enviar', // 25 s → se renueva a los 20
+  ])
+})
+
+test('correrTanda: el cron (sin entrante) usa el último wamid guardado; sin wamid solo hay pausa', async () => {
+  const grafo = { nodos: [D({ tipo: 'organico' }), M('a', {}), F], lineas: [{ ...L('d', 'a'), esperaSeg: 3 }, L('a', 'f')] }
+  const uno = depsFalsas()
+  const vistos = []
+  uno.deps.dormir = async () => {}
+  uno.deps.escribiendo = async (a) => { vistos.push(a.wamid); return { ok: true } }
+  await correrTanda(uno.deps, { flujo: flujo(grafo), desde: desdeD, esDisparo: false, contacto, wamidEntrante: '', ultimoWamid: 'w-viejo', respuestas: [] })
+  assert.deepEqual(vistos, ['w-viejo'])
+
+  const dos = depsFalsas()
+  let llamado = false
+  dos.deps.dormir = async () => {}
+  dos.deps.escribiendo = async () => { llamado = true; return { ok: true } }
+  const r = await correrTanda(dos.deps, { flujo: flujo(grafo), desde: desdeD, esDisparo: false, contacto, wamidEntrante: '', ultimoWamid: '', respuestas: [] })
+  assert.equal(llamado, false)
+  assert.equal(r.salieron, 1)
+})
+
+test('correrTanda: si el "escribiendo…" falla o lanza, el flujo sale igual', async () => {
+  const { deps, reg } = depsFalsas()
+  deps.dormir = async () => {}
+  deps.escribiendo = async () => { throw new Error('Meta caída') }
+  const grafo = { nodos: [D({ tipo: 'organico' }), M('a', {}), F], lineas: [{ ...L('d', 'a'), esperaSeg: 3 }, L('a', 'f')] }
+  const r = await correrTanda(deps, { flujo: flujo(grafo), desde: desdeD, esDisparo: true, contacto, wamidEntrante: 'w', ultimoWamid: 'w', respuestas: [] })
+  assert.equal(r.salieron, 1)
+  assert.equal(reg.enviadas.length, 1)
+})
