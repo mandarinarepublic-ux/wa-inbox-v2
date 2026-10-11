@@ -9,7 +9,8 @@
 // que llevan estado propio acá adentro (la palabra a medio escribir, el número de
 // la espera) tienen que arrancar limpios al saltar a otro nodo. Sin esa `key`,
 // React reusaría el componente y se vería la palabra del nodo anterior.
-import React, { useState } from 'react'
+import React, { useState, useRef } from 'react'
+import { subirAdjunto } from '@/lib/subir-adjunto'
 import { MAX_BOTONES, MAX_TITULO } from '@/lib/recetas'
 import { MAX_ESPERA_MIN, MAX_ESPERA_SEG, MAX_PAUSA_TANDA_SEG } from '@/lib/flujo'
 import { adjuntosDeRespuesta } from '@/lib/adjuntos-respuesta'
@@ -180,6 +181,28 @@ function EditorMensaje({ datos, respuestas, onCambiar }) {
   const cambiarAdjunto = (i, parcial) =>
     onCambiar({ adjuntos: adjuntos.map((a, j) => (j === i ? { ...a, ...parcial } : a)) })
 
+  // 📎 Subir un archivo de la compu o del celular (antes solo había URL). Uno a la
+  // vez: mientras sube, los botones de adjuntos se apagan, así `adjuntos` no
+  // cambia por debajo. `onCambiar` es el del render del clic, o sea el del nodo
+  // donde se tocó, aunque mientras tanto se elija otro (ver cambiarNodo).
+  const archivoRef = useRef(null)
+  const [subiendo, setSubiendo] = useState(false)
+  const [errorSubida, setErrorSubida] = useState('')
+  const alElegirArchivo = async (e) => {
+    const f = e.target.files?.[0]
+    e.target.value = ''   // permite volver a elegir el mismo archivo
+    if (!f) return
+    setSubiendo(true); setErrorSubida('')
+    try {
+      const nuevo = await subirAdjunto(f)
+      onCambiar({ adjuntos: [...adjuntos, nuevo] })
+    } catch (err) {
+      setErrorSubida(err?.message || 'No se pudo subir el archivo')
+    } finally {
+      setSubiendo(false)
+    }
+  }
+
   return (
     <>
       <Bloque titulo="QUÉ MANDA">
@@ -230,9 +253,17 @@ function EditorMensaje({ datos, respuestas, onCambiar }) {
                   title="Quitar" style={{ ...estiloBotonChico, flexShrink: 0 }}>✕</button>
               </div>
             ))}
-            <button onClick={() => onCambiar({ adjuntos: [...adjuntos, { url: '', tipo: 'imagen' }] })} style={estiloBotonChico}>
-              + Adjunto por URL
-            </button>
+            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+              <button onClick={() => archivoRef.current?.click()} disabled={subiendo}
+                style={{ ...estiloBotonChico, opacity: subiendo ? 0.6 : 1, cursor: subiendo ? 'wait' : 'pointer' }}>
+                {subiendo ? '⏳ Subiendo…' : '📎 Subir archivo'}
+              </button>
+              <button onClick={() => onCambiar({ adjuntos: [...adjuntos, { url: '', tipo: 'imagen' }] })} disabled={subiendo} style={estiloBotonChico}>
+                + Adjunto por URL
+              </button>
+              <input ref={archivoRef} type="file" style={{ display: 'none' }} onChange={alElegirArchivo} />
+            </div>
+            {errorSubida && <div style={{ fontSize: 11, color: '#f87171', marginTop: 5 }}>⚠️ {errorSubida}</div>}
             <div style={{ fontSize: 10, color: '#64748b', marginTop: 5 }}>
               Salen en este orden, uno por mensaje: es el orden en que los ve el cliente.
             </div>
