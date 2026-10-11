@@ -409,7 +409,7 @@ const CATALOGO_LABEL = 'Mandarina'
 // (WhatsApp), así App.jsx sigue igual sin tocar una línea. SOCIAL pasa un subconjunto:
 // nunca 'ventas' (escribiría contactos basura con el sender_id como si fuera teléfono),
 // y en un hilo de COMENTARIO tampoco 'tienda' (es público).
-export default function RightPanel({ activeConv, onQuickReply, onSendText, onSendImage, onSendProducto, contactInfo, onUpdateContact, windowOpen, ventanaPautaHasta = null, onPedidoManual, onVerPedido, onEnviarHojaPedido, pestanas = ['respuestas', 'ventas', 'tienda'] }) {
+export default function RightPanel({ activeConv, onQuickReply, onSendText, onSendImage, onSendProducto, contactInfo, onUpdateContact, windowOpen, ventanaPautaHasta = null, onPedidoManual, onVerPedido, onEnviarHojaPedido, onEnviandoHoja, pestanas = ['respuestas', 'ventas', 'tienda'] }) {
   const [tab, setTab]           = useState(pestanas[0] || 'respuestas')
   // El panel NO se desmonta al cambiar de conversación (SOCIAL reutiliza la misma
   // instancia entre chats): si `tab` quedó en una pestaña que la conversación nueva
@@ -645,6 +645,16 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
   // al chat ABIERTO, así que una hoja que termine de armarse después le llegaría
   // a OTRO cliente. Desmontar el iframe escondido mata el envío en vuelo.
   useEffect(() => { setHojaEnvio(null) }, [activeConv?.telefono])
+  // Avisarle al chat (App) que hay una hoja saliendo, para la burbuja que titila.
+  // Hay DOS paneles montados (escritorio y celular): cada uno avisa solo cuando
+  // SU envío cambia, y solo apaga el aviso si él lo había prendido — si no, el
+  // panel que no está enviando lo borraría al montarse.
+  const avisoHojaRef = useRef(false)
+  useEffect(() => {
+    const enviando = hojaEnvio?.estado === 'enviando'
+    if (enviando) { avisoHojaRef.current = true; onEnviandoHoja?.({ tel: hojaEnvio.tel, id: hojaEnvio.id }) }
+    else if (avisoHojaRef.current) { avisoHojaRef.current = false; onEnviandoHoja?.(null) }
+  }, [hojaEnvio?.estado, hojaEnvio?.id])  // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cargar historial de pedidos al cambiar de contacto (una sola vez por teléfono).
   // Solo tiene sentido si la pestaña Ventas está habilitada: en SOCIAL no lo está

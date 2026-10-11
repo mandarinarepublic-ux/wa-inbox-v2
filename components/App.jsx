@@ -300,6 +300,9 @@ export default function App() {
   // es el del asa del panel derecho.
   const [soltarAqui,   setSoltarAqui]   = useState(false)
   const [filtro,       setFiltro]       = useState(FILTRO_INICIAL)
+  // 📤 Enviar del historial en curso: { tel, id } o null. Lo avisa RightPanel y se
+  // pinta como burbuja verde titilando en el chat (la hoja tarda unos segundos).
+  const [hojaEnviando, setHojaEnviando] = useState(null)
   // Botón ⇅ de Pendientes: false = cola (el que más espera arriba, como siempre),
   // true = el que escribió último arriba. Se recuerda en ESTE navegador.
   const [pendNuevosArriba, setPendNuevosArriba] = useState(false)
@@ -3015,8 +3018,19 @@ export default function App() {
                   </div>
                 </div>
               )}
-              <Toast result={toast} />
-              <div ref={endRef} />
+              {/* 📤 Enviar del historial: la hoja tarda unos segundos (el CRM la
+                  arma en un iframe escondido). Se avisa ACÁ, en el chat, que es
+                  donde se mira — no solo en la tarjeta del panel derecho. */}
+              {hojaEnviando && activeConv && hojaEnviando.tel === activeConv.telefono && (
+                <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:4 }}>
+                  <div style={{ background:'#0d4f3c', borderRadius:'18px 18px 4px 18px', padding:'9px 14px', border:'1px solid rgba(37,211,102,.35)' }}>
+                    <span style={{ color:'#25d366', fontSize:12, fontWeight:800, letterSpacing:'.04em', animation:'blink 1s infinite' }}>
+                      📤 ENVIANDO FOTO DEL PEDIDO {hojaEnviando.id}…
+                    </span>
+                  </div>
+                </div>
+              )}
+              <Toast result={toast} />              <div ref={endRef} />
             </div>
 
             <div className="input-bar" style={{ position:'relative' }}>
@@ -3278,6 +3292,7 @@ export default function App() {
                 onPedidoManual={alPedidoManualEscritorio}
                 onVerPedido={alVerPedidoEscritorio}
                 onEnviarHojaPedido={handleEnviarHojaPedido}
+                onEnviandoHoja={setHojaEnviando}
               />
             </div>
           </div>
@@ -3299,6 +3314,7 @@ export default function App() {
               onPedidoManual={alPedidoManualCajon}
               onVerPedido={alVerPedidoCajon}
               onEnviarHojaPedido={handleEnviarHojaPedido}
+              onEnviandoHoja={setHojaEnviando}
             />
           </div>
         )}
