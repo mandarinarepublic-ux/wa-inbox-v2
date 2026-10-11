@@ -3,7 +3,8 @@ import { urlPropia } from '@/lib/url-propia'
 import { getContactos, updateEtapa, updateDeuda } from '@/lib/contactos'
 import { getAutomatizaciones } from '@/lib/automatizaciones'
 import { getRespuestas } from '@/lib/respuestas'
-import { getFlujosPublicadosSupabase } from '@/lib/inbox-supabase'
+import { getFlujosPublicadosSupabase, getCandidatosRecordatorioFlujoSupabase, reclamarRecordatorioFlujoSupabase } from '@/lib/inbox-supabase'
+import { correrRecordatorioFlujo } from '@/lib/recordatorio-flujo'
 import { getEstadosVencidos, borrarEstadosCaducados, borrarEstadoFlujo, guardarEstadoFlujo, registrarPasos } from '@/lib/flujos'
 import { decidirVencido } from '@/lib/flujo'
 import { correrTanda } from '@/lib/flujo-motor'
@@ -39,9 +40,18 @@ export async function GET(req) {
   const ahora = new Date()
   const caducados = await borrarEstadosCaducados(ahora.toISOString())
     .catch(e => { console.error('[/api/cron/flujos] caducados:', e.message); return { borrados: -1 } })
+  // Recordatorio de 12 h tras un flujo (lib/recordatorio-flujo.js): UNA vez por
+  // cliente, con grupo de control. Va ANTES del `return` de "no hay vencidos":
+  // casi siempre no hay, y ahí se quedaba sin correr. Un fallo acá no frena los flujos.
+  const recordatorio = await correrRecordatorioFlujo({
+    candidatos: (h) => getCandidatosRecordatorioFlujoSupabase(h),
+    reclamar: (tel, d) => reclamarRecordatorioFlujoSupabase(tel, d),
+    enviar: (cuerpo) => enviarSaliente(origin, cuerpo),
+  }, cfg.recordatorio_flujo, ahora).catch(e => { console.error('[/api/cron/flujos] recordatorio:', e.message); return { error: e.message } })
+
   const vencidos = await getEstadosVencidos(ahora.toISOString(), 40)
     .catch(e => { console.error('[/api/cron/flujos] vencidos:', e.message); return [] })
-  if (!vencidos.length) return NextResponse.json({ ok: true, vencidos: 0, caducados: caducados.borrados })
+  if (!vencidos.length) return NextResponse.json({ ok: true, vencidos: 0, caducados: caducados.borrados, recordatorio })
 
   // `null` = contactos de TODOS los números: cada envío sale por el canal de ese cliente.
   const [flujos, contactos, respuestas] = await Promise.all([
@@ -98,5 +108,5 @@ export async function GET(req) {
     await Promise.all(vencidos.slice(i, i + 20).map(procesarUno))
   }
   console.log('[/api/cron/flujos]', `vencidos ${vencidos.length} · seguidos ${seguidos.length} · borrados ${borrados.length} · caducados ${caducados.borrados}`)
-  return NextResponse.json({ ok: true, vencidos: vencidos.length, seguidos, borrados, caducados: caducados.borrados })
+  return NextResponse.json({ ok: true, vencidos: vencidos.length, seguidos, borrados, caducados: caducados.borrados, recordatorio })
 }
