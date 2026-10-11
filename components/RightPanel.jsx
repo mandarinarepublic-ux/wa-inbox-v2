@@ -8,6 +8,7 @@ import { adjuntosDeRespuesta, moverAdjunto } from '@/lib/adjuntos-respuesta'
 import Notas from './Notas'
 import PedidoManual from './PedidoManual'
 import VerPedido from './VerPedido'
+import EnviarHojaOculta from './EnviarHojaOculta'
 import { textoNotaPedido } from '@/lib/pedido-manual'
 import { parseDate } from '@/lib/utils'
 import { moverItem } from '@/lib/orden-lista'
@@ -298,7 +299,7 @@ function BotonesEditor({ botones, onChange }) {
 }
 
 // ── Tarjeta de un pedido del historial (MANDARINACRM) ────────────
-function PedidoCard({ p, onVer }) {
+function PedidoCard({ p, onVer, onEnviar, envio, puedeEnviar }) {
   const est       = String(p.estado || '').toUpperCase()
   const pago      = String(p.estadoPago || '').toUpperCase()
   const entregado = /ENTREG/.test(est)
@@ -330,13 +331,27 @@ function PedidoCard({ p, onVer }) {
             te sacaba del chat justo cuando estás atendiendo. Se necesita el
             número de pedido, que es con lo que se arma la url (ver
             `urlVerPedido`); sin número no hay a dónde ir y no se pinta. */}
+        {/* 📤 Enviar: la hoja al cliente SIN abrir el pedido (EnviarHojaOculta). */}
+        {p.id && onEnviar && (
+          <button onClick={() => onEnviar(p.id)} disabled={!puedeEnviar || envio?.estado === 'enviando'}
+            title={puedeEnviar ? 'Enviar la foto del pedido al cliente' : 'Ventana cerrada o ya hay un envío en curso'}
+            style={{ marginLeft:'auto', background: puedeEnviar ? 'rgba(37,211,102,.12)' : 'transparent', border:`1px solid ${puedeEnviar ? 'rgba(37,211,102,.4)' : '#1e2d3d'}`, borderRadius:5, padding:'1px 7px', fontSize:9, fontWeight:700, color: puedeEnviar ? '#25d366' : '#475569', cursor: puedeEnviar ? 'pointer' : 'default', fontFamily:'inherit' }}>
+            {envio?.estado === 'enviando' ? '⏳ Enviando…' : '📤 Enviar'}
+          </button>
+        )}
         {p.id && onVer && (
           <button onClick={() => onVer(p.id)} title="Ver el pedido acá mismo"
-            style={{ marginLeft:'auto', background:'transparent', border:'none', padding:0, fontSize:9, fontWeight:700, color:'#60a5fa', cursor:'pointer', fontFamily:'inherit' }}>
+            style={{ marginLeft: onEnviar ? 0 : 'auto', background:'transparent', border:'none', padding:0, fontSize:9, fontWeight:700, color:'#60a5fa', cursor:'pointer', fontFamily:'inherit' }}>
             Ver →
           </button>
         )}
       </div>
+      {envio?.estado === 'ok' && (
+        <div style={{ fontSize:10, color:'#25d366', fontWeight:700, marginTop:4 }}>✅ Hoja enviada al chat.</div>
+      )}
+      {envio?.estado === 'error' && (
+        <div style={{ fontSize:10, color:'#f87171', fontWeight:700, marginTop:4 }}>❌ NO se envió: {envio.msg}. El cliente no la recibió.</div>
+      )}
     </div>
   )
 }
@@ -506,6 +521,16 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
   const [historial,   setHistorial]   = useState(null)  // null = cargando
   const [histError,   setHistError]   = useState(false)
   const histLoadedRef = useRef(null)
+  // 📤 Enviar del historial: { id, estado:'enviando'|'ok'|'error', msg?, tel }.
+  // Uno a la vez: dos iframes escondidos armando hojas a la vez es lento y confuso.
+  const [hojaEnvio, setHojaEnvio] = useState(null)
+  const enviarHojaDesdeHistorial = (id) => {
+    if (hojaEnvio?.estado === 'enviando') return
+    // El mismo «¿seguro?» que el botón de adentro del pedido: es una foto a un
+    // cliente REAL y no se puede deshacer.
+    if (!window.confirm(`¿Estás seguro que quieres enviar la foto del pedido ${id} al cliente?`)) return
+    setHojaEnvio({ id, estado: 'enviando', tel: activeConv?.telefono })
+  }
 
   // ── Catálogo TIENDA (Shopify) ────────────────────────────────
   const [fuente,        setFuente]        = useState('shopify') // 'shopify' | 'sucursal'
@@ -616,6 +641,10 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
   // único que la vuelve a inicializar. Sin esto te quedarías mirando el pedido
   // del cliente anterior mientras la cabecera dice otro nombre.
   useEffect(() => { setVerPedidoId(null) }, [activeConv?.telefono])
+  // ☠️ Cambiar de chat CANCELA el 📤 Enviar del historial: onEnviarHojaPedido manda
+  // al chat ABIERTO, así que una hoja que termine de armarse después le llegaría
+  // a OTRO cliente. Desmontar el iframe escondido mata el envío en vuelo.
+  useEffect(() => { setHojaEnvio(null) }, [activeConv?.telefono])
 
   // Cargar historial de pedidos al cambiar de contacto (una sola vez por teléfono).
   // Solo tiene sentido si la pestaña Ventas está habilitada: en SOCIAL no lo está
@@ -794,6 +823,21 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
 
   return (
     <div style={{ display:'flex', flexDirection:'column', height:'100%', background:'#07111d', overflow:'hidden' }}>
+
+      {/* El pedido escondido del 📤 Enviar del historial. Va AQUÍ, en la raíz, y
+          no junto al historial: las pestañas y el bloque de notas+historial se
+          esconden con display:none, y dentro de eso el CRM no se pinta y no puede
+          capturar la hoja. Se desmonta al terminar o al cambiar de chat. */}
+      {hojaEnvio?.estado === 'enviando' && (
+        <EnviarHojaOculta pedidoId={hojaEnvio.id}
+          // Última guardia antes de mandar: la hoja va al chat ABIERTO, así que
+          // tiene que seguir siendo el chat donde se tocó el botón.
+          onEnviarHoja={(hoja) => (activeConv?.telefono === hojaEnvio.tel
+            ? onEnviarHojaPedido(hoja)
+            : { ok: false, error: 'cambiaste de chat antes de que saliera; no se envió' })}
+          onListo={(r) => setHojaEnvio(h => (h && h.id === hojaEnvio.id
+            ? { ...h, estado: r?.ok ? 'ok' : 'error', msg: r?.error || '' } : h))} />
+      )}
 
       {/* ── HEADER FIJO: INFO CONTACTO + VENTANA ── */}
       {/* Se esconde mientras el PEDIDO MANUAL está abierto: con el formulario a
@@ -1253,7 +1297,12 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                       {historial.totalPedidos} pedido{historial.totalPedidos === 1 ? '' : 's'} · <strong style={{ color:'#10b981' }}>${historial.totalGastado.toFixed(2)}</strong> total
                     </div>
                     <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-                      {historial.pedidos.map(p => <PedidoCard key={p.id} p={p} onVer={setVerPedidoId} />)}
+                      {historial.pedidos.map(p => (
+                        <PedidoCard key={p.id} p={p} onVer={setVerPedidoId}
+                          onEnviar={onEnviarHojaPedido ? enviarHojaDesdeHistorial : null}
+                          puedeEnviar={!!windowOpen && hojaEnvio?.estado !== 'enviando'}
+                          envio={hojaEnvio?.id === p.id && hojaEnvio?.tel === activeConv?.telefono ? hojaEnvio : null} />
+                      ))}
                     </div>
                   </>
                 )}

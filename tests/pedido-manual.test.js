@@ -426,3 +426,20 @@ test('casi no queda vacío a los lados', () => {
   assert.ok(vacioPorLado < 40, `quedan ${vacioPorLado}px de vacío por lado`)
   assert.ok(vacioPorLado > 0, 'el formulario no puede quedar más ancho que el panel')
 })
+
+// ── Botón «📤 Enviar» del historial: el pedido escondido que manda la hoja solo ──
+import { leerHojaFallida, urlEnviarHoja } from '../lib/pedido-manual.js'
+
+test('urlEnviarHoja: la url del pedido en embed con autoenviar=1', () => {
+  assert.equal(urlEnviarHoja('MAN-AND-6304'), 'https://crm.apps.mandarinaec.com/dashboard/pedido/MAN-AND-6304?embed=1&autoenviar=1')
+  assert.equal(urlEnviarHoja(''), '')
+})
+
+test('leerHojaFallida: solo del CRM y con la forma exacta', () => {
+  const ok = { origin: 'https://crm.apps.mandarinaec.com', data: { tipo: 'hoja-pedido-error', pedidoId: 'P-1', motivo: 'sin prendas' } }
+  assert.deepEqual(leerHojaFallida(ok), { pedidoId: 'P-1', motivo: 'sin prendas' })
+  assert.equal(leerHojaFallida({ ...ok, origin: 'https://otro.com' }), null)
+  assert.equal(leerHojaFallida({ ...ok, data: { ...ok.data, tipo: 'hoja-pedido' } }), null)
+  assert.equal(leerHojaFallida({ ...ok, data: { tipo: 'hoja-pedido-error' } }), null)
+  assert.equal(leerHojaFallida(null), null)
+})

@@ -63,9 +63,11 @@ export default function Notas({ telefono, refrescar = 0, onVerPedido }) {
     try {
       const lista = await fetchNotas(telefono)
       setNotas(lista)
-      // La más reciente abierta de entrada: es la que casi siempre se viene a
-      // leer, y si es la única no tiene sentido un click para verla.
-      setAbiertas(lista.length ? new Set([lista[0].id]) : new Set())
+      // TODAS cerradas de entrada (pedido de Rodrigo, oct-2026). Antes la más
+      // reciente se abría sola, y la nota 📦 que deja cada pedido nuevo ocupaba
+      // media pestaña VENTAS empujando el historial hacia abajo. Cerrada se sigue
+      // leyendo su primera línea.
+      setAbiertas(new Set())
     } catch (e) {
       setError(e.message)
     } finally {

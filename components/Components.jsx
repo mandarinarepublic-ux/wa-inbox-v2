@@ -899,6 +899,23 @@ export function MessageBubble({ msg, allMsgs, onResponder, onAbrirChat, onReenvi
         marginBottom: reaccion ? 12 : 0,
       }}>
 
+        {/* Reacciones: aparecen SOLO en el mensaje que tocaste, ARRIBA del contenido,
+            lejos del "↩ Responder" de abajo. Se van al usarlas o al tocar de nuevo. */}
+        {accion && onReaccionar && (
+          <div style={{ display:'flex', gap:2, justifyContent:'flex-start', marginBottom:8, paddingBottom:6, borderBottom:'1px solid #1e2d3d', flexWrap:'wrap' }}>
+            {EMOJIS_REACCION.map((e) => (
+              <button key={e}
+                onClick={(ev) => { ev.stopPropagation(); setAccion(false); onReaccionar(e) }}
+                title={reaccion === e ? 'Quitar reacción' : 'Reaccionar'}
+                style={{
+                  background: reaccion === e ? 'rgba(37,211,102,.22)' : 'rgba(255,255,255,.05)',
+                  border: `1px solid ${reaccion === e ? 'rgba(37,211,102,.6)' : '#1e2d3d'}`,
+                  borderRadius: 14, padding: '2px 7px', fontSize: 16, lineHeight: 1.3, cursor: 'pointer',
+                }}>{e}</button>
+            ))}
+          </div>
+        )}
+
         {msg.referral && <ReferralCard referral={msg.referral} />}
 
         {msg.contextoId && (
@@ -987,21 +1004,8 @@ export function MessageBubble({ msg, allMsgs, onResponder, onAbrirChat, onReenvi
           {isMe && <Ticks estado={msg.estadoEntrega} />}
         </div>
 
-        {/* Aparece SOLO en el mensaje que tocaste. Se va al usarlo o al tocar de nuevo. */}
-        {accion && onReaccionar && (
-          <div style={{ display:'flex', gap:2, justifyContent:'flex-start', marginTop:6, flexWrap:'wrap' }}>
-            {EMOJIS_REACCION.map((e) => (
-              <button key={e}
-                onClick={(ev) => { ev.stopPropagation(); setAccion(false); onReaccionar(e) }}
-                title={reaccion === e ? 'Quitar reacción' : 'Reaccionar'}
-                style={{
-                  background: reaccion === e ? 'rgba(37,211,102,.22)' : 'rgba(255,255,255,.05)',
-                  border: `1px solid ${reaccion === e ? 'rgba(37,211,102,.6)' : '#1e2d3d'}`,
-                  borderRadius: 14, padding: '2px 7px', fontSize: 16, lineHeight: 1.3, cursor: 'pointer',
-                }}>{e}</button>
-            ))}
-          </div>
-        )}
+        {/* ↩ Responder va ABAJO y las reacciones ARRIBA (al inicio de la burbuja):
+            juntas abajo, se tocaba un emoji queriendo responder (oct-2026). */}
         {accion && onResponder && (
           <div style={{ display:'flex', justifyContent: isMe ? 'flex-start' : 'flex-end', marginTop: 6 }}>
             <button
