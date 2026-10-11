@@ -11,8 +11,8 @@ import { urlEnviarHoja, leerHojaPedido, leerHojaFallida } from '@/lib/pedido-man
 // botón de adentro. De ahí en adelante es el MISMO camino que VerPedido
 // (`onEnviarHoja` → la foto al chat), con las mismas validaciones.
 //
-// Escondido pero con tamaño real (no display:none): html2canvas necesita que la
-// pantalla del CRM se haya pintado para poder capturar la hoja.
+// Invisible pero DENTRO de la pantalla y con tamaño real (no display:none, no
+// fuera de pantalla): html2canvas necesita que la pantalla del CRM se pinte.
 //
 // `onListo({ ok, error? })` se llama UNA vez: al mandar, al fallar o al vencer el
 // tiempo. El padre desmonta este componente al recibirlo.
@@ -62,7 +62,11 @@ export default function EnviarHojaOculta({ pedidoId, onEnviarHoja, onListo }) {
       title={`Enviando la hoja del pedido ${pedidoId}`}
       aria-hidden="true"
       tabIndex={-1}
-      style={{ position: 'fixed', left: -10000, top: 0, width: 900, height: 1200, border: 0, opacity: 0, pointerEvents: 'none' }}
+      // DENTRO de la pantalla, transparente, detrás de todo y sin tomar clics.
+      // ☠️ NO fuera de pantalla (left:-10000): Chrome congela los iframes de otro
+      // sitio que no se ven — no corre requestAnimationFrame — y el CRM nunca
+      // armaba la hoja (oct-2026, el inbox cortaba a los 45 s).
+      style={{ position: 'fixed', left: 0, top: 0, width: 900, height: 1200, border: 0, opacity: 0, pointerEvents: 'none', zIndex: -1 }}
     />
   )
 }
