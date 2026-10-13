@@ -8,7 +8,8 @@
 //   node scripts/enviar-lote.mjs lote.json            → ensayo: revisa y NO manda
 //   node scripts/enviar-lote.mjs lote.json --enviar   → manda de verdad
 //
-// lote.json = [{ telefono, phone_id, nombre, texto, entrante_at, saliente_at }]
+// lote.json = [{ telefono, phone_id, nombre, texto, entrante_at, saliente_at, pauta_vence_en? }]
+// pauta_vence_en (de inbox.lista_bandeja) deja escribir hasta 7 días a quien vino de un anuncio.
 // Justo antes de cada envío relee el hilo y decide con lib/lote-envio.js.
 // El resultado queda en <lote>.resultado.json con el wamid de cada envío, para
 // verificar la entrega en inbox.webhook_eventos (un 200 no es prueba de entrega).
@@ -66,7 +67,7 @@ async function main() {
       // fetch no lanza con 4xx/5xx: un 401 aquí es la clave mala, no "chat vacío".
       if (!rh.ok) throw new Error(`no se pudo leer el chat (HTTP ${rh.status})`)
       const hilo = await rh.json()
-      const r = revisarAntesDeEnviar({ hilo, entranteEsperadoAt: d.entrante_at, salienteEsperadoAt: d.saliente_at, texto: d.texto })
+      const r = revisarAntesDeEnviar({ hilo, entranteEsperadoAt: d.entrante_at, salienteEsperadoAt: d.saliente_at, texto: d.texto, pautaVenceEn: d.pauta_vence_en })
       if (!r.ok) {
         console.log(`⏭  ${quien}: ${r.motivo}`)
         resultado.push({ ...d, estado: 'saltado', motivo: r.motivo })

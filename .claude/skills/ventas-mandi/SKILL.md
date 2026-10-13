@@ -16,8 +16,12 @@ de Anthropic**: el costo es el plan de Claude. (El diseño del asistente embebid
 
 1. **Nada sale sin un "dale" explícito de Rodrigo** para ESE lote. Primero se le muestra la lista y
    los textos; aprobar un lote no aprueba el siguiente.
-2. **Solo dentro de la ventana de 24 h.** Fuera de ella solo se puede con plantilla aprobada (cuesta
-   y es otro camino: `contactos`/plantillas del inbox).
+2. **Solo con la ventana abierta**: 24 h desde el último mensaje del cliente, o la **ventana de
+   pauta** (7 días de texto libre gratis a quien llegó de un anuncio, PROBADO 7-oct). El
+   vencimiento real lo da Meta: `inbox.bandeja.pauta_vence_en` (por teléfono + `phone_id`); va en el
+   lote como `pauta_vence_en` y `lib/lote-envio.js` usa la mayor de las dos. Fuera de ambas, solo
+   plantilla aprobada (cuesta). ☠️ En el primer lote fuera de 24 h: mandar UNO solo, verificar
+   `delivered` y recién ahí el resto (un 131047 = la ventana no estaba abierta).
 3. **Quien habló último NO recibe un mensaje de retoma**: espera a una persona. Se le entrega a
    Rodrigo como lista aparte ("esperan respuesta").
 4. Nunca a 🤫 (`sin_automaticos`), internos (`tipo_contacto='interno'`) ni a quien compró en los
@@ -78,7 +82,7 @@ solo 10 % en pregunta; 4 % recibió seguimiento. Comparar contra estos números 
 ## Envío en lote
 
 1. Armar `lote.json` en el scratchpad (NO en el repo; lleva teléfonos):
-   `[{ "telefono", "phone_id", "nombre", "texto", "entrante_at", "saliente_at" }]`,
+   `[{ "telefono", "phone_id", "nombre", "texto", "entrante_at", "saliente_at", "pauta_vence_en" }]`,
    con `entrante_at` y `saliente_at` tal cual salieron de la consulta. Si un vendedor le escribe
    a mano entre la lista y el envío, el script lo salta (25-sep: pasó con 3 clientes).
    ☠️ Al mostrarle textos a Rodrigo para que copie, NO usar citas `>` de markdown: la terminal

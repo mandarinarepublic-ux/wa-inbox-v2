@@ -59,6 +59,39 @@ test('ventana a menos de 15 min de cerrarse → no se manda', () => {
   assert.match(r.motivo, /ventana/)
 })
 
+// Ventana de pauta (PROBADO 7-oct): quien llega de un anuncio tiene 7 días de texto
+// libre gratis. El vencimiento real viene de Meta (`lista_bandeja.pauta_vence_en`).
+const hiloPauta = [
+  { direccion: 'ENTRANTE', tipo: 'texto', mensaje: '¡Hola! Quiero más información.', timestamp: hace(50) },
+  { direccion: 'SALIENTE', tipo: 'texto', mensaje: 'cuál te gustó y para qué talla? 😊', timestamp: hace(50) },
+]
+
+test('pasaron las 24 h pero la ventana de pauta sigue abierta → se manda', () => {
+  const r = revisar({ hilo: hiloPauta, entranteEsperadoAt: hace(50), salienteEsperadoAt: hace(50), pautaVenceEn: hace(-118) })
+  assert.deepEqual(r, { ok: true })
+})
+
+test('pasaron las 24 h y sin ventana de pauta → no se manda', () => {
+  const r = revisar({ hilo: hiloPauta, entranteEsperadoAt: hace(50), salienteEsperadoAt: hace(50) })
+  assert.equal(r.ok, false)
+  assert.match(r.motivo, /ventana/)
+})
+
+test('ventana de pauta a menos de 15 min de cerrarse → no se manda', () => {
+  const r = revisar({ hilo: hiloPauta, entranteEsperadoAt: hace(50), salienteEsperadoAt: hace(50), pautaVenceEn: hace(-0.2) })
+  assert.equal(r.ok, false)
+  assert.match(r.motivo, /ventana/)
+})
+
+test('pauta vencida no acorta una ventana de 24 h abierta → se manda', () => {
+  assert.deepEqual(revisar({ pautaVenceEn: hace(1) }), { ok: true })
+})
+
+test('pauta_vence_en basura se ignora (no abre nada)', () => {
+  const r = revisar({ hilo: hiloPauta, entranteEsperadoAt: hace(50), salienteEsperadoAt: hace(50), pautaVenceEn: 'mañana' })
+  assert.equal(r.ok, false)
+})
+
 test('ya le mandamos este mismo texto antes (lista vieja) → no se repite', () => {
   const texto = '¡Hola Luis! Me quedé con la duda…'
   const hilo = [...hiloCallado, { direccion: 'SALIENTE', tipo: 'texto', mensaje: texto, timestamp: hace(0.5) }]
