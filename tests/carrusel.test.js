@@ -92,3 +92,8 @@ test('plantilla de carrusel: marketing, 2 tarjetas modelo, cuerpo que no termina
   assert.ok(!/\{\{\d+\}\}\s*$/.test(TEXTO_PLANTILLA_CARRUSEL))
   assert.ok(!/^\s*\{\{\d+\}\}/.test(TEXTO_PLANTILLA_CARRUSEL))
 })
+
+test('plantilla de carrusel: el botón spm dice "Ver" en español (Meta lo exige)', () => {
+  assert.equal(payloadCrearPlantillaCarrusel().components[1].cards[0].components[1].buttons[0].text, 'Ver')
+  assert.equal(payloadCrearPlantillaCarrusel('x', 'en_US').components[1].cards[0].components[1].buttons[0].text, 'View')
+})
