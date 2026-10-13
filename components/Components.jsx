@@ -715,7 +715,7 @@ function TextoConEnlaces({ texto }) {
 function CarruselCards({ c }) {
   return (
     <div style={{ marginTop: 7 }}>
-      <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4, maxWidth: 330 }}>
+      <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4, maxWidth: 330, scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,.25) transparent' }}>
         {c.carrusel.map((p) => (
           <div key={p.retailerId} title={p.nombre} style={{ flex: '0 0 104px', borderRadius: 9, overflow: 'hidden', background: 'rgba(0,0,0,.25)', border: '1px solid rgba(255,255,255,.08)' }}>
             {p.foto

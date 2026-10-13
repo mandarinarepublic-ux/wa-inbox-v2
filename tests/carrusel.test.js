@@ -97,3 +97,18 @@ test('plantilla de carrusel: el botón spm dice "Ver" en español (Meta lo exige
   assert.equal(payloadCrearPlantillaCarrusel().components[1].cards[0].components[1].buttons[0].text, 'Ver')
   assert.equal(payloadCrearPlantillaCarrusel('x', 'en_US').components[1].cards[0].components[1].buttons[0].text, 'View')
 })
+
+import { buildConvs } from '../lib/utils.js'
+test('buildConvs: el pedido resuelto del hilo no se pierde aunque el poll llegue primero', () => {
+  const base = { id: 'w1', telefono: '593987498489', tipo: 'order', mensaje: '📦 Pedido… (8089792151645)', timestamp: '2026-10-13T22:07:49Z', direccion: 'ENTRANTE' }
+  const delPoll = { ...base }
+  const delHilo = { ...base, pedido: { items: [{ nombre: 'Hoodie Zoro' }] }, productoReferido: { retailerId: 'x', nombre: 'Y' } }
+  const [c] = buildConvs([delPoll, delHilo])
+  assert.equal(c.msgs.length, 1)
+  assert.equal(c.msgs[0].pedido.items[0].nombre, 'Hoodie Zoro')
+  assert.equal(c.msgs[0].productoReferido.nombre, 'Y')
+  // y al revés (hilo primero) sigue igual
+  assert.equal(buildConvs([delHilo, delPoll])[0].msgs[0].pedido.items[0].nombre, 'Hoodie Zoro')
+  // el primero sigue ganando en todo lo demás
+  assert.equal(buildConvs([{ ...base, mensaje: 'A' }, { ...base, mensaje: 'B' }])[0].msgs[0].mensaje, 'A')
+})
