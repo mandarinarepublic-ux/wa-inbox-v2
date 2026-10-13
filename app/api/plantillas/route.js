@@ -46,6 +46,9 @@ function simplificar(t) {
     bodyVars: contarVars(body?.text),       // cuántas variables {{n}} pedir al usuario
     footerText: footer?.text || '',
     buttons: Array.isArray(btns?.buttons) ? btns.buttons.map((b) => b.text || '') : [],
+    // 🛍️ Carrusel de productos: no se manda desde este selector (pide productos),
+    // sino desde el 🛍️ del chat. Ver lib/carrusel.js.
+    carrusel: comps.some((c) => String(c.type).toUpperCase() === 'CAROUSEL'),
   }
 }
 

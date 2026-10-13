@@ -7,7 +7,7 @@ import { MIN_TARJETAS, MAX_TARJETAS, MAX_TEXTO } from '@/lib/carrusel'
 
 const P = { bg: '#0d1520', borde: '#1e2d3d', texto: '#e2e8f0', tenue: '#94a3b8', muy: '#475569', verde: '#25d366' }
 
-export default function CarruselModal({ nombreCliente, onEnviar, onCerrar }) {
+export default function CarruselModal({ nombreCliente, onEnviar, onCerrar, ventanaCerrada = false }) {
   const [productos, setProductos] = useState(null)
   const [error, setError] = useState('')
   const [q, setQ] = useState('')
@@ -53,6 +53,11 @@ export default function CarruselModal({ nombreCliente, onEnviar, onCerrar }) {
           <button onClick={onCerrar} style={{ background: 'transparent', border: 'none', color: P.tenue, fontSize: 18, cursor: 'pointer' }}>✕</button>
         </div>
 
+        {ventanaCerrada && (
+          <div style={{ fontSize: 11.5, color: '#fbbf24', background: 'rgba(245,158,11,.08)', border: '1px solid rgba(245,158,11,.25)', borderRadius: 8, padding: '7px 10px', lineHeight: 1.4 }}>
+            ⚠️ La ventana de 24 h está cerrada: sale con la <b>plantilla de carrusel</b> (la cobra Meta como marketing). Tu texto va en el saludo: «¡Hola! 🧡 <i>tu texto</i> … Desliza para ver más 👉».
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 6 }}>
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar producto…" autoFocus
             style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: `1px solid ${P.borde}`, background: '#080d14', color: P.texto, fontFamily: 'inherit', fontSize: 13 }} />

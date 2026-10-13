@@ -2707,7 +2707,7 @@ export default function App() {
           onCerrar={() => setMenuEtiquetas(false)} />
       )}
       {showCarrusel && activeConv && (
-        <CarruselModal nombreCliente={displayName(activeConv.telefono)} onEnviar={handleSendCarrusel}
+        <CarruselModal nombreCliente={displayName(activeConv.telefono)} onEnviar={handleSendCarrusel} ventanaCerrada={!windowOpen}
           onCerrar={() => setShowCarrusel(false)} />
       )}
       {adminEtiquetas && (
@@ -3533,6 +3533,7 @@ export default function App() {
           nombre={activeConv.nombre}
           onClose={() => setShowTplModal(false)}
           flash={(m) => { setTplToast(m); setTimeout(() => setTplToast(null), 3000) }}
+          onCarrusel={() => setShowCarrusel(true)}
         />
       )}
       {tplToast && (
