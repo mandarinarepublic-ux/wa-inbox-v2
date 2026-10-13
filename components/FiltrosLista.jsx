@@ -1,6 +1,6 @@
 'use client'
 // Filtros combinables de la lista de chats (diseño 2026-09-22 §4).
-// Cuatro filas: bandeja · temperatura (automática) · etapa · especiales (📌 🎧 ⏰ 🏷️).
+// Cinco filas: bandeja · temperatura (automática) · etapa · especiales (📌 🎧 ⏰ 🏷️) · 🔖 etiquetas.
 // Cada número respeta las OTRAS dimensiones activas (lib/filtro-chats.js `conteos`).
 import React from 'react'
 import { ETAPAS } from '@/lib/gestion'
@@ -28,7 +28,7 @@ const Fila = ({ children }) => <div style={{ display: 'flex', gap: 4, marginTop:
 
 const TONO_TEMP = { caliente: '#fb923c', tibio: '#fbbf24', frio: '#38bdf8', dormido: '#A09A90' }
 
-export default function FiltrosLista({ filtro, conteos, onCambiar }) {
+export default function FiltrosLista({ filtro, conteos, onCambiar, etiquetas = [], onAdministrarEtiquetas }) {
   const n = conteos || { bandeja: {}, temp: {}, etapa: {} }
   return (
     <div>
@@ -58,6 +58,31 @@ export default function FiltrosLista({ filtro, conteos, onCambiar }) {
         <Chip activo={filtro.alerta} color="#fb923c" n={n.alerta} onClick={() => onCambiar('alerta')} title="Se cierra la ventana de 24 h">⏰ Se cierra</Chip>
         <Chip activo={filtro.interno} color={P.creamDim} n={n.interno} onClick={() => onCambiar('interno')} title="Equipo, taller, proveedores">🏷️ Internos</Chip>
       </Fila>
+      {/* 🔖 Etiquetas: una por chip, envuelven en varias líneas si son muchas */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+        {etiquetas.map(e => {
+          const activo = filtro.etiqueta === e.id
+          const cuantos = n.etiqueta?.[e.id] || 0
+          return (
+            <button key={e.id} onClick={() => onCambiar('etiqueta', e.id)} title={`Solo los chats con «${e.nombre}»`} style={{
+              padding: '4px 7px', fontSize: 9, fontWeight: 700, maxWidth: 140,
+              background: activo ? `${e.color}22` : 'transparent',
+              border: `1px solid ${activo ? e.color : e.color + '44'}`,
+              color: activo ? e.color : P.creamDim,
+              borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit',
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            }}>
+              🔖 {e.nombre}{cuantos > 0 && <span style={{ marginLeft: 3, color: e.color, fontWeight: 800 }}>{cuantos}</span>}
+            </button>
+          )
+        })}
+        {onAdministrarEtiquetas && (
+          <button onClick={onAdministrarEtiquetas} title="Crear o editar etiquetas" style={{
+            padding: '4px 7px', fontSize: 9, fontWeight: 700, background: 'transparent',
+            border: `1px dashed ${P.border}`, color: P.creamFaint, borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit',
+          }}>{etiquetas.length ? '⚙️' : '🔖 Etiquetas ⚙️'}</button>
+        )}
+      </div>
     </div>
   )
 }

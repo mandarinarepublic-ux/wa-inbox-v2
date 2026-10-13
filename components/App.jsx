@@ -1,7 +1,7 @@
 'use client'
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
 import dynamic from 'next/dynamic'
-import { sendReaction, fetchInboxSync, fetchHilo, buscarEnMensajes, sendReply, updateContact, updateEtapa, updateDeuda, updateSinAutomaticos, updateTipoContacto, fetchPedidosChat, isDemo, sendInteractiveButtons, toggleIAMode, sendVideo, sendDocumento, sendAudio, enviarAudioUrl, enviarDocumentoUrl, sendImageFile, precacheMedia, setCanalActivo, getCanalActivo, reenviarPieza, hayVersionNueva } from '@/lib/api-client'
+import { sendReaction, fetchInboxSync, fetchHilo, buscarEnMensajes, sendReply, updateContact, updateEtapa, updateDeuda, updateSinAutomaticos, updateTipoContacto, fetchPedidosChat, isDemo, sendInteractiveButtons, toggleIAMode, sendVideo, sendDocumento, sendAudio, enviarAudioUrl, enviarDocumentoUrl, sendImageFile, precacheMedia, setCanalActivo, getCanalActivo, reenviarPieza, hayVersionNueva, fetchEtiquetas, crearEtiquetaApi, editarEtiquetaApi, ponerEtiquetaApi, quitarEtiquetaApi } from '@/lib/api-client'
 import { buildConvs, fmtDate, parseDate } from '@/lib/utils'
 import { Spinner, Avatar, ContactRow, MessageBubble, Toast } from '@/components/Components'
 import RightPanel from '@/components/RightPanel'
@@ -15,6 +15,7 @@ import { agregarOptimista, claveOptimista, reconciliarPendientes } from '@/lib/o
 import { etiquetaTelefono } from '@/lib/cliente-sin-telefono'
 import { etiquetaPedido, etapaVigente, tail9 } from '@/lib/etiqueta-crm'
 import FiltrosLista from '@/components/FiltrosLista'
+import { MenuEtiquetas, AdminEtiquetas, ChipEtiqueta } from '@/components/Etiquetas'
 import { hilosDelCanal } from '@/lib/hilos'
 
 import SocialInbox from '@/components/SocialInbox'
@@ -246,6 +247,17 @@ export default function App() {
   // no llegó del servidor (ver el badge de GENERAL más abajo).
   const [pendientesTotal, setPendientesTotal] = useState(null)
   const [versionNueva, setVersionNueva] = useState(false)
+  // 🔖 Etiquetas (lib/etiquetas.js): el catálogo y { telefono: [ids] } de los chats
+  // etiquetados. El mapa llega en cada inbox-sync; el catálogo, al abrir y al editar.
+  const [etiquetas, setEtiquetas] = useState([])
+  const [etiquetasChat, setEtiquetasChat] = useState({})
+  const [menuEtiquetas, setMenuEtiquetas] = useState(false)
+  const [adminEtiquetas, setAdminEtiquetas] = useState(false)
+  const [etiquetaOcupada, setEtiquetaOcupada] = useState(null)
+  // Cambios recién hechos en ESTA pestaña: un poll que salió antes del clic traería
+  // el mapa viejo y la etiqueta "rebotaría". Se respetan 20 s, como los overrides.
+  const etiquetasLocalRef = useRef({})   // telefono → { ids, hasta }
+  const etiquetasRef = useRef([])
   const syncSeqRef = useRef(0)       // última petición de sync que SALIÓ
   const syncAplicadoRef = useRef(0)  // última que se APLICÓ (ver load)
   // Las dos pestañas de número Y la de GENERAL comparten la vista de chat de
@@ -490,6 +502,21 @@ export default function App() {
     // Solo si vino un número: `null` significa que la lectura falló, y ahí es mejor
     // conservar el valor anterior que pintar un 0 que diría "ya contestaste a todos".
     if (typeof sync?.pendientesTotal === 'number') setPendientesTotal(sync.pendientesTotal)
+    // 🔖 `null` = la lectura falló → se conserva el mapa anterior (no se borran etiquetas).
+    if (sync?.etiquetasChat && typeof sync.etiquetasChat === 'object') {
+      const mapa = { ...sync.etiquetasChat }
+      const ahoraMs = Date.now()
+      for (const [tel, o] of Object.entries(etiquetasLocalRef.current)) {
+        if (o.hasta > ahoraMs) { if (o.ids.length) mapa[tel] = o.ids; else delete mapa[tel] }
+        else delete etiquetasLocalRef.current[tel]
+      }
+      setEtiquetasChat(mapa)
+      // Una etiqueta que no está en el catálogo la creó otra pestaña: se recarga.
+      const conocidas = new Set(etiquetasRef.current.map(e => e.id))
+      if (Object.values(mapa).some(ids => ids.some(id => !conocidas.has(id)))) {
+        fetchEtiquetas().then(l => { if (l) { etiquetasRef.current = l; setEtiquetas(l) } })
+      }
+    }
     // Combinamos 3 fuentes (buildConvs deduplica por id de mensaje):
     //  · lista → ÚLTIMO msg de CADA conversación sobre TODO el historial → aparecen
     //            también los chats viejos que la ventana de 3000 ocultaba (el bug de
@@ -1479,6 +1506,7 @@ export default function App() {
   useEffect(() => {
     let vivo = true
     const traer = () => fetchPedidosChat().then(p => { if (vivo && p) setPedidosChat(p) })
+    fetchEtiquetas().then(l => { if (vivo && l) { etiquetasRef.current = l; setEtiquetas(l) } })
     traer()
     const id = setInterval(traer, 5 * 60 * 1000)
     return () => { vivo = false; clearInterval(id) }
@@ -1494,6 +1522,7 @@ export default function App() {
       deudaAt: ct.deudaAt, deudaNota: ct.deudaNota, deudaPor: ct.deudaPor,
       sinAutomaticos: ct.sinAutomaticos, tipoContacto: ct.tipoContacto,
       pedido: etiquetaPedido(pedido, ahora),
+      etiquetas: etiquetasChat[tel] || [],
     }
   }
 
@@ -1589,7 +1618,7 @@ export default function App() {
       counts: conteos(vistas, filtro),
       totalPendientes: vistas.filter(v => v.estado === 'pendiente').length,
     }
-  }, [convs, search, searchMode, msgHits, contacts, pedidosChat, ahora, filtro, pendNuevosArriba])
+  }, [convs, search, searchMode, msgHits, contacts, pedidosChat, ahora, filtro, pendNuevosArriba, etiquetasChat])
   /* eslint-enable react-hooks/exhaustive-deps */
 
   const lastMsg      = activeConv?.last
@@ -1742,6 +1771,52 @@ export default function App() {
   const cambiarSinAutomaticos = (telefono) => {
     const on = !contacts[telefono]?.sinAutomaticos
     cambiarCampos(telefono, { sinAutomaticos: on }, () => updateSinAutomaticos(telefono, on), 'No se pudo cambiar 🤫')
+  }
+  // ── 🔖 Etiquetas ──
+  const avisar = (msg) => { setToast({ ok: false, msg }); setTimeout(() => setToast(null), 4000) }
+  // Si la etiqueta del filtro se desactiva, su chip desaparece y no habría cómo
+  // apagar el filtro: la bandeja quedaría vacía sin explicación. Se suelta solo.
+  useEffect(() => {
+    if (filtro.etiqueta && etiquetas.length && !etiquetas.some(e => e.id === filtro.etiqueta && e.activa)) {
+      setFiltro(f => ({ ...f, etiqueta: 0 }))
+    }
+  }, [filtro.etiqueta, etiquetas])
+  const etiquetasDe = (telefono) => {
+    const porId = new Map(etiquetas.map(e => [e.id, e]))
+    return (etiquetasChat[telefono] || []).map(id => porId.get(id)).filter(e => e && e.activa)
+  }
+  const chipsEtiquetas = (telefono) => etiquetasDe(telefono)
+    .map(e => ({ key: `et${e.id}`, texto: e.nombre, color: e.color, titulo: `Etiqueta: ${e.nombre}` }))
+  const fijarEtiquetasLocal = (telefono, ids) => {
+    etiquetasLocalRef.current[telefono] = { ids, hasta: Date.now() + 20000 }
+    setEtiquetasChat(prev => {
+      const n = { ...prev }
+      if (ids.length) n[telefono] = ids; else delete n[telefono]
+      return n
+    })
+  }
+  const alternarEtiqueta = async (telefono, e, poner) => {
+    const antes = etiquetasChat[telefono] || []
+    fijarEtiquetasLocal(telefono, poner ? [...new Set([...antes, e.id])] : antes.filter(id => id !== e.id))
+    setEtiquetaOcupada(e.id)
+    const r = poner ? await ponerEtiquetaApi(telefono, e.id) : await quitarEtiquetaApi(telefono, e.id)
+    setEtiquetaOcupada(null)
+    if (!r.ok) { fijarEtiquetasLocal(telefono, antes); avisar(`✗ No se pudo ${poner ? 'poner' : 'quitar'} la etiqueta — ${r.error || 'reintenta'}`) }
+  }
+  const recargarEtiquetas = async () => {
+    const l = await fetchEtiquetas()
+    if (l) { etiquetasRef.current = l; setEtiquetas(l) }
+  }
+  // En AdminEtiquetas el error se muestra en la misma ventana: por eso estas sí lanzan.
+  const crearEtiqueta = async ({ nombre, color }) => {
+    const r = await crearEtiquetaApi(nombre, color)
+    if (!r.ok) throw new Error(r.error)
+    await recargarEtiquetas()
+  }
+  const editarEtiqueta = async (id, cambios) => {
+    const r = await editarEtiquetaApi(id, cambios)
+    if (!r.ok) throw new Error(r.error)
+    await recargarEtiquetas()
   }
   const cambiarTipoContacto = (telefono) => {
     const tipo = contacts[telefono]?.tipoContacto === 'interno' ? 'cliente' : 'interno'
@@ -2594,6 +2669,17 @@ export default function App() {
 
       {showSetup && <SetupModal onClose={() => { setShowSetup(false); load() }} />}
       {showGuide && <GuideModal onClose={() => setShowGuide(false)} />}
+      {menuEtiquetas && activeConv && (
+        <MenuEtiquetas etiquetas={etiquetas} puestas={etiquetasChat[activeConv.telefono] || []}
+          ocupado={etiquetaOcupada}
+          onAlternar={(e, poner) => alternarEtiqueta(activeConv.telefono, e, poner)}
+          onAdministrar={() => { setMenuEtiquetas(false); setAdminEtiquetas(true) }}
+          onCerrar={() => setMenuEtiquetas(false)} />
+      )}
+      {adminEtiquetas && (
+        <AdminEtiquetas etiquetas={etiquetas} onCrear={crearEtiqueta} onEditar={editarEtiqueta}
+          onCerrar={() => setAdminEtiquetas(false)} />
+      )}
       {(showSidebar && active) && <div className="overlay" onClick={() => setShowSidebar(false)} />}
       {showRight            && <div className="overlay" onClick={cerrarCajonDerecho} />}
 
@@ -2742,7 +2828,8 @@ export default function App() {
               ))}
             </div>
             {/* ── Filtros combinables (port desde IND) ── */}
-            <FiltrosLista filtro={filtro} conteos={counts} onCambiar={cambiarFiltro} />
+            <FiltrosLista filtro={filtro} conteos={counts} onCambiar={cambiarFiltro}
+              etiquetas={etiquetas.filter(e => e.activa)} onAdministrarEtiquetas={() => setAdminEtiquetas(true)} />
             {/* ⇅ Orden de Pendientes (lib/orden-bandeja.js) — solo en esa bandeja */}
             {filtro.bandeja === 'pendiente' && !isSearching && (
               <button onClick={alternarOrdenPend}
@@ -2792,7 +2879,7 @@ export default function App() {
                   search={search}
                   estado={estadoFila(conv)}
                   modoIA={getModoIA(conv.telefono)}
-                  chips={chipsDeChat(datosGestion(conv), ahora)}
+                  chips={[...chipsDeChat(datosGestion(conv), ahora), ...chipsEtiquetas(conv.telefono)]}
                   msgSnippet={searchingMsgs ? matchSnippet(conv) : null}
                   // El color y la etiqueta salen del canal DE LA FILA, que ahora
                   // es un hecho y no una deducción: la lista viene de
@@ -2871,6 +2958,11 @@ export default function App() {
                 <div style={{ minWidth:0, flex:1 }}>
                   <div style={{ fontWeight:800, color:'#f1f5f9', fontSize:13, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:160 }}>{displayName(activeConv.telefono)}</div>
                   <div style={{ fontSize:12, fontWeight:600, color:'#94a3b8', whiteSpace:'nowrap', userSelect:'text' }}>{etiquetaTelefono(activeConv.telefono, contacts[activeConv.telefono]?.username)}</div>
+                  {etiquetasDe(activeConv.telefono).length > 0 && (
+                    <div onClick={() => setMenuEtiquetas(true)} title="Cambiar etiquetas" style={{ display:'flex', flexWrap:'wrap', gap:4, marginTop:3, cursor:'pointer' }}>
+                      {etiquetasDe(activeConv.telefono).map(e => <ChipEtiqueta key={e.id} e={e} chico />)}
+                    </div>
+                  )}
                 </div>
                 {/* Acceso directo a Crear pedido / herramientas (solo móvil) */}
                 <button onClick={() => setShowRight(true)} className="order-btn-mob" title="Crear pedido y herramientas"
@@ -2936,6 +3028,8 @@ export default function App() {
                       <BotonEje on={ct.tipoContacto === 'interno'} color="#94a3b8" icon="🏷️" label="Interno"
                         title={ct.tipoContacto === 'interno' ? 'Contacto interno o proveedor — clic para volverlo cliente' : 'Marcar como contacto interno o proveedor'}
                         onClick={() => cambiarTipoContacto(activeConv.telefono)} />
+                      <BotonEje on={etiquetasDe(activeConv.telefono).length > 0} color="#a855f7" icon="🔖" label="Etiquetas"
+                        title="Poner o quitar etiquetas" onClick={() => setMenuEtiquetas(true)} />
                     </>
                   )
                 })()}
