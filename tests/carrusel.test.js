@@ -81,3 +81,14 @@ test('productosParaCarrusel: limpia " - Mandarina Republic" y " | Mandarina Repu
   ])
   assert.deepEqual(r.map(p => p.nombre), ['Hoodie Spider-Man', 'Sudadera Zoro'])
 })
+
+import { payloadCrearPlantillaCarrusel, TEXTO_PLANTILLA_CARRUSEL } from '../lib/carrusel.js'
+test('plantilla de carrusel: marketing, 2 tarjetas modelo, cuerpo que no termina en variable', () => {
+  const p = payloadCrearPlantillaCarrusel()
+  assert.equal(p.name, 'carrusel_productos')
+  assert.equal(p.category, 'MARKETING')
+  assert.equal(p.components[1].cards.length, 2)
+  assert.deepEqual(p.components[1].cards[0].components[0], { type: 'header', format: 'product' })
+  assert.ok(!/\{\{\d+\}\}\s*$/.test(TEXTO_PLANTILLA_CARRUSEL))
+  assert.ok(!/^\s*\{\{\d+\}\}/.test(TEXTO_PLANTILLA_CARRUSEL))
+})

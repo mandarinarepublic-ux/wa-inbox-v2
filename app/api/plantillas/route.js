@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getWabaId, GRAPH } from '@/lib/whatsapp'
 import { wabaIdDePhoneId } from '@/lib/canales'
+import { payloadCrearPlantillaCarrusel } from '@/lib/carrusel'
 import { armarPlantilla } from '@/lib/plantilla-nueva'
 
 export const dynamic = 'force-dynamic'
@@ -95,7 +96,10 @@ export async function POST(req) {
   const wabaId = wabaIdDePhoneId(datos.canal || '')
   if (!wabaId) return NextResponse.json({ ok: false, error: `Canal desconocido: ${datos.canal || '(vacío)'}` }, { status: 400 })
 
-  const armada = armarPlantilla(datos)
+  // 🛍️ La plantilla de carrusel tiene forma propia (lib/carrusel.js), no pasa por el formulario.
+  const armada = datos.tipo === 'carrusel_productos'
+    ? { ok: true, payload: payloadCrearPlantillaCarrusel() }
+    : armarPlantilla(datos)
   if (!armada.ok) return NextResponse.json({ ok: false, errores: armada.errores }, { status: 400 })
 
   try {
