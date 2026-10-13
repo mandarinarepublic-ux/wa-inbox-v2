@@ -82,3 +82,22 @@ test('I6: un estado desconocido se trata como 🔴 (nunca desaparece de las band
   }
   assert.equal(prepararVista({ telefono: 'z', estado: 'ATENDIDO' }, AHORA).estado, 'atendido')
 })
+
+test('🔖 etiqueta: filtra, se apaga con otro clic y cuenta respetando la bandeja', () => {
+  const vs = [
+    prepararVista({ telefono: 'a', estado: 'pendiente', etiquetas: [1, 2] }, AHORA),
+    prepararVista({ telefono: 'b', estado: 'pendiente', etiquetas: [2] }, AHORA),
+    prepararVista({ telefono: 'c', estado: 'atendido', etiquetas: [1] }, AHORA),
+    prepararVista({ telefono: 'd', estado: 'pendiente' }, AHORA),   // sin etiquetas → []
+  ]
+  assert.deepEqual(vs[3].etiquetas, [])
+  const f = alternar(FILTRO_INICIAL, 'etiqueta', 1)
+  assert.equal(f.etiqueta, 1)
+  assert.deepEqual(vs.filter(x => pasaFiltro(x, f)).map(x => x.telefono), ['a'])   // c está atendido
+  assert.equal(alternar(f, 'etiqueta', 1).etiqueta, 0)
+  assert.equal(alternar(f, 'etiqueta', '2').etiqueta, 2)
+  const n = conteos(vs, FILTRO_INICIAL)
+  assert.deepEqual(n.etiqueta, { 1: 1, 2: 2 })
+  // sin filtro de etiqueta nadie se esconde
+  assert.equal(vs.filter(x => pasaFiltro(x, FILTRO_INICIAL)).length, 3)
+})
