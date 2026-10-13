@@ -1,7 +1,7 @@
 'use client'
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
 import dynamic from 'next/dynamic'
-import { sendReaction, fetchInboxSync, fetchHilo, buscarEnMensajes, sendReply, updateContact, updateEtapa, updateDeuda, updateSinAutomaticos, updateTipoContacto, fetchPedidosChat, isDemo, sendInteractiveButtons, toggleIAMode, sendVideo, sendDocumento, sendAudio, enviarAudioUrl, enviarDocumentoUrl, sendImageFile, precacheMedia, setCanalActivo, getCanalActivo, reenviarPieza, hayVersionNueva, fetchEtiquetas, crearEtiquetaApi, editarEtiquetaApi, ponerEtiquetaApi, quitarEtiquetaApi } from '@/lib/api-client'
+import { sendReaction, fetchInboxSync, fetchHilo, buscarEnMensajes, sendReply, updateContact, updateEtapa, updateDeuda, updateSinAutomaticos, updateTipoContacto, fetchPedidosChat, isDemo, sendInteractiveButtons, toggleIAMode, sendVideo, sendDocumento, sendAudio, enviarAudioUrl, enviarDocumentoUrl, sendImageFile, precacheMedia, setCanalActivo, getCanalActivo, reenviarPieza, hayVersionNueva, fetchEtiquetas, crearEtiquetaApi, editarEtiquetaApi, ponerEtiquetaApi, quitarEtiquetaApi, sendCarrusel } from '@/lib/api-client'
 import { buildConvs, fmtDate, parseDate } from '@/lib/utils'
 import { Spinner, Avatar, ContactRow, MessageBubble, Toast } from '@/components/Components'
 import RightPanel from '@/components/RightPanel'
@@ -17,6 +17,8 @@ import { etiquetaPedido, etapaVigente, tail9 } from '@/lib/etiqueta-crm'
 import FiltrosLista from '@/components/FiltrosLista'
 import { MenuEtiquetas, AdminEtiquetas, ChipEtiqueta } from '@/components/Etiquetas'
 import { expandirEtiquetas } from '@/lib/etiquetas-mapa'
+import CarruselModal from '@/components/CarruselModal'
+import { guardadoCarrusel } from '@/lib/carrusel'
 import { hilosDelCanal } from '@/lib/hilos'
 
 import SocialInbox from '@/components/SocialInbox'
@@ -255,6 +257,7 @@ export default function App() {
   const [menuEtiquetas, setMenuEtiquetas] = useState(false)
   const [adminEtiquetas, setAdminEtiquetas] = useState(false)
   const [etiquetaOcupada, setEtiquetaOcupada] = useState(null)
+  const [showCarrusel, setShowCarrusel] = useState(false)   // 🛍️ lib/carrusel.js
   // Cambios recién hechos en ESTA pestaña: un poll que salió antes del clic traería
   // el mapa viejo y la etiqueta "rebotaría". Se respetan 20 s, como los overrides.
   const etiquetasLocalRef = useRef({})   // telefono → { ids, hasta }
@@ -2551,6 +2554,30 @@ export default function App() {
     setTogglingIA(false)
   }
 
+  // ── 🛍️ Enviar carrusel de productos ───────────────────────────
+  // Devuelve el resultado a la ventana (CarruselModal), que muestra el error ahí
+  // mismo: si Meta rechaza un producto, el vendedor no pierde lo que eligió.
+  const handleSendCarrusel = async (texto, productos) => {
+    if (!activeConv) return { ok: false, error: 'No hay chat abierto' }
+    if (canalSinResolver()) { avisarCanalSinResolver(); return { ok: false, error: 'No sé por cuál número enviar' } }
+    const telefono = activeConv.telefono
+    const nombre   = activeConv.nombre
+    const canal    = canalDeEnvio()
+    const estadoDestino = estadoAlResponder(currentStatus)
+    const result = await sendCarrusel(telefono, nombre, texto, productos, canal)
+    if (result.ok) {
+      pintarOptimista(telefono, canal, {
+        id: result.wamid || 'tmp_' + Date.now(), telefono, nombre, tipo: 'carrusel', mensaje: texto,
+        botones: guardadoCarrusel(productos, ''), direccion: 'SALIENTE',
+        timestamp: new Date().toISOString(), estado: 'enviado',
+      })
+      setToast({ ok: true, msg: '🛍️ Carrusel enviado' }); setTimeout(() => setToast(null), 3000)
+      await changeStatus(telefono, estadoDestino, canal)
+      setTimeout(load, 3000)
+    }
+    return result
+  }
+
   // ── Enviar botones interactivos ───────────────────────────────
   const handleSendButtons = async () => {
     if (!activeConv || !input.trim()) return
@@ -2678,6 +2705,10 @@ export default function App() {
           onAlternar={(e, poner) => alternarEtiqueta(activeConv.telefono, e, poner)}
           onAdministrar={() => { setMenuEtiquetas(false); setAdminEtiquetas(true) }}
           onCerrar={() => setMenuEtiquetas(false)} />
+      )}
+      {showCarrusel && activeConv && (
+        <CarruselModal nombreCliente={displayName(activeConv.telefono)} onEnviar={handleSendCarrusel}
+          onCerrar={() => setShowCarrusel(false)} />
       )}
       {adminEtiquetas && (
         <AdminEtiquetas etiquetas={etiquetas} onCrear={crearEtiqueta} onEditar={editarEtiqueta}
@@ -3345,6 +3376,7 @@ export default function App() {
                   📎
                   {imgFiles.length > 0 && <span style={{ position:'absolute', top:-4, right:-4, width:16, height:16, borderRadius:'50%', background:'#25d366', color:'#080d14', fontSize:8, fontWeight:900, display:'flex', alignItems:'center', justifyContent:'center' }}>{imgFiles.length}</span>}
                 </button>
+                <button onClick={() => setShowCarrusel(true)} title="Enviar productos del catálogo (carrusel)" style={{ width:42, height:42, flexShrink:0, background:'#111c2a', border:'1px solid #1e2d3d', borderRadius:11, cursor:'pointer', fontSize:17, display:'flex', alignItems:'center', justifyContent:'center', transition:'all .15s' }}>🛍️</button>
                 <button onClick={() => setShowBtnPanel(p=>!p)} title="Botones interactivos" style={{ width:42, height:42, flexShrink:0, background:showBtnPanel?'rgba(37,211,102,.15)':'#111c2a', border:`1px solid ${showBtnPanel?'rgba(37,211,102,.4)':'#1e2d3d'}`, borderRadius:11, cursor:'pointer', fontSize:16, display:'flex', alignItems:'center', justifyContent:'center', color:showBtnPanel?'#25d366':'#475569', transition:'all .15s' }}>🔘</button>
                 <button onClick={() => { setShowEmoji(p=>!p); setShowBtnPanel(false) }} title="Emojis" style={{ width:42, height:42, flexShrink:0, background:showEmoji?'rgba(245,158,11,.15)':'#111c2a', border:`1px solid ${showEmoji?'rgba(245,158,11,.4)':'#1e2d3d'}`, borderRadius:11, cursor:'pointer', fontSize:20, display:'flex', alignItems:'center', justifyContent:'center', transition:'all .15s' }}>😊</button>
                 {/* Sin `accept`: desde que se pueden mandar documentos no hay tipo prohibido,
