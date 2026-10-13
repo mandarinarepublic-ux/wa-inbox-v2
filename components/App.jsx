@@ -16,6 +16,7 @@ import { etiquetaTelefono } from '@/lib/cliente-sin-telefono'
 import { etiquetaPedido, etapaVigente, tail9 } from '@/lib/etiqueta-crm'
 import FiltrosLista from '@/components/FiltrosLista'
 import { MenuEtiquetas, AdminEtiquetas, ChipEtiqueta } from '@/components/Etiquetas'
+import { expandirEtiquetas } from '@/lib/etiquetas-mapa'
 import { hilosDelCanal } from '@/lib/hilos'
 
 import SocialInbox from '@/components/SocialInbox'
@@ -503,8 +504,10 @@ export default function App() {
     // conservar el valor anterior que pintar un 0 que diría "ya contestaste a todos".
     if (typeof sync?.pendientesTotal === 'number') setPendientesTotal(sync.pendientesTotal)
     // 🔖 `null` = la lectura falló → se conserva el mapa anterior (no se borran etiquetas).
-    if (sync?.etiquetasChat && typeof sync.etiquetasChat === 'object') {
-      const mapa = { ...sync.etiquetasChat }
+    // Campo NUEVO a propósito (antes `etiquetasChat` con otra forma): una pestaña
+    // abierta con el código anterior lo ignora en vez de reventar.
+    if (sync?.etiquetasCompacto && typeof sync.etiquetasCompacto === 'object') {
+      const mapa = expandirEtiquetas(sync.etiquetasCompacto)
       const ahoraMs = Date.now()
       for (const [tel, o] of Object.entries(etiquetasLocalRef.current)) {
         if (o.hasta > ahoraMs) { if (o.ids.length) mapa[tel] = o.ids; else delete mapa[tel] }

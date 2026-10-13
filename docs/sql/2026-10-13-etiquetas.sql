@@ -120,3 +120,26 @@ select c.cuenta, c.telefono, c.nombre_contacto, e.nombre as etiqueta, e.color, e
   join inbox.conversaciones c using (conversacion_id)
   join inbox.etiquetas e on e.etiqueta_id = ce.etiqueta_id
   left join crm.usuarios u on u.usuario_id::text = ce.puesta_por;
+
+-- Migración `etiquetas_compacto` (mismo día). Al ponerle "Pauta" a los 2.026
+-- chats que llegaron de anuncios, { tel: [ids] } pesaba ~40 kB por inbox-sync.
+-- Viaja al revés y en texto, en UNA fila (sin tope de 1000): ~26 kB, 12 ms.
+create or replace function inbox.etiquetas_compacto(p_cuenta text) returns json
+language sql stable security invoker set search_path = inbox, public as $$
+  select coalesce(json_object_agg(etiqueta_id, tels), '{}'::json) from (
+    select ce.etiqueta_id, string_agg(c.telefono, ',' order by c.telefono) as tels
+      from inbox.conversacion_etiquetas ce
+      join inbox.etiquetas e on e.etiqueta_id = ce.etiqueta_id and e.activa and e.cuenta = p_cuenta
+      join inbox.conversaciones c on c.conversacion_id = ce.conversacion_id and c.cuenta = p_cuenta
+     group by ce.etiqueta_id) x;
+$$;
+revoke all on function inbox.etiquetas_compacto(text) from public, anon, authenticated;
+grant execute on function inbox.etiquetas_compacto(text) to service_role;
+
+-- Relleno (13-oct, pedido por Rodrigo): "Pauta" a todo chat de MANDI que alguna
+-- vez llegó de un anuncio, con la fecha del PRIMER mensaje con referral. 2.026 chats.
+-- insert into inbox.conversacion_etiquetas (conversacion_id, etiqueta_id, puesta_por, puesta_en)
+-- select m.conversacion_id, e.etiqueta_id, 'auto', min(m.fecha) from inbox.mensajes m
+--   join inbox.etiquetas e on e.cuenta = 'MANDI' and e.clave = 'pauta'
+--  where m.cuenta = 'MANDI' and m.direccion = 'ENTRANTE' and m.referral is not null
+--  group by 1, 2 on conflict do nothing;

@@ -41,7 +41,7 @@ export async function GET(req) {
       return new Response(null, { status: 304, headers: { ETag: etagActual, 'Cache-Control': 'no-store', 'X-Build': process.env.VERCEL_GIT_COMMIT_SHA || '' } })
     }
 
-    const [lista, rows, contactos, pendientes, pendientesTotal, etiquetasChat] = await Promise.all([
+    const [lista, rows, contactos, pendientes, pendientesTotal, etiquetasCompacto] = await Promise.all([
       getLista(canal),
       getMensajes(canal),
       // Contactos SIN filtro de canal, a propósito. El estado (pendiente, atendido,
@@ -71,14 +71,14 @@ export async function GET(req) {
       // `null` (no 0) si falla, para que la pantalla sepa distinguir "no vino" de
       // "no hay ninguno" y caiga a la suma en vez de mostrar un 0 falso.
       contarPendientesTotalSupabase().catch(() => null),
-      // 🏷️ { telefono: [etiqueta_id] } SOLO de los chats etiquetados (no uno por
-      // contacto: la ficha ya es el 65 % del payload). Poner/quitar una toca
+      // 🔖 { etiqueta_id: "tel,tel" } — compacto (lib/etiquetas-mapa.js): con
+      // "Pauta" en ~2.000 chats, { tel: [ids] } pesaba ~40 kB por ciclo. Poner/quitar una toca
       // `conversaciones.updated_at` (trigger), así que el ETag de arriba se mueve.
       // `null` si falla → la pantalla se queda con las que tenía, no las borra.
       mapaEtiquetasChats().catch(e => { console.error('[/api/inbox-sync] etiquetas:', e.message); return null }),
     ])
     // `v` va en el cuerpo: de ahí lo toma el cliente para la próxima vuelta.
-    return NextResponse.json({ lista, rows, contactos, pendientes, pendientesTotal, etiquetasChat, v: etagActual, build: process.env.VERCEL_GIT_COMMIT_SHA || '' }, {
+    return NextResponse.json({ lista, rows, contactos, pendientes, pendientesTotal, etiquetasCompacto, v: etagActual, build: process.env.VERCEL_GIT_COMMIT_SHA || '' }, {
       // Cache COMPARTIDO en el edge, corto (5s) para no agregar latencia visible al
       // vendedor: varias pestañas que pollean dentro de la misma ventana comparten
       // UNA ejecución de origen. stale-while-revalidate sirve al instante y revalida.
