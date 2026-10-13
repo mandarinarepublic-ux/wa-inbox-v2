@@ -73,3 +73,11 @@ test('productosParaCarrusel: sin foto / oculto / sin stock fuera; nombre repetid
   assert.equal(r[0].nombre, 'Chaqueta Dragon Ball Z Clásica')
   assert.equal(r[0].precio, '$35.00')
 })
+
+test('productosParaCarrusel: limpia " - Mandarina Republic" y " | Mandarina Republic"', () => {
+  const r = productosParaCarrusel([
+    { retailer_id: 'a', name: 'Sudadera Zoro - Mandarina Republic', image_url: 'https://a.png' },
+    { retailer_id: 'b', name: 'Hoodie Spider-Man | Mandarina Republic', image_url: 'https://b.png' },
+  ])
+  assert.deepEqual(r.map(p => p.nombre), ['Hoodie Spider-Man', 'Sudadera Zoro'])
+})
