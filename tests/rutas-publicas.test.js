@@ -13,6 +13,7 @@ const PUBLICAS = [
   '/api/cron/flujos',       // cron de Vercel, cada 5 min — esperas de los flujos
   '/api/cron/pendientes',    // cron de Vercel, cada 5 min — recordatorio Telegram
   '/api/pago-dlocal',        // dLocal, ya protegida con secreto en la URL
+  '/api/feed-catalogo',      // Meta lee la lista de productos de Shopify para CatMandSF
 ]
 
 // Todo lo demás del inventario: son del navegador y van protegidas.
