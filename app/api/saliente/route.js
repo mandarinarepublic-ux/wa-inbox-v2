@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { destinoMeta, esBsuid } from '@/lib/cliente-sin-telefono'
-import { guardarMensajeSupabase } from '@/lib/inbox-supabase'
+import { guardarMensajeSupabase, getVentanaSupabase } from '@/lib/inbox-supabase'
+import { validarCarrusel, ventanaAbiertaCarrusel, plantillaCarrusel, payloadInteractivo, payloadPlantilla, guardadoCarrusel, CATALOGO_POR_DEFECTO } from '@/lib/carrusel'
+import { ponerEtiquetaAuto } from '@/lib/etiquetas'
 import { waitUntil } from '@vercel/functions'
 import { limpiarPush, revisarPromesa, marcarRespuestaHumana } from '@/lib/contactos'
 import { borrarEstadoFlujo } from '@/lib/flujos'
@@ -29,12 +31,47 @@ const canalDe = (body) => {
   const p = String(body?.Canal || '').trim()
   return CANALES_VALIDOS.has(p) ? p : META_PHONE_ID
 }
-const urlGraph = (phoneId) => `https://graph.facebook.com/v19.0/${phoneId}/messages`
+const urlGraph = (phoneId, version = 'v19.0') => `https://graph.facebook.com/${version}/${phoneId}/messages`
+// El carrusel es nuevo: la doc oficial lo muestra con v23+ (13-oct-2026). Solo él
+// sube de versión; el resto sigue en la v19 probada.
+const VERSION_CARRUSEL = 'v23.0'
 
 // La conversión URL → media_id (descarga + subida a Meta + caché) vive en
 // lib/media-id.js: la comparten esta ruta y /api/media/precache.
 
 const soloDigitos = (s) => String(s || '').replace(/\D/g, '')
+
+// 🛍️ Carrusel de productos (lib/carrusel.js). Async: la ventana se decide AQUÍ,
+// leyendo la base, y no en el navegador — el vendedor no puede equivocarse de vía.
+// Ventana abierta → interactivo; cerrada → plantilla aprobada (CARRUSEL_PLANTILLA)
+// o un error que dice qué falta. Lanza con `status` para devolver el código justo.
+async function construirCarrusel(body, canal) {
+  let productos = []
+  try { productos = JSON.parse(body.Productos || '[]') } catch {}
+  let v
+  try { v = validarCarrusel(productos, body.Cuerpo) } catch (e) { e.status = 400; throw e }
+  const catalogId = String(process.env.CATALOG_ID || CATALOGO_POR_DEFECTO).trim()
+  const dest = destinoMeta(body.Telefono)
+  const ventana = await getVentanaSupabase(soloDigitos(body.Telefono) || body.Telefono, canal).catch(() => null)
+  if (ventanaAbiertaCarrusel(ventana || {})) {
+    return {
+      tipo: 'carrusel', contenido: v.texto, mediaUrl: '', mediaId: '',
+      botonesGuardar: guardadoCarrusel(v.productos, 'interactivo'),
+      payload: payloadInteractivo(dest, catalogId, v.productos, v.texto),
+    }
+  }
+  const plantilla = plantillaCarrusel(process.env.CARRUSEL_PLANTILLA)
+  if (!plantilla) {
+    const e = new Error('La ventana de 24 h está cerrada y la plantilla del carrusel todavía no está aprobada en Meta. Escríbele primero con una plantilla normal.')
+    e.status = 409
+    throw e
+  }
+  return {
+    tipo: 'carrusel', contenido: v.texto, mediaUrl: '', mediaId: '',
+    botonesGuardar: guardadoCarrusel(v.productos, 'plantilla'),
+    payload: payloadPlantilla(dest, catalogId, v.productos, v.texto, plantilla),
+  }
+}
 
 // Traduce el body del cliente → { payload Graph, tipo, contenido, mediaUrl, mediaId }
 function construir(body) {
@@ -317,7 +354,14 @@ export async function POST(req) {
       )
     }
 
-    const construido = construir(body)
+    let construido
+    if (body.TipoMensaje === 'carrusel') {
+      try { construido = await construirCarrusel(body, canal) } catch (e) {
+        return NextResponse.json({ ok: false, error: e.message }, { status: e.status || 500 })
+      }
+    } else {
+      construido = construir(body)
+    }
     const { payload, tipo, contenido, mediaUrl, botones } = construido
     let mediaId = construido.mediaId
 
@@ -363,7 +407,7 @@ export async function POST(req) {
     const idPreresuelto = payload.type === 'image' && Boolean(payload.image?.id) && !urlOrigen
     if (idPreresuelto && body.ImagenURL) urlOrigen = String(body.ImagenURL)
 
-    const enviar = () => fetch(urlGraph(canal), {
+    const enviar = () => fetch(urlGraph(canal, tipo === 'carrusel' ? VERSION_CARRUSEL : undefined), {
       method: 'POST',
       headers: { Authorization: `Bearer ${META_TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -428,7 +472,7 @@ export async function POST(req) {
     const telSal = esBsuid(body.Telefono) ? String(body.Telefono).trim() : soloDigitos(body.Telefono)
     const fechaSal = new Date().toISOString()
     // Botones (interactivos) serializados para la columna M / campo Supabase.
-    const botonesStr = botones && botones.length ? JSON.stringify(botones) : ''
+    const botonesStr = construido.botonesGuardar || (botones && botones.length ? JSON.stringify(botones) : '')
     try {
       // Registro del saliente en Supabase (idempotente por wamid).
       await guardarMensajeSupabase({
@@ -472,6 +516,9 @@ export async function POST(req) {
       waitUntil(marcarRespuestaHumana(telSal)
         .catch(e => console.error('[/api/saliente] marcar respuesta humana:', e.message)))
     }
+
+    // 🔖 "Le mostré productos" (lib/etiquetas.js). Nunca lanza: el envío ya salió.
+    if (tipo === 'carrusel') waitUntil(ponerEtiquetaAuto(telSal, 'productos'))
 
     // citaOmitida = el mensaje SÍ se envió, pero sin la cita. La UI lo avisa.
     return NextResponse.json({ ok: true, wamid, citaOmitida: Boolean(contextoId) && !citaAplicada })
