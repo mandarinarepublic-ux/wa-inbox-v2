@@ -109,3 +109,14 @@ insert into inbox.etiquetas (cuenta, nombre, color, clave) values
   ('MANDI', 'Pauta', '#1877f2', 'pauta'),
   ('MANDI', 'Le mostré productos', '#f59e0b', 'productos')
 on conflict do nothing;
+
+-- Migración `etiquetas_chats_con_usuario` (mismo día): `puesta_por` guarda el
+-- usuario_id del CRM (sesión del inbox); la vista agrega el nombre legible.
+create or replace view inbox.etiquetas_chats with (security_invoker = on) as
+select c.cuenta, c.telefono, c.nombre_contacto, e.nombre as etiqueta, e.color, e.activa,
+       ce.puesta_por, ce.puesta_en,
+       coalesce(u.nombre, ce.puesta_por) as puesta_por_nombre
+  from inbox.conversacion_etiquetas ce
+  join inbox.conversaciones c using (conversacion_id)
+  join inbox.etiquetas e on e.etiqueta_id = ce.etiqueta_id
+  left join crm.usuarios u on u.usuario_id::text = ce.puesta_por;
