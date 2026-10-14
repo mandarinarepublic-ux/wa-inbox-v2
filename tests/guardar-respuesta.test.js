@@ -58,3 +58,9 @@ test('un `adjuntos` que no es lista no rompe el guardado', () => {
   assert.deepEqual(cuerpoDeRespuesta('add', { adjuntos: 'basura' }).adjuntos, [])
   assert.deepEqual(cuerpoDeRespuesta('add', { adjuntos: null }).adjuntos, [])
 })
+
+test('🛍️ el carrusel de la respuesta rápida viaja al guardar', () => {
+  const productos = [{ retailerId: '1', nombre: 'A', precio: '$35', foto: 'f1' }, { retailerId: '2', nombre: 'B', precio: '$35', foto: 'f2' }]
+  assert.deepEqual(cuerpoDeRespuesta('edit', { id: '1', text: 'Mira', carrusel: productos }).carrusel, productos)
+  assert.deepEqual(cuerpoDeRespuesta('edit', { id: '1', text: 'Mira' }).carrusel, [])
+})

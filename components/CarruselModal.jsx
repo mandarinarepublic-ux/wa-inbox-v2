@@ -7,11 +7,13 @@ import { MIN_TARJETAS, MAX_TARJETAS, MAX_TEXTO } from '@/lib/carrusel'
 
 const P = { bg: '#0d1520', borde: '#1e2d3d', texto: '#e2e8f0', tenue: '#94a3b8', muy: '#475569', verde: '#25d366' }
 
-export default function CarruselModal({ nombreCliente, onEnviar, onCerrar, ventanaCerrada = false }) {
+// `modoElegir`: para guardar productos en una RESPUESTA RÁPIDA. Sin texto (el texto es
+// el de la respuesta) y `onEnviar(null, productos)` solo devuelve la selección.
+export default function CarruselModal({ nombreCliente, onEnviar, onCerrar, ventanaCerrada = false, modoElegir = false, inicial = [] }) {
   const [productos, setProductos] = useState(null)
   const [error, setError] = useState('')
   const [q, setQ] = useState('')
-  const [elegidos, setElegidos] = useState([])   // en el orden en que se eligen = orden de las tarjetas
+  const [elegidos, setElegidos] = useState(Array.isArray(inicial) ? inicial.slice(0, MAX_TARJETAS) : [])   // en el orden en que se eligen = orden de las tarjetas
   const [texto, setTexto] = useState('')
   const [enviando, setEnviando] = useState(false)
 
@@ -35,11 +37,11 @@ export default function CarruselModal({ nombreCliente, onEnviar, onCerrar, venta
     return [...prev, p]
   })
 
-  const listo = elegidos.length >= MIN_TARJETAS && elegidos.length <= MAX_TARJETAS && texto.trim() && texto.length <= MAX_TEXTO
+  const listo = elegidos.length >= MIN_TARJETAS && elegidos.length <= MAX_TARJETAS && (modoElegir || (texto.trim() && texto.length <= MAX_TEXTO))
   const enviar = async () => {
     if (!listo || enviando) return
     setEnviando(true); setError('')
-    const r = await onEnviar(texto.trim(), elegidos)
+    const r = await onEnviar(modoElegir ? null : texto.trim(), elegidos)
     setEnviando(false)
     if (r?.ok) onCerrar()
     else setError(r?.error || 'No se pudo enviar')
@@ -49,11 +51,11 @@ export default function CarruselModal({ nombreCliente, onEnviar, onCerrar, venta
     <div onClick={onCerrar} style={{ position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(0,0,0,.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12 }}>
       <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 720, height: '88vh', display: 'flex', flexDirection: 'column', background: P.bg, border: `1px solid ${P.borde}`, borderRadius: 14, padding: 14, fontFamily: 'Outfit,sans-serif', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ fontWeight: 800, color: P.texto, fontSize: 14 }}>🛍️ Enviar productos{nombreCliente ? ` a ${nombreCliente}` : ''}</div>
+          <div style={{ fontWeight: 800, color: P.texto, fontSize: 14 }}>{modoElegir ? '🛍️ Productos de la respuesta rápida' : `🛍️ Enviar productos${nombreCliente ? ` a ${nombreCliente}` : ''}`}</div>
           <button onClick={onCerrar} style={{ background: 'transparent', border: 'none', color: P.tenue, fontSize: 18, cursor: 'pointer' }}>✕</button>
         </div>
 
-        {ventanaCerrada && (
+        {ventanaCerrada && !modoElegir && (
           <div style={{ fontSize: 11.5, color: '#fbbf24', background: 'rgba(245,158,11,.08)', border: '1px solid rgba(245,158,11,.25)', borderRadius: 8, padding: '7px 10px', lineHeight: 1.4 }}>
             ⚠️ La ventana de 24 h está cerrada: sale con la <b>plantilla de carrusel</b> (la cobra Meta como marketing). Tu texto va en el saludo: «¡Hola! 🧡 <i>tu texto</i> … Desliza para ver más 👉».
           </div>
@@ -93,9 +95,9 @@ export default function CarruselModal({ nombreCliente, onEnviar, onCerrar, venta
           )}
         </div>
 
-        <textarea value={texto} onChange={e => setTexto(e.target.value)} rows={2} maxLength={MAX_TEXTO}
+        {!modoElegir && <textarea value={texto} onChange={e => setTexto(e.target.value)} rows={2} maxLength={MAX_TEXTO}
           placeholder="Texto que acompaña al carrusel (obligatorio)…"
-          style={{ padding: '8px 10px', borderRadius: 8, border: `1px solid ${P.borde}`, background: '#080d14', color: P.texto, fontFamily: 'inherit', fontSize: 13, resize: 'vertical' }} />
+          style={{ padding: '8px 10px', borderRadius: 8, border: `1px solid ${P.borde}`, background: '#080d14', color: P.texto, fontFamily: 'inherit', fontSize: 13, resize: 'vertical' }} />}
         {error && <div style={{ color: '#f87171', fontSize: 12 }}>{error}</div>}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontSize: 12, color: elegidos.length >= MIN_TARJETAS ? P.verde : P.tenue }}>
@@ -107,7 +109,7 @@ export default function CarruselModal({ nombreCliente, onEnviar, onCerrar, venta
             padding: '9px 16px', borderRadius: 9, border: 'none', fontWeight: 800, fontSize: 13, fontFamily: 'inherit',
             background: listo ? 'linear-gradient(135deg,#25d366,#128c7e)' : '#111c2a', color: listo ? '#fff' : P.muy,
             cursor: listo && !enviando ? 'pointer' : 'default',
-          }}>{enviando ? 'Enviando…' : '🛍️ Enviar carrusel'}</button>
+          }}>{modoElegir ? '✓ Guardar productos' : (enviando ? 'Enviando…' : '🛍️ Enviar carrusel')}</button>
         </div>
       </div>
     </div>

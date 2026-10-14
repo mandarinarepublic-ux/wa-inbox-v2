@@ -2387,7 +2387,23 @@ export default function App() {
       let todoOk = true
       try {
       const botones = (reply.botones || []).filter(Boolean).slice(0, 3)
-      if (botones.length && reply.text) {
+      const carrusel = Array.isArray(reply.carrusel) ? reply.carrusel : []
+      let motivoFallo = ''   // el porqué concreto, si lo hay, para el aviso final
+      if (carrusel.length >= 2 && reply.text) {
+        // 🛍️ Respuesta rápida CON productos → carrusel con el texto encima (lib/carrusel.js).
+        // El servidor decide interactivo o plantilla. Productos O botones: si
+        // hubiera las dos cosas, manda el carrusel (el editor ya no lo deja).
+        const r = await sendCarrusel(telefono, nombre, reply.text, carrusel, canal).catch(e => ({ ok: false, error: e.message }))
+        if (r?.ok) {
+          pintarOptimista(telefono, canal, { id: r.wamid || 'tmp_' + Date.now(), telefono, nombre, tipo: 'carrusel', mensaje: reply.text, botones: guardadoCarrusel(carrusel, ''), direccion: 'SALIENTE', timestamp: new Date().toISOString(), estado: 'enviado' })
+        } else {
+          todoOk = false
+          // Dice POR QUÉ (producto agotado, ventana cerrada sin plantilla…): sin esto
+          // el vendedor ve "no salió completa" y no sabe qué cambiar.
+          motivoFallo = `🛍️ El carrusel no salió: ${r?.error || 'error al enviar'}`
+        }
+        avanzar()
+      } else if (botones.length && reply.text) {
         // Respuesta rápida CON botones interactivos → mensaje + botones
         const validBtns = botones.map((t, i) => ({ id: `btn_${i + 1}`, title: t }))
         // El servidor guarda SOLO el cuerpo en `mensaje`; los botones van aparte en `botones`.
@@ -2426,7 +2442,7 @@ export default function App() {
       }
 
       if (todoOk) changeStatus(telefono, estadoDestino, canal)
-      else { setToast({ ok: false, error: 'La respuesta rápida no salió completa' }); setTimeout(() => setToast(null), 4000) }
+      else { setToast({ ok: false, error: motivoFallo || 'La respuesta rápida no salió completa' }); setTimeout(() => setToast(null), motivoFallo ? 7000 : 4000) }
       setTimeout(load, 4000)
       } catch (e) {
         todoOk = false
