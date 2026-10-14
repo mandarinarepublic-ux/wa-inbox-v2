@@ -127,6 +127,18 @@ test('piezasDeNodos: respuesta rápida con adjuntos + texto con botones; la 1.ª
   assert.equal(p[2].TipoMensaje, 'interactive_buttons')
   assert.ok(p.every(x => x.Canal === contacto.phoneId))
 })
+test('piezasDeNodos: respuesta con 🛍️ carrusel → carrusel con el texto encima, sin botones, y después los adjuntos', () => {
+  const prods = [{ retailerId: 'a', nombre: 'A', precio: '$35', foto: 'https://x/a.jpg' }, { retailerId: 'b', nombre: 'B', precio: '$35', foto: 'https://x/b.jpg' }]
+  const resp = [{ id: 'rc', text: 'Mira estas', botones: ['Sí'], carrusel: prods, adjuntos: [{ tipo: 'audio', url: 'https://x/v.ogg', nombre: '' }] }]
+  const p = piezasDeNodos({ nodos: [M('m', { origen: 'respuesta', respuestaId: 'rc' })], respuestas: resp, contacto })
+  assert.equal(p.length, 2)
+  assert.equal(p[0].TipoMensaje, 'carrusel'); assert.equal(p[0].Cuerpo, 'Mira estas'); assert.equal(p[0].Canal, contacto.phoneId)
+  assert.deepEqual(JSON.parse(p[0].Productos).map(x => x.retailerId), ['a', 'b'])
+  assert.equal(p[1].AudioURL, 'https://x/v.ogg')
+  // Un solo producto no es carrusel: sale como texto normal.
+  const uno = piezasDeNodos({ nodos: [M('m', { origen: 'respuesta', respuestaId: 'rc' })], respuestas: [{ ...resp[0], botones: [], carrusel: prods.slice(0, 1) }], contacto })
+  assert.equal(uno[0].Mensaje, 'Mira estas')
+})
 test('piezasDeNodos: respuesta borrada se salta; texto vacío no sale; adjuntos por url en un nodo texto', () => {
   const nodos = [M('x', { origen: 'respuesta', respuestaId: 'no' }), M('y', { origen: 'texto', texto: '', adjuntos: [{ tipo: 'audio', url: 'https://x/v.ogg', nombre: '' }] })]
   const p = piezasDeNodos({ nodos, respuestas, contacto })

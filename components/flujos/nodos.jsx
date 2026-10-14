@@ -186,12 +186,14 @@ function NodoMensaje({ id, data, selected }) {
 
   let texto = ''
   let nAdjuntos = 0
+  let nProductos = 0
   let perdida = false
   if (data?.origen === 'respuesta') {
     const r = (respuestas || []).find((x) => String(x.id) === String(data?.respuestaId))
     if (r) {
       texto = r.text || ''
       nAdjuntos = adjuntosDeRespuesta(r).length
+      nProductos = Array.isArray(r.carrusel) && r.carrusel.length >= 2 ? r.carrusel.length : 0
     } else {
       perdida = true
     }
@@ -201,6 +203,7 @@ function NodoMensaje({ id, data, selected }) {
   }
 
   const marcas = []
+  if (nProductos) marcas.push(`🛍️ ${nProductos}`)
   if (nAdjuntos) marcas.push(`📎 ${nAdjuntos}`)
   if (data?.etapa && EMOJI_ETAPA[data.etapa]) marcas.push(EMOJI_ETAPA[data.etapa])
   if (String(data?.deuda || '').trim()) marcas.push('📌')
