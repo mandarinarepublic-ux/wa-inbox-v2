@@ -40,5 +40,27 @@ test('frena lo que Meta rechaza', () => {
     const r = armarPlantilla({ nombre: 'n', categoria: 'UTILITY', ...c })
     assert.equal(r.ok, false, JSON.stringify(c))
   }
-  assert.equal(armarPlantilla({ nombre: 'n', categoria: 'AUTHENTICATION', cuerpo: 'hola' }).ok, false)
+  assert.equal(armarPlantilla({ nombre: 'n', categoria: 'PROMO', cuerpo: 'hola' }).ok, false)
+})
+
+// 🔑 Autenticación (14-oct-2026): el código de acceso del club de premios. Meta pone
+// el texto ('<código> es tu código de verificación…'); nosotros solo elegimos el
+// botón y cuánto dura. IND no tenía ninguna y su club no podía mandar el código.
+test('autenticación: texto de Meta, botón Copiar código y vencimiento', () => {
+  const r = armarPlantilla({ nombre: 'Codigo Acceso', categoria: 'authentication', idioma: 'es', cuerpo: 'esto se ignora', minutos: 10 })
+  assert.equal(r.ok, true)
+  assert.deepEqual(r.payload, {
+    name: 'codigo_acceso', category: 'AUTHENTICATION', language: 'es',
+    components: [
+      { type: 'BODY', add_security_recommendation: true },
+      { type: 'FOOTER', code_expiration_minutes: 10 },
+      { type: 'BUTTONS', buttons: [{ type: 'OTP', otp_type: 'COPY_CODE', text: 'Copiar código' }] },
+    ],
+  })
+})
+
+test('autenticación: 10 minutos por defecto y solo entre 1 y 90', () => {
+  assert.equal(armarPlantilla({ nombre: 'a', categoria: 'AUTHENTICATION' }).payload.components[1].code_expiration_minutes, 10)
+  assert.equal(armarPlantilla({ nombre: 'a', categoria: 'AUTHENTICATION', minutos: 0 }).ok, false)
+  assert.equal(armarPlantilla({ nombre: 'a', categoria: 'AUTHENTICATION', minutos: 91 }).ok, false)
 })

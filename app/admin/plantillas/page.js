@@ -12,6 +12,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { CANALES } from '@/lib/canales'
 import { CATEGORIAS, IDIOMAS, armarPlantilla, normalizarNombre, variablesDe } from '@/lib/plantilla-nueva'
 
+const ETIQUETA_CATEGORIA = {
+  UTILITY: 'Servicio (pedido, envío, seguimiento)',
+  MARKETING: 'Marketing (promos, novedades)',
+  AUTHENTICATION: 'Código de acceso (autenticación)',
+}
+
 const C = { bg: '#0b0f14', card: '#131a22', border: '#243040', text: '#e6edf3', dim: '#8b98a5', green: '#25d366', orange: '#f97316', red: '#f87171' }
 const COLOR_ESTADO = { APPROVED: C.green, PENDING: C.orange, REJECTED: C.red }
 const NOMBRE_ESTADO = { APPROVED: 'Aprobada', PENDING: 'En revisión', REJECTED: 'Rechazada', PAUSED: 'Pausada', DISABLED: 'Desactivada' }
@@ -33,6 +39,7 @@ export default function Plantillas() {
   }, [canal.phoneId])
   useEffect(() => { cargar() }, [cargar])
 
+  const esAuth = form.categoria === 'AUTHENTICATION'
   const vars = useMemo(() => variablesDe(form.cuerpo), [form.cuerpo])
   const revision = useMemo(() => armarPlantilla(form), [form])
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
@@ -87,7 +94,7 @@ export default function Plantillas() {
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <label style={{ ...lbl, flex: 1, minWidth: 160 }}>Categoría
               <select value={form.categoria} onChange={set('categoria')} style={inp}>
-                {CATEGORIAS.map((c) => <option key={c} value={c}>{c === 'UTILITY' ? 'Servicio (pedido, envío, seguimiento)' : 'Marketing (promos, novedades)'}</option>)}
+                {CATEGORIAS.map((c) => <option key={c} value={c}>{ETIQUETA_CATEGORIA[c] || c}</option>)}
               </select>
             </label>
             <label style={{ ...lbl, flex: 1, minWidth: 120 }}>Idioma
@@ -97,6 +104,16 @@ export default function Plantillas() {
             </label>
           </div>
 
+          {esAuth && (
+            <div style={{ color: C.dim, margin: '0 0 12px', lineHeight: 1.5 }}>
+              🔑 El texto lo pone Meta: <i>«123456 es tu código de verificación. Por tu seguridad, no lo compartas.»</i> con un botón <b>Copiar código</b>.
+              <label style={{ ...lbl, marginTop: 8 }}>El código vence en (minutos)
+                <input type="number" min={1} max={90} value={form.minutos ?? 10} onChange={set('minutos')} style={{ ...inp, maxWidth: 120 }} />
+              </label>
+            </div>
+          )}
+
+          {!esAuth && <>
           <label style={lbl}>Mensaje <span style={{ color: C.dim, fontWeight: 400 }}>— usa {'{{1}}'}, {'{{2}}'}… para lo que cambia (nombre, pedido)</span>
             <textarea value={form.cuerpo} onChange={set('cuerpo')} rows={5} placeholder="Hola {{1}}, te escribimos de Mandarina Republic por tu consulta. ¿Seguimos con tu pedido?" style={{ ...inp, resize: 'vertical' }} />
           </label>
@@ -117,6 +134,8 @@ export default function Plantillas() {
               {form.pie && <div style={{ color: C.dim, fontSize: 12, marginTop: 6 }}>{form.pie}</div>}
             </div>
           )}
+
+          </>}
 
           {!revision.ok && form.cuerpo && (
             <ul style={{ color: C.orange, margin: '0 0 12px', paddingLeft: 18 }}>{revision.errores.map((e) => <li key={e}>{e}</li>)}</ul>
