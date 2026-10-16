@@ -8,6 +8,7 @@ import { fuenteDeMedia } from '@/lib/fuente-media'
 import { etiquetaTelefono } from '@/lib/cliente-sin-telefono'
 import { EMOJIS_REACCION } from '@/lib/reacciones'
 import { leerCarrusel } from '@/lib/carrusel'
+import { urlDeDescarga, nombreDeDescarga } from '@/lib/descarga'
 
 // ── SPINNER ──────────────────────────────────────────────────────
 export function Spinner({ size = 24 }) {
@@ -415,7 +416,7 @@ function VisorFoto({ src, onCerrar }) {
 }
 
 // ── MEDIA CONTENT ────────────────────────────────────────────────
-function MediaContent({ tipo, mediaUrl, mediaId }) {
+function MediaContent({ tipo, mediaUrl, mediaId, nombre = '' }) {
   // Va ANTES de cualquier return condicional: los hooks no pueden quedar
   // detrás de un if.
   const [verFoto, setVerFoto] = useState(false)
@@ -503,14 +504,17 @@ function MediaContent({ tipo, mediaUrl, mediaId }) {
     </div>
   )
 
+  // Se DESCARGA con el nombre que puso el cliente: abrir la URL tal cual bajaba
+  // un `wamid….bin` que Illustrator/Photoshop no reconocen (lib/descarga.js).
   if (has && isDocument) return (
-    <a href={src} target="_blank" rel="noreferrer" style={{
+    <a href={urlDeDescarga(src, nombre)} download={nombreDeDescarga(nombre) || true} target="_blank" rel="noreferrer" title="Descargar" style={{
       display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6,
       background: 'rgba(99,102,241,.1)', border: '1px solid rgba(99,102,241,.2)',
       borderRadius: 10, padding: '10px 14px', textDecoration: 'none',
     }}>
       <span style={{ fontSize: 22 }}>📄</span>
-      <span style={{ fontSize: 13, color: '#818cf8', fontWeight: 600 }}>Documento adjunto</span>
+      <span style={{ fontSize: 13, color: '#818cf8', fontWeight: 600, wordBreak: 'break-word' }}>{nombre || 'Documento adjunto'}</span>
+      <span style={{ fontSize: 12, color: '#818cf8', marginLeft: 'auto' }}>⬇</span>
     </a>
   )
 
@@ -965,7 +969,8 @@ export function MessageBubble({ msg, allMsgs, onResponder, onAbrirChat, onReenvi
         )}
 
         {hasMedia && (
-          <MediaContent tipo={msg.tipo} mediaUrl={msg.mediaUrl} mediaId={msg.mediaId} />
+          <MediaContent tipo={msg.tipo} mediaUrl={msg.mediaUrl} mediaId={msg.mediaId}
+            nombre={['document', 'documento'].includes(String(msg.tipo || '').toLowerCase()) ? msg.mensaje : ''} />
         )}
 
         {/* La ubicación reemplaza al texto: el `mensaje` de esa fila SON las
