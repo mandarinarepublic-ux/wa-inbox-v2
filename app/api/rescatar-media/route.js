@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSupabase, CUENTA } from '@/lib/supabase'
-import { archivarMedia } from '@/lib/media-archive'
+import { archivarMediaDetalle } from '@/lib/media-archive'
 
 // Rescate de la media entrante que quedó colgando del `media_id` de Meta.
 //
@@ -125,26 +125,36 @@ export async function GET(req) {
     for (let i = 0; i < filas.length; i += EN_PARALELO) {
       const lote = filas.slice(i, i + EN_PARALELO)
       const res = await Promise.all(lote.map(async (m) => {
-        // `archivarMedia` es best-effort y NUNCA lanza: devuelve la url o null.
-        const u = await archivarMedia({ mediaId: m.media_id, wamid: m.wa_message_id })
-        return { m, u }
+        // Best-effort, NUNCA lanza: devuelve { url, motivo }.
+        const r = await archivarMediaDetalle({ mediaId: m.media_id, wamid: m.wa_message_id })
+        return { m, ...r }
       }))
-      for (const { m, u } of res) {
+      for (const { m, url: u, motivo } of res) {
         if (u) rescatados += 1
-        // Se dice CUÁLES fallaron y de qué fecha son. Un rescate que solo dice
-        // "12 de 20" no deja saber si lo que falla es lo viejo (Meta ya lo borró,
-        // normal) o lo nuevo (ahí sí hay algo roto).
-        else fallidos.push({ tipo: m.tipo, fecha: m.fecha })
+        // Se dice CUÁLES fallaron, de qué fecha son y POR QUÉ. Un rescate que solo
+        // dice "12 de 20" no deja saber si lo que falla es lo viejo (Meta ya lo
+        // borró, normal) o lo nuevo (ahí sí hay algo roto).
+        else fallidos.push({ tipo: m.tipo, fecha: m.fecha, motivo })
       }
     }
+
+    // ☠️ Antes había un solo contador `no_estaban_en_meta` que sumaba CUALQUIER
+    // fallo. El 16-oct-2026 tres .psd que Meta sí tenía salieron como perdidos:
+    // era el tope de 25 MB del bucket. Ahora solo `meta_ya_lo_borro` es pérdida
+    // definitiva; todo lo demás tiene arreglo y se cuenta aparte.
+    const porMotivo = {}
+    for (const f of fallidos) porMotivo[f.motivo || 'desconocido'] = (porMotivo[f.motivo || 'desconocido'] || 0) + 1
+    const perdidos = porMotivo.meta_ya_lo_borro || 0
 
     return NextResponse.json({
       ok: true,
       procesados: filas.length,
       rescatados,
-      // Los que Meta ya no tiene. Es el resultado esperado para los más viejos:
-      // no es un error del rescate, es que llegamos tarde a esos.
-      no_estaban_en_meta: fallidos.length,
+      // Los que Meta ya no tiene: no hay forma de recuperarlos.
+      perdidos_en_meta: perdidos,
+      // Fallaron por algo NUESTRO (bucket, token, red): tienen arreglo, revisar.
+      fallaron_con_arreglo: fallidos.length - perdidos,
+      fallos_por_motivo: porMotivo,
       quedan: Math.max(0, (count ?? filas.length) - rescatados),
       ventana_dias: dias,
       saltados: saltar,
