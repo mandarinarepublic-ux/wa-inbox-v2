@@ -6,7 +6,9 @@ import {
   getMarcaAvisoFallidosSupabase,
   setMarcaAvisoFallidosSupabase,
 } from '@/lib/inbox-supabase'
-import { agruparFallos, textoAvisoFallidos } from '@/lib/entregas-fallidas'
+import { agruparFallos, textoAvisoFallidos, eventosParaTablero } from '@/lib/entregas-fallidas'
+import { reportarEntregasFallidas } from '@/lib/eventos-sistema'
+import { CUENTA } from '@/lib/supabase'
 import { CANALES } from '@/lib/canales'
 import { autorizadoCron } from '@/lib/cron-auth'
 
@@ -125,6 +127,10 @@ export async function GET(req) {
       return NextResponse.json({ ok: true, fallidos: 0, desde, bsuid, bandeja })
     }
 
+    // También al tablero de errores del CRM (/dashboard/errores): Telegram se
+    // pierde entre las ventas; el tablero queda hasta que alguien lo marca resuelto.
+    const tablero = await reportarEntregasFallidas(eventosParaTablero(grupos, CUENTA))
+
     const envio = await enviarTelegram(texto)
     // ⚠️ Se mira el resultado. `fetch` no lanza con 4xx/5xx, así que un token
     // vencido se vería idéntico a un envío bueno — que es exactamente cómo este
@@ -142,6 +148,7 @@ export async function GET(req) {
       avisado: envio.ok,
       motivo: envio.ok ? undefined : envio.motivo,
       telegram: telegramConfigurado(),
+      tablero,
       desde,
       bsuid,
       bandeja,

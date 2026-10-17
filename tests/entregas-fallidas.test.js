@@ -6,7 +6,7 @@
 // que tiene que decir el aviso para que sirva de algo.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { agruparFallos, textoAvisoFallidos, motivoLegible } from '../lib/entregas-fallidas.js'
+import { agruparFallos, textoAvisoFallidos, motivoLegible, eventosParaTablero, esFalloDeCuenta } from '../lib/entregas-fallidas.js'
 
 const MANDI    = '1024077200794372'
 const REPUBLIC = '118582961194601'
@@ -92,4 +92,50 @@ test('el singular se lee bien', () => {
 test('sin nombre se muestra el teléfono, no un hueco', () => {
   const g = agruparFallos([{ telefono: '593960643698', nombre: '', phone_id: MANDI, codigo: 131047 }])
   assert.match(textoAvisoFallidos(g, { canales: CANALES }), /\+593960643698/)
+})
+
+// 17-oct-2026: IND amaneció con un pago pendiente a Meta (131042) y desde las
+// 8:00 no salió NINGÚN mensaje. El aviso tiene que gritar que es la CUENTA, no
+// listar clientes sueltos, y el fallo tiene que quedar en /dashboard/errores.
+const BLOQUEO = [
+  { telefono: '593994787733', nombre: 'Salome', phone_id: MANDI, codigo: 131042, fecha: '2026-10-17T13:30:44Z' },
+  { telefono: '593994787733', nombre: 'Salome', phone_id: MANDI, codigo: 131042, fecha: '2026-10-17T13:30:43Z' },
+  { telefono: '593967848110', nombre: 'Pedro',  phone_id: MANDI, codigo: 131042, fecha: '2026-10-17T13:31:16Z' },
+]
+
+test('131042 (pago pendiente) se reconoce como bloqueo de TODA la cuenta', () => {
+  assert.equal(esFalloDeCuenta(131042), true)
+  assert.equal(esFalloDeCuenta('131042'), true)
+  assert.equal(esFalloDeCuenta(131047), false)
+  assert.match(motivoLegible(131042), /PAGO PENDIENTE/)
+})
+
+test('un bloqueo de cuenta encabeza el aviso y dice que no se reenvía solo', () => {
+  const t = textoAvisoFallidos(agruparFallos(BLOQUEO), { canales: CANALES })
+  assert.match(t, /^🛑 <b>NO ESTÁ SALIENDO NINGÚN MENSAJE<\/b>/)
+  assert.match(t, /NO se reenvían solos/)
+})
+
+test('fallos normales NO llevan la alarma de cuenta', () => {
+  const t = textoAvisoFallidos(agruparFallos([{ telefono: '1', phone_id: MANDI, codigo: 131047, fecha: 'x' }]), { canales: CANALES })
+  assert.doesNotMatch(t, /NINGÚN MENSAJE/)
+})
+
+test('al tablero va UNA fila por motivo, con los clientes en el detalle', () => {
+  const filas = eventosParaTablero(agruparFallos([
+    ...BLOQUEO, { telefono: '9', phone_id: MANDI, codigo: 131047, fecha: 'x' },
+  ]), 'IND')
+  assert.equal(filas.length, 2)
+  const b = filas.find(f => f.detalle.codigo === 131042)
+  assert.equal(b.fuente, 'whatsapp')
+  assert.equal(b.nivel, 'error')
+  assert.equal(b.pedido_id, null)
+  assert.equal(b.detalle.de_cuenta, true)
+  assert.equal(b.detalle.mensajes, 3)
+  assert.equal(b.detalle.clientes.length, 2)
+  assert.match(b.mensaje, /^🛑 NO SALE NINGÚN MENSAJE de IND\. 3 mensajes NO llegaron \(2 clientes\)/)
+})
+
+test('sin fallos no se escribe nada en el tablero', () => {
+  assert.deepEqual(eventosParaTablero([], 'IND'), [])
 })
