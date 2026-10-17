@@ -8,7 +8,7 @@ import { correrTanda } from '@/lib/flujo-motor'
 import { mandarEscribiendo } from '@/lib/escribiendo'
 import { getEstadoFlujo, guardarEstadoFlujo, borrarEstadoFlujo, registrarPasos } from '@/lib/flujos'
 import { getRespuestas } from '@/lib/respuestas'
-import { enviarTelegram } from '@/lib/telegram'
+import { enviarTelegram, enviarAlerta } from '@/lib/telegram'
 import { usaSupabaseLectura, CUENTA } from '@/lib/supabase'
 import { guardarMensajeSupabase, existeWamidSupabase, guardarEventoCrudoSupabase, actualizarEstadoEntregaSupabase, asegurarConversacionSalienteSupabase, getFlujosPublicadosSupabase } from '@/lib/inbox-supabase'
 import { archivarMedia } from '@/lib/media-archive'
@@ -287,7 +287,7 @@ async function procesar(nuevos, origin) {
         // pero sin recibir nada por 24h: nadie más lo va a intentar. Sin este aviso
         // el chat se pierde en silencio.
         if (salieron === 0 && piezas.length > 0) {
-          await enviarTelegram(
+          await enviarAlerta(
             `⚠️ <b>Receta sin enviar en ${esc(CUENTA)}</b>\n` +
             `receta ${esc(receta.id)} a ${esc(m.telefono)}: 0/${piezas.length} piezas salieron. ` +
             `El chat quedó marcado 24 h. Revisa /api/saliente en los logs de Vercel.`
@@ -340,7 +340,7 @@ async function procesar(nuevos, origin) {
     registrarPasos,
     setEtapa: (tel, etapa) => updateEtapa(tel, etapa, 'flujo', { soloSiVacia: true }),
     setDeuda: (tel, nota) => updateDeuda(tel, nota, 'auto', { noPisar: true }),
-    avisar: (texto) => enviarTelegram(texto),
+    avisar: (texto) => enviarAlerta(texto),
     ahora: () => new Date(),
     cuenta: CUENTA,
     log: console.log,

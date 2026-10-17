@@ -1,6 +1,6 @@
 import { getSupabase } from '@/lib/supabase'
 import { NextResponse } from 'next/server'
-import { enviarTelegram, telegramConfigurado } from '@/lib/telegram'
+import { enviarAlerta, telegramConfigurado } from '@/lib/telegram'
 import {
   getEntregasFallidasSupabase,
   getMarcaAvisoFallidosSupabase,
@@ -131,7 +131,7 @@ export async function GET(req) {
     // pierde entre las ventas; el tablero queda hasta que alguien lo marca resuelto.
     const tablero = await reportarEntregasFallidas(eventosParaTablero(grupos, CUENTA))
 
-    const envio = await enviarTelegram(texto)
+    const envio = await enviarAlerta(texto)
     // ⚠️ Se mira el resultado. `fetch` no lanza con 4xx/5xx, así que un token
     // vencido se vería idéntico a un envío bueno — que es exactamente cómo este
     // aviso se moriría en silencio, igual que lo que vino a vigilar.

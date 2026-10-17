@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert'
-import { telegramConfigurado, enviarTelegram } from '../lib/telegram.js'
+import { telegramConfigurado, enviarTelegram, enviarAlerta } from '../lib/telegram.js'
 
 // Las pruebas corren sin TELEGRAM_BOT_TOKEN ni TELEGRAM_CHAT_ID, que es
 // exactamente el estado en que esto se despliega: vivo y mudo.
@@ -55,6 +55,44 @@ test('con variables y 200, reporta exito', async () => {
   try {
     const r = await enviarTelegram('hola')
     assert.equal(r.ok, true)
+  } finally {
+    globalThis.fetch = fetchOriginal
+    delete process.env.TELEGRAM_BOT_TOKEN
+    delete process.env.TELEGRAM_CHAT_ID
+  }
+})
+
+// 17-oct-2026: "cualquier error me debe llegar como alerta siempre por telegram".
+// Las alertas de ERROR van al chat de errores; el trabajo diario (pendientes,
+// pagos, anuncios) sigue en el chat de siempre.
+test('enviarAlerta va a TELEGRAM_CHAT_ERRORES y enviarTelegram al chat de siempre', async () => {
+  const fetchOriginal = globalThis.fetch
+  const chats = []
+  process.env.TELEGRAM_BOT_TOKEN = 'x'
+  process.env.TELEGRAM_CHAT_ID = 'trabajo'
+  process.env.TELEGRAM_CHAT_ERRORES = 'errores'
+  globalThis.fetch = async (_url, init) => { chats.push(JSON.parse(init.body).chat_id); return { ok: true } }
+  try {
+    assert.equal((await enviarAlerta('roto')).ok, true)
+    assert.equal((await enviarTelegram('pendientes')).ok, true)
+    assert.deepEqual(chats, ['errores', 'trabajo'])
+  } finally {
+    globalThis.fetch = fetchOriginal
+    delete process.env.TELEGRAM_BOT_TOKEN
+    delete process.env.TELEGRAM_CHAT_ID
+    delete process.env.TELEGRAM_CHAT_ERRORES
+  }
+})
+
+test('sin chat de errores, la alerta NO se pierde: cae al chat de siempre', async () => {
+  const fetchOriginal = globalThis.fetch
+  const chats = []
+  process.env.TELEGRAM_BOT_TOKEN = 'x'
+  process.env.TELEGRAM_CHAT_ID = 'trabajo'
+  globalThis.fetch = async (_url, init) => { chats.push(JSON.parse(init.body).chat_id); return { ok: true } }
+  try {
+    await enviarAlerta('roto')
+    assert.deepEqual(chats, ['trabajo'])
   } finally {
     globalThis.fetch = fetchOriginal
     delete process.env.TELEGRAM_BOT_TOKEN
