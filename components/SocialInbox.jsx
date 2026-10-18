@@ -29,8 +29,7 @@ const CHANNEL_META = {
 
 // Vocabulario de bandeja (Eje 1) — el mismo de WhatsApp, en minúsculas, con los
 // mismos iconos y colores de components/App.jsx (leídos de ahí, sin tocar ese
-// archivo). 'venta' y 'soporte' NO aparecen en Comentarios: la venta y el lead se
-// siguen en el DM, que es donde ocurren de verdad.
+// archivo). Mensajes y Comentarios usan los cinco (ver FILTROS_COMENTARIOS).
 const STATUS_META = {
   pendiente: { icon:'🔴', label:'Pendiente', filterLabel:'🔴 Pendientes', color:'#f87171' },
   atendido:  { icon:'🟢', label:'Atendido',  filterLabel:'🟢 Atendidos',  color:'#4ade80' },
@@ -39,7 +38,10 @@ const STATUS_META = {
   archivado: { icon:'⚫', label:'Archivado', filterLabel:'⚫ Archivados', color:'#64748b' },
 }
 const FILTROS_MENSAJES    = ['pendiente', 'atendido', 'venta', 'soporte', 'archivado']
-const FILTROS_COMENTARIOS = ['pendiente', 'atendido', 'archivado']
+// Comentarios tiene LOS MISMOS filtros que Mensajes (pedido de Rodrigo, 18-oct): la
+// bandeja de Pendientes se limpia igual en los dos lados, y la temperatura se va a
+// usar para configurar opciones que tienen que funcionar en ambos.
+const FILTROS_COMENTARIOS = FILTROS_MENSAJES
 
 // Eje 2 (temperatura del lead): 100% manual, nada la cambia sola. Solo tiene
 // sentido en Mensajes — un comentario público no es un lead que se "enfríe", el
@@ -934,9 +936,9 @@ export default function SocialInbox({ active: isVisible }) {
             })}
           </div>
 
-          {/* Fila 2 — TEMPERATURA del lead (Eje 2, manual). Solo en Mensajes: en un
-              comentario el lead y su temperatura se siguen en el DM. */}
-          {bandeja === 'mensajes' && (
+          {/* Fila 2 — TEMPERATURA del lead (Eje 2, manual). En Mensajes Y en Comentarios. */}
+          {(
+
             <div style={{ display:'flex', gap:3, flexWrap:'wrap', marginTop:5 }}>
               {TEMPERATURAS.map(({ key, icon, label, color }) => {
                 const active = filter === key
@@ -1049,12 +1051,11 @@ export default function SocialInbox({ active: isVisible }) {
               {/* Separador entre los dos ejes (igual que App.jsx:1292): con hasta 8
                   botones seguidos, sin esta línea no se ve dónde termina la bandeja
                   de estado y empieza la temperatura. */}
-              {selectedConv.tipo !== 'COMENTARIO' && (
+              {(
                 <span style={{ width:1, alignSelf:'stretch', background:'#1e2d3d', margin:'2px 2px', flexShrink:0 }} />
               )}
-              {/* La temperatura solo tiene sentido en Mensajes: en un comentario el
-                  lead y su temperatura se siguen en el DM (restricciones.md). */}
-              {selectedConv.tipo !== 'COMENTARIO' && TEMPERATURAS.map(({ key, icon, label, color }) => {
+              {/* Temperatura en los dos tipos de hilo (Mensajes y Comentarios). */}
+              {TEMPERATURAS.map(({ key, icon, label, color }) => {
                 const on = selectedConv.temperatura === key
                 return (
                   <button key={key} title={on ? `${label} — clic para quitar` : `Marcar ${label}`} onClick={() => cambiarTemperatura(key)} style={{
