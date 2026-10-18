@@ -355,6 +355,9 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
   const [modoRespuesta, setModoRespuesta] = useState('privado') // comentarios: 'privado' | 'publico'
   const [isMobile, setIsMobile] = useState(false)
   const [mediaInfo, setMediaInfo] = useState(null) // publicación/anuncio que comentó el cliente
+  // Meta rechazó el envío y hay a dónde ir a contestarlo (Business Suite o la
+  // publicación). Se pinta sobre el compositor SOLO en el chat donde pasó.
+  const [bloqueo, setBloqueo] = useState(null) // { conv, texto, enlace }
   const [subiendo, setSubiendo] = useState(false)
   const [showEmoji, setShowEmoji] = useState(false)
   const fileRef = useRef(null)
@@ -545,9 +548,23 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
     // /api/social/saliente ya valida (foto en comentario, LINKPAGO en público, etc.)
     // con mensajes entendibles: no se repiten esas reglas acá, solo se propaga el error.
     const data = await res.json().catch(() => ({}))
-    if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`)
+    if (!res.ok || data.error) {
+      const err = new Error(data.error || `HTTP ${res.status}`)
+      err.enlace = data.enlace || ''
+      throw err
+    }
+    if (bloqueo?.conv === selected) setBloqueo(null)
     return data
-  }, [selectedConv, iraAlComentario, ultimoDelCliente, modoRespuesta])
+  }, [selectedConv, iraAlComentario, ultimoDelCliente, modoRespuesta, bloqueo, selected])
+
+  // Un envío que Meta rechazó. Si hay link para contestarlo en Meta, va en el aviso
+  // sobre el compositor (un alert no deja tocar un link); si no, el alert de siempre.
+  // En un comentario de IG se prefiere la publicación misma: ahí está el comentario.
+  const avisarFallo = useCallback((e, prefijo = '❌ No se pudo enviar') => {
+    const enlace = (iraAlComentario && mediaInfo?.permalink) || e?.enlace || ''
+    if (enlace) setBloqueo({ conv: selected, texto: e.message, enlace })
+    else alert(prefijo + ': ' + e.message)
+  }, [iraAlComentario, mediaInfo, selected])
 
   // Respuesta rápida del panel: el texto y luego cada foto, en orden (Meta no admite
   // texto + adjunto en un mismo mensaje). Las fotos se descartan solo cuando el envío
@@ -583,10 +600,10 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
         alert('Es un comentario público: se mandó solo el texto. Responde en privado para poder mandar las fotos.')
       }
     } catch (e) {
-      alert('❌ No se pudo enviar: ' + e.message)
+      avisarFallo(e)
     }
     load()
-  }, [selectedConv, iraAlComentario, enviarSocial, load])
+  }, [selectedConv, iraAlComentario, enviarSocial, load, avisarFallo])
 
   // `RightPanel` acepta esta prop pero hoy no la invoca en ningún lado (tampoco en
   // WhatsApp: App.jsx la pasa igual, sin que nada la dispare todavía). Se deja cableada
@@ -594,9 +611,9 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
   // agrega ahí un botón que la use, funcione en los tres canales sin otro parche.
   const onSendImage = useCallback(async (imageUrl) => {
     try { await enviarSocial({ imagen: imageUrl }) }
-    catch (e) { alert('❌ No se pudo enviar la foto: ' + e.message) }
+    catch (e) { avisarFallo(e, '❌ No se pudo enviar la foto') }
     load()
-  }, [enviarSocial, load])
+  }, [enviarSocial, load, avisarFallo])
 
   // Producto del catálogo (pestaña Tienda, nunca en un hilo de comentario). RightPanel
   // manda (p, modo): 'foto' solo la imagen, 'info' primero título+precio y luego la
@@ -609,16 +626,16 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
         if (detalle) await enviarSocial({ texto: detalle })
       }
       if (p.image) await enviarSocial({ imagen: p.image })
-    } catch (e) { alert('❌ No se pudo enviar el producto: ' + e.message) }
+    } catch (e) { avisarFallo(e, '❌ No se pudo enviar el producto') }
     load()
-  }, [enviarSocial, load])
+  }, [enviarSocial, load, avisarFallo])
 
   const onSendText = useCallback(async (texto, copiarAlInput) => {
     if (copiarAlInput) { setInput(texto); return }
     try { await enviarSocial({ texto }) }
-    catch (e) { alert('❌ No se pudo enviar: ' + e.message) }
+    catch (e) { avisarFallo(e) }
     load()
-  }, [enviarSocial, load])
+  }, [enviarSocial, load, avisarFallo])
 
   // Foto suelta desde el computador (botón 📎 del compositor, solo en hilos privados).
   // Sube al bucket propio (inbox-media) y manda la URL. Meta la busca sola: en FB/IG
@@ -637,11 +654,11 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
       await enviarSocial({ imagen: data.url })
       load()
     } catch (err) {
-      alert('❌ ' + err.message)
+      avisarFallo(err, '❌')
     } finally {
       setSubiendo(false)
     }
-  }, [enviarSocial, load])
+  }, [enviarSocial, load, avisarFallo])
 
   // Inserta el emoji en la POSICIÓN DEL CURSOR, no al final: si el vendedor
   // escribió "hola  cómo estás" con el cursor en medio, el emoji va ahí. Después
@@ -804,9 +821,12 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
       if (!res.ok || data.error) {
         console.error('Send error:', data.error || res.status)
         setInput(text) // devolver el texto para reintentar
-        alert('❌ No se pudo enviar: ' + (data.error || `HTTP ${res.status}`))
+        const err = new Error(data.error || `HTTP ${res.status}`)
+        err.enlace = data.enlace || ''
+        avisarFallo(err)
         return
       }
+      if (bloqueo?.conv === selected) setBloqueo(null)
       // Optimistic update: agrega el saliente y marca 'atendido' (como en el server).
       // Vocabulario en minúsculas: en MAYÚSCULAS no calzaba con STATUS_META ni con
       // el filtro activo, y la fila se veía "sin bandeja" hasta el próximo poll.
@@ -1157,6 +1177,24 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
               contenedor (bottom:100%) para abrirse hacia arriba, encima del
               compositor, y así nunca tapa el textarea ni en pantalla chica. */}
           <div style={{ padding:'10px 16px 14px', background:'#0a0f1a', borderTop:'1px solid #111c2a', flexShrink:0, position:'relative' }}>
+            {/* Meta no dejó responder desde acá (p. ej. falta el App Review de
+                pages_messaging): link directo para contestar en Meta. */}
+            {bloqueo?.conv === selected && (
+              <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap', marginBottom:8,
+                            padding:'10px 12px', background:'#1a1116', border:'1px solid #3a1f28', borderRadius:12 }}>
+                <div style={{ flex:'1 1 220px', color:'#f87171', fontSize:12, lineHeight:1.45 }}>
+                  ❌ <b>Meta no dejó enviar desde el inbox.</b> Respóndele directo en Meta.
+                  <div style={{ color:'#64748b', fontSize:10, marginTop:2 }}>{bloqueo.texto}</div>
+                </div>
+                <a href={bloqueo.enlace} target="_blank" rel="noreferrer" style={{
+                  padding:'7px 12px', borderRadius:8, background:'#25d366', color:'#06110b',
+                  fontSize:12, fontWeight:800, textDecoration:'none', whiteSpace:'nowrap' }}>
+                  Abrir en Meta ↗
+                </a>
+                <button onClick={() => setBloqueo(null)} title="Cerrar" style={{
+                  background:'transparent', border:'none', color:'#64748b', cursor:'pointer', fontSize:14 }}>✕</button>
+              </div>
+            )}
             {/* Ventana cerrada y no es un comentario (que tiene su propio camino público
                 sin límite de tiempo): avisar ANTES de escribir, no dejar que Meta rebote
                 el mensaje después de que el vendedor ya lo redactó entero. */}

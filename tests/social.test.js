@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert'
 import { claveConversacion, agruparConversaciones, normalizarEstado, filaAMensaje } from '../lib/social-agrupar.js'
-import { cuerpoMensajeMeta, esHiloPublico } from '../lib/social-envio.js'
+import { cuerpoMensajeMeta, esHiloPublico, enlaceBusinessSuite } from '../lib/social-envio.js'
 import { estadoVentana } from '../lib/social-ventana.js'
 
 const base = { canal: 'IG', sender_id: '660529760420669', direccion: 'ENTRANTE', estado: 'PENDIENTE' }
@@ -247,4 +247,21 @@ test('audio-meta: solo convierte .ogg/.opus y la copia tiene ruta estable', asyn
   assert.equal(necesitaConversion('https://x/a.m4a'), false)
   const u = 'https://p.supabase.co/storage/v1/object/public/inbox-media/audios/MANDI/c49d.ogg'
   assert.equal(rutaCopiaM4a(u), 'audios-meta/audios/MANDI/c49d.m4a')
+})
+
+test('enlaceBusinessSuite abre el hilo del cliente en FB', () => {
+  const u = new URL(enlaceBusinessSuite({ canal: 'FB', sender_id: '939835211', pageId: '1437580293211264' }))
+  assert.equal(u.hostname, 'business.facebook.com')
+  assert.equal(u.searchParams.get('asset_id'), '1437580293211264')
+  assert.equal(u.searchParams.get('selected_item_id'), '939835211')
+  assert.equal(u.searchParams.get('thread_type'), 'FB_MESSAGE')
+})
+
+test('enlaceBusinessSuite marca el hilo de IG como IG_MESSAGE', () => {
+  const u = new URL(enlaceBusinessSuite({ canal: 'ig', sender_id: '660529760420669', pageId: '1' }))
+  assert.equal(u.searchParams.get('thread_type'), 'IG_MESSAGE')
+})
+
+test('enlaceBusinessSuite sin id de página no inventa un link', () => {
+  assert.equal(enlaceBusinessSuite({ canal: 'FB', sender_id: '1', pageId: '' }), '')
 })

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { guardarSocialMensajeSupabase, getTokenPagina, getFbPageId } from '@/lib/social-supabase'
-import { esHiloPublico, cuerpoMensajeMeta } from '@/lib/social-envio'
+import { esHiloPublico, cuerpoMensajeMeta, enlaceBusinessSuite } from '@/lib/social-envio'
 import { audioParaMeta } from '@/lib/audio-meta'
 import { parseLinkpago, crearLinkPago, mensajeLinkPago } from '@/lib/dlocal'
 
@@ -169,8 +169,12 @@ export async function POST(req) {
       const pista = saldraEnPublico
         ? ' Si el problema persiste, lo más probable es que falte la aprobación de "instagram_manage_comments" en App Review de Meta (también puede ser que el comentario haya sido borrado por su autor).'
         : ''
+      // Si Meta no deja responder desde acá (code 10 = falta App Review de
+      // pages_messaging), el vendedor igual tiene que contestar: se le da el link
+      // para abrir ESE chat en Business Suite.
+      const enlace = enlaceBusinessSuite({ canal, sender_id, pageId })
       return NextResponse.json(
-        { error: (err.message || `Envío falló (HTTP ${r.status})`) + pista, code: err.code, subcode: err.error_subcode },
+        { error: (err.message || `Envío falló (HTTP ${r.status})`) + pista, code: err.code, subcode: err.error_subcode, enlace },
         { status: 502 }
       )
     }
