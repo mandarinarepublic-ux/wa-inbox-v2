@@ -77,3 +77,8 @@ test('el texto genérico del anuncio sigue mostrando el anuncio', () => {
   const r = resumenDeLista({ direccion: 'ENTRANTE', mensaje: '¡Hola! Quiero más información.', referral: { body: 'Dragon Ball' } })
   assert.deepEqual(r, { icono: '🎯', texto: 'Dragon Ball' })
 })
+
+test('lo que el cliente escribió a mano no se muestra como producto (sin el punto de Meta)', () => {
+  const r = resumenDeLista({ direccion: 'ENTRANTE', mensaje: 'Me interesa la chompa de el anuncio dispone en talla m', referral: { body: 'Crewneck Oversize' } })
+  assert.deepEqual(r, { icono: '🎯', texto: 'Crewneck Oversize' })
+})

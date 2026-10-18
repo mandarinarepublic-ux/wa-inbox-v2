@@ -75,3 +75,10 @@ test('partes sin catálogo: nombre y variante del texto', () => {
   assert.deepEqual(partesProductoTocado('Me interesa SPIDER-VERSE "HERO SUIT".'), { nombre: 'SPIDER-VERSE "HERO SUIT"', variante: '' })
   assert.deepEqual(partesProductoTocado('¡Hola! Quiero más información.'), { nombre: '', variante: '' })
 })
+
+test('lo que el cliente escribe a mano (sin el punto de Meta) no es un producto seleccionado', () => {
+  assert.equal(restoProductoTocado('Me interesa la chompa de el anuncio dispone en talla m'), '')
+  assert.equal(restoProductoTocado('Me interesa Chaqueta  de los power rangers'), '')
+  // …pero el texto de Meta con algo agregado por el cliente sí cuenta.
+  assert.match(restoProductoTocado('Me interesa Zip Hoodie Venom "Symbiote" Dark Edition. Buenos días me interesa'), /^Zip Hoodie Venom/)
+})
