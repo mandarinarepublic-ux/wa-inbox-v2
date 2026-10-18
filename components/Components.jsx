@@ -533,71 +533,113 @@ function MediaContent({ tipo, mediaUrl, mediaId, nombre = '' }) {
   return null
 }
 
-// ── REFERRAL / PAUTA (anuncio Click-to-WhatsApp) ─────────────────
-// Cuando un cliente entra desde un anuncio de Meta, el mensaje trae `referral`
-// con el anuncio del que vino. Lo mostramos para responder con contexto.
+// Pauta + producto de cada primer mensaje: una sola consulta por chat abierto.
+const origenCache = new Map()
+
+// ── ORIGEN DE PAUTA (anuncio Click-to-WhatsApp) ────────────────────
+// El cuadro dice POR QUÉ PAUTA entró el cliente y QUÉ PRODUCTO seleccionó:
+//   · Pauta    → nombre del anuncio en el Administrador + campaña (/api/origen-pauta).
+//   · Producto → ☠️ el que TOCÓ dentro del anuncio. Meta lo escribe en el texto
+//     ("Me interesa X.") y el referral sigue diciendo el anuncio pautado: si toca
+//     Tortugas Ninja dentro del de Dragon Ball, el producto es Tortugas Ninja. La
+//     foto y el precio salen de Shopify. Ver lib/producto-tocado.js.
+//   · Creativo → el del referral DE ESTE MENSAJE (lo que este cliente vio). Si se
+//     cambia el creativo sin cambiar la pauta, cada cliente sigue mostrando el suyo.
 function ReferralCard({ referral, texto = '' }) {
   let r = referral
-  if (typeof r === 'string') { try { r = JSON.parse(r) } catch { return null } }
-  if (!r || typeof r !== 'object') return null
+  if (typeof r === 'string') { try { r = JSON.parse(r) } catch { r = null } }
+  const valido = Boolean(r && typeof r === 'object')
+  const tocado = valido ? restoProductoTocado(texto).trim() : ''
+  const clave = valido ? `${r.source_id || ''}|${tocado}` : ''
+  const [origen, setOrigen] = useState(() => origenCache.get(clave) || null)
 
+  useEffect(() => {
+    if (!valido || (!r.source_id && !tocado)) return
+    if (origenCache.has(clave)) { setOrigen(origenCache.get(clave)); return }
+    let vivo = true
+    fetch(`/api/origen-pauta?source_id=${encodeURIComponent(r.source_id || '')}&texto=${encodeURIComponent(texto)}`)
+      .then(res => res.ok ? res.json() : null)
+      .then(d => { if (d && !d.error) { origenCache.set(clave, d); if (vivo) setOrigen(d) } })
+      .catch(() => {})
+    return () => { vivo = false }
+  }, [clave]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!valido) return null
   const img = r.image_url || r.thumbnail_url || ''
   const proxied = img && /lookaside\.fbsbx\.com|graph\.facebook\.com|fbcdn|scontent/i.test(img)
     ? `/api/media?url=${encodeURIComponent(img)}`
     : img
   if (!r.headline && !r.body && !proxied && !r.source_url) return null
-  // ☠️ El cliente pudo tocar OTRO producto del catálogo dentro del anuncio: Meta lo
-  // escribe en el texto ("Me interesa …") y el referral sigue diciendo el anuncio.
-  // Lo que TOCÓ va primero; el anuncio queda como "dentro de". Ver lib/producto-tocado.js.
-  const tocado = restoProductoTocado(texto).trim()
+
+  const pauta = origen?.pauta
+  const producto = origen?.producto
+  const variante = origen?.variante || ''
+  const precio = (() => {
+    const n = Number(String(producto?.precio ?? '').replace(',', '.'))
+    return Number.isFinite(n) && n > 0 ? (Number.isInteger(n) ? `$${n}` : `$${n.toFixed(2)}`) : ''
+  })()
+  const etiqueta = { fontSize: 10, fontWeight: 800, letterSpacing: '.04em' }
 
   return (
-    <div style={{
-      border: '1px solid rgba(99,102,241,.35)',
-      background: 'rgba(99,102,241,.10)',
-      borderRadius: 12, padding: 8, marginBottom: 8,
-      display: 'flex', gap: 8, alignItems: 'flex-start', maxWidth: '100%',
-    }}>
-      {proxied && (
-        <img
-          src={proxied}
-          alt="anuncio"
-          style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }}
-          onError={e => { e.currentTarget.style.display = 'none' }}
-        />
-      )}
-      <div style={{ minWidth: 0, flex: 1 }}>
-        {tocado && (
-          <div style={{ marginBottom: 6 }}>
-            <div style={{ fontSize: 10, fontWeight: 800, color: '#25d366', letterSpacing: '.03em' }}>🛍️ TOCÓ ESTE PRODUCTO</div>
-            <div style={{ fontSize: 13, fontWeight: 800, color: '#e2e8f0' }}>{tocado}</div>
-          </div>
+    <div style={{ border: '1px solid rgba(99,102,241,.45)', background: 'rgba(99,102,241,.10)', borderRadius: 12, padding: 10, marginBottom: 8, maxWidth: '100%' }}>
+      {/* PAUTA */}
+      <div style={{ ...etiqueta, color: '#818cf8' }}>
+        🎯 {r.source_type === 'post' ? 'PUBLICACIÓN' : 'PAUTA'}
+      </div>
+      <div style={{ fontSize: 13, fontWeight: 800, color: '#e2e8f0', overflowWrap: 'anywhere' }}>
+        {pauta?.nombre || r.headline || 'Anuncio'}
+        {pauta?.campana && <span style={{ fontWeight: 600, color: '#94a3b8' }}> · {pauta.campana}</span>}
+      </div>
+
+      {/* PRODUCTO QUE SELECCIONÓ */}
+      <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed rgba(99,102,241,.45)', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+        {producto?.imagen && (
+          <a href={producto.imagen} target="_blank" rel="noreferrer" style={{ flexShrink: 0 }}>
+            <img src={producto.imagen} alt={producto.titulo}
+              style={{ width: 84, height: 84, borderRadius: 10, objectFit: 'cover', display: 'block' }}
+              onError={e => { e.currentTarget.style.display = 'none' }} />
+          </a>
         )}
-        <div style={{ fontSize: 10, fontWeight: 800, color: '#818cf8', letterSpacing: '.03em', marginBottom: 2 }}>
-          📣 {tocado ? 'DENTRO DEL' : 'VINO DE'} {r.source_type === 'post' ? (tocado ? 'LA PUBLICACIÓN' : 'UNA PUBLICACIÓN') : (tocado ? 'ANUNCIO' : 'UN ANUNCIO')}
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ ...etiqueta, color: '#25d366' }}>🛍️ PRODUCTO QUE SELECCIONÓ</div>
+          {tocado ? (
+            <>
+              <div style={{ fontSize: 14, fontWeight: 800, color: '#e2e8f0', overflowWrap: 'anywhere' }}>
+                {producto?.titulo || tocado}
+              </div>
+              {(variante || precio) && (
+                <div style={{ fontSize: 12, color: '#e2e8f0', marginTop: 2 }}>
+                  {variante && <>📏 {variante}</>}{variante && precio && '  ·  '}{precio && <>💲 {precio}</>}
+                </div>
+              )}
+              {producto && !producto.enShopify && (
+                <div style={{ fontSize: 10, color: '#475569', marginTop: 2 }}>No está en Shopify con ese nombre: sin foto</div>
+              )}
+            </>
+          ) : (
+            <div style={{ fontSize: 12, color: '#94a3b8' }}>No tocó un producto: escribió desde el anuncio</div>
+          )}
         </div>
-        {r.headline && (
-          <div style={{
-            fontSize: 13, fontWeight: 700, color: '#e2e8f0',
-            overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
-          }}>{r.headline}</div>
+      </div>
+
+      {/* CREATIVO que vio ESTE cliente */}
+      <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px dashed rgba(99,102,241,.45)', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+        {proxied && (
+          <img src={proxied} alt="anuncio"
+            style={{ width: 40, height: 40, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }}
+            onError={e => { e.currentTarget.style.display = 'none' }} />
         )}
-        {r.body && (
-          <div style={{
-            fontSize: 12, color: '#94a3b8', marginTop: 2,
-            overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', whiteSpace: 'pre-wrap',
-          }}>{r.body}</div>
-        )}
-        <div style={{ display: 'flex', gap: 10, marginTop: 4, flexWrap: 'wrap', alignItems: 'center' }}>
-          {r.source_url && (
-            <a href={r.source_url} target="_blank" rel="noreferrer"
-              style={{ fontSize: 11, color: '#818cf8', fontWeight: 600, textDecoration: 'none' }}>
-              Ver anuncio ↗
-            </a>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ ...etiqueta, color: '#475569' }}>📣 CREATIVO QUE VIO</div>
+          {r.body && (
+            <div style={{ fontSize: 11, color: '#94a3b8', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', whiteSpace: 'pre-wrap' }}>{r.body}</div>
           )}
-          {r.source_id && (
-            <span style={{ fontSize: 10, color: '#475569' }}>ID: {r.source_id}</span>
-          )}
+          <div style={{ display: 'flex', gap: 10, marginTop: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+            {r.source_url && (
+              <a href={r.source_url} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: '#818cf8', fontWeight: 600, textDecoration: 'none' }}>Ver anuncio ↗</a>
+            )}
+            {r.source_id && <span style={{ fontSize: 10, color: '#475569' }}>ID: {r.source_id}</span>}
+          </div>
         </div>
       </div>
     </div>
