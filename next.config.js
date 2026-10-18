@@ -13,10 +13,10 @@ const nextConfig = {
   experimental: {
     // 🎤 ffmpeg (lib/audio-meta.js) es un BINARIO que se ejecuta por ruta: mismo
     // trato que tesseract. Solo viaja a la función que manda por FB/IG.
-    serverComponentsExternalPackages: ['tesseract.js', 'tesseract.js-core', 'ffmpeg-static'],
+    serverComponentsExternalPackages: ['tesseract.js', 'tesseract.js-core', '@ffmpeg-installer/ffmpeg'],
     outputFileTracingIncludes: {
       '/api/guias': ['./node_modules/tesseract.js/**/*', './node_modules/tesseract.js-core/**/*'],
-      '/api/social/saliente': ['./node_modules/ffmpeg-static/ffmpeg*'],
+      '/api/social/saliente': ['./node_modules/@ffmpeg-installer/linux-x64/**/*'],
     },
   },
   // El commit con el que se compiló ESTE bundle, horneado en el navegador. El
