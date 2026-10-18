@@ -4,6 +4,7 @@ import { waitUntil } from '@vercel/functions'
 import { guardarSocialMensajeSupabase, getTokenPagina } from '@/lib/social-supabase'
 import { guardarEventoCrudoSupabase } from '@/lib/inbox-supabase'
 import { usaSupabaseLectura } from '@/lib/supabase'
+import { deAdjuntos } from '@/lib/social-adjuntos'
 
 // ── Webhook de Meta para FACEBOOK e INSTAGRAM — recepción DIRECTA ─────────────
 // Reemplaza a los escenarios de Make (EscuchaFacebook / EscuchaInstagram) que
@@ -57,20 +58,6 @@ function firmaValida(rawBody, cabecera) {
   return a.length === b.length && crypto.timingSafeEqual(a, b)
 }
 
-// Adjuntos (foto, video, audio, sticker, respuesta a historia). Meta manda una URL
-// firmada temporal: la guardamos igual para no perder el mensaje.
-function deAdjuntos(adjuntos) {
-  const a = adjuntos?.[0]
-  if (!a) return { etiqueta: '', url: '' }
-  const url  = a.payload?.url || ''
-  const tipo = String(a.type || '').toLowerCase()
-  const etiqueta = {
-    image: '📷 Foto', video: '🎥 Video', audio: '🎤 Audio',
-    file: '📎 Archivo', share: '🔗 Enlace', story_mention: '📸 Te mencionó en su historia',
-  }[tipo] || `📎 ${tipo || 'adjunto'}`
-  return { etiqueta, url }
-}
-
 // Datos de pauta de un referral de Meta (anuncio Click-to-Messenger o enlace m.me).
 function dePauta(ref) {
   if (!ref) return { ad_id: '', pauta: '', ref: '' }
@@ -102,7 +89,9 @@ function deMensajeDirecto(item, canal) {
   }
   const referral = item?.referral || msg.referral || item?.postback?.referral
   // Nada que registrar: ni texto, ni adjunto, ni origen de pauta (p.ej. un "read").
-  if (!texto && !url && !referral) return null
+  // Un adjunto SIN url (p. ej. una foto temporal) también cuenta: la etiqueta lo
+  // hace visible. Descartarlo escondía al cliente.
+  if (!texto && !url && !referral && !etiqueta) return null
   // Referral suelto: entró desde un anuncio/enlace pero todavía no escribió. Se
   // registra igual (para no perder la pauta) con un id propio, estable si Meta
   // reintenta el mismo evento.

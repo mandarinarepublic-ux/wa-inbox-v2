@@ -196,3 +196,15 @@ test('un eco sin estado (bienvenida automatica de Meta) no saca el chat de Pendi
   assert.equal(convs[0].status, 'pendiente')
   assert.equal(convs[0].messages.length, 2)
 })
+
+test('una foto temporal (ephemeral) no llega vacia: tiene etiqueta aunque Meta no mande url', async () => {
+  const { deAdjuntos } = await import('../lib/social-adjuntos.js')
+  const r = deAdjuntos([{ type: 'ephemeral' }])
+  assert.equal(r.url, '')
+  assert.match(r.etiqueta, /TEMPORAL/)
+})
+
+test('un tipo de adjunto desconocido no se pierde', async () => {
+  const { deAdjuntos } = await import('../lib/social-adjuntos.js')
+  assert.equal(deAdjuntos([{ type: 'inventado_xyz' }]).etiqueta, '📎 inventado_xyz')
+})
