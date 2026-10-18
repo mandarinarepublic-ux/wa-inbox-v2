@@ -5,8 +5,6 @@ import { identificadorEntrante, perfilesDeContactos } from '@/lib/cliente-sin-te
 import { decidirReceta, piezasDeReceta, textoAvisoAnuncioNuevo, esc } from '@/lib/recetas'
 import { elegirFlujo, caminoLineal, decidirEntranteEnFlujo, elegirFlujoPorBoton, tituloBotonTocado, nodoDisparador } from '@/lib/flujo'
 import { correrTanda } from '@/lib/flujo-motor'
-import { restoProductoTocado, emparejarProductoTocado, piezasProductoTocado } from '@/lib/producto-tocado'
-import { getCatalogoActivo } from '@/lib/catalogo-tienda'
 import { mandarEscribiendo } from '@/lib/escribiendo'
 import { getEstadoFlujo, guardarEstadoFlujo, borrarEstadoFlujo, registrarPasos } from '@/lib/flujos'
 import { getRespuestas } from '@/lib/respuestas'
@@ -435,62 +433,6 @@ async function procesar(nuevos, origin) {
     return true
   }
 
-  // ── Producto TOCADO dentro del anuncio ────────────────────────────────────
-  // Ver lib/producto-tocado.js. El anuncio de Dragon Ball muestra productos del
-  // catálogo; si el cliente toca Tortugas Ninja, Meta escribe "Me interesa Hoodie
-  // Tortugas Ninja…" pero el referral sigue diciendo Dragon Ball. Antes ganaba el
-  // referral y se le mandaba el pitch de Dragon Ball. Ahora gana lo que TOCÓ:
-  //   'enviado' → se le mandó ese producto (foto + precio + su talla/color).
-  //   'duda'    → tocó un producto pero no se sabe cuál con seguridad (no está en
-  //               Shopify con ese título, o hay dos iguales): NO se manda el pitch
-  //               del anuncio, que sería del producto equivocado. Contesta un humano.
-  //   ''        → no es un producto tocado: sigue el camino de siempre.
-  // Mismo candado que flujos y recetas (marcarReceta, 24 h) para no mandar dos paquetes.
-  let catalogoCache = null
-  async function productoTocadoSiCorresponde(m) {
-    if (!auto?.flujos?.activo && !auto?.recetas?.activo) return ''
-    if (!m.referral?.source_id || m.raw?.type !== 'text') return ''
-    if (!restoProductoTocado(m.contenido)) return ''
-    const t = tail9(m.telefono)
-    if (recetados.has(t) || modoIAde(m.telefono, m.phoneId) || humanoAtendiendo(m.telefono)) return ''
-    if (!catalogoCache) catalogoCache = await getCatalogoActivo()
-    const r = emparejarProductoTocado(m.contenido, catalogoCache)
-    if (!r.producto) {
-      console.log('[/api/webhook] producto tocado sin emparejar (' + r.motivo + '), no va el pitch del anuncio', m.telefono, String(m.contenido).slice(0, 80))
-      return 'duda'
-    }
-    const contacto = contactos.find(c => tail9(c.telefono) === t) || null
-    const piezas = piezasProductoTocado({
-      producto: r.producto, variante: r.variante, citaId: m.wamid,
-      contacto: { telefono: m.telefono, nombre: m.nombre, alias: contacto?.alias || '', phoneId: m.phoneId },
-    })
-    const { marcado } = await marcarReceta(m.telefono).catch(e => { console.error('[/api/webhook] marcar producto tocado:', e.message); return { marcado: false } })
-    if (!marcado) return 'duda'
-    recetados.add(t)
-    saludados.add(t)
-    waitUntil((async () => {
-      try {
-        let salieron = 0
-        for (const p of piezas) {
-          const res = await enviarSaliente(origin, p)
-          if (res?.ok) salieron++
-          else console.error('[/api/webhook] producto tocado: pieza rechazada', res?.status ?? 'red', m.telefono)
-        }
-        console.log('[/api/webhook] producto tocado', JSON.stringify(r.producto.title), 'a', m.telefono, `${salieron}/${piezas.length} piezas`)
-        if (salieron === 0) {
-          await enviarAlerta(
-            `⚠️ <b>Producto tocado sin enviar en ${esc(CUENTA)}</b>
-` +
-            `${esc(r.producto.title)} a ${esc(m.telefono)}: 0/${piezas.length} piezas salieron. El chat quedó marcado 24 h.`
-          ).catch(() => {})
-        }
-      } catch (e) {
-        console.error('[/api/webhook] producto tocado tarea falló:', e.message)
-      }
-    })())
-    return 'enviado'
-  }
-
   async function flujoSiCorresponde(m) {
     // Interruptor general de FLUJOS (AUTOS). Va PRIMERO: apagado, ni se lee la
     // tabla. Ver DEFAULTS.flujos en lib/automatizaciones.js.
@@ -660,18 +602,11 @@ async function procesar(nuevos, origin) {
         .catch(e => { console.error('[/api/webhook] flujo de botón:', e.message); return false })
       conReceta = porBoton
     }
-    // El producto que el cliente TOCÓ en el anuncio gana sobre el anuncio mismo.
-    let tocado = ''
     if (!conReceta) {
-      tocado = await productoTocadoSiCorresponde(m)
-        .catch(e => { console.error('[/api/webhook] producto tocado:', e.message); return '' })
-      if (tocado === 'enviado') conReceta = true
-    }
-    if (!conReceta && !tocado) {
       conReceta = await flujoSiCorresponde(m)
         .catch(e => { console.error('[/api/webhook] flujo:', e.message); return false })
     }
-    if (!conReceta && !tocado && auto?.recetas?.activo) {
+    if (!conReceta && auto?.recetas?.activo) {
       conReceta = await recetaSiCorresponde(m)
         .catch(e => { console.error('[/api/webhook] receta:', e.message); return false })
     }

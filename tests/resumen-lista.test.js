@@ -54,3 +54,26 @@ test('un entrante normal se queda como esta hoy', () => {
 test('un lead sin referral no se inventa un origen', () => {
   assert.equal(resumenDeLista(ent({ mensaje: '¡Hola! Quiero más información.' })), null)
 })
+
+test('producto TOCADO dentro del anuncio: manda lo que tocó, no el anuncio', () => {
+  const r = resumenDeLista({
+    direccion: 'ENTRANTE',
+    mensaje: 'Me interesa Hoodie Tortugas Ninja - Casey Jones.',
+    referral: { body: '🔥 Chaqueta Varsity Dragon Ball Z – Naranja🔥', headline: 'Mandarina Republic' },
+  })
+  assert.deepEqual(r, { icono: '🛍️', texto: 'Hoodie Tortugas Ninja - Casey Jones.' })
+})
+
+test('producto tocado con el formato de IND ("Vi tu anuncio en …")', () => {
+  const r = resumenDeLista({
+    direccion: 'ENTRANTE',
+    mensaje: 'Vi tu anuncio en Instagram.\nMe interesa Conjunto "Dual Lifestyle".',
+    referral: { body: 'Otro anuncio' },
+  })
+  assert.equal(r.texto, 'Conjunto "Dual Lifestyle".')
+})
+
+test('el texto genérico del anuncio sigue mostrando el anuncio', () => {
+  const r = resumenDeLista({ direccion: 'ENTRANTE', mensaje: '¡Hola! Quiero más información.', referral: { body: 'Dragon Ball' } })
+  assert.deepEqual(r, { icono: '🎯', texto: 'Dragon Ball' })
+})
