@@ -249,6 +249,9 @@ export default function App() {
   // botones de número y sumarlos contaría a esa persona dos veces. `null` = todavía
   // no llegó del servidor (ver el badge de GENERAL más abajo).
   const [pendientesTotal, setPendientesTotal] = useState(null)
+  // 🔴 de SOCIAL (FB + IG, mensajes + comentarios): lo reporta SocialInbox, que sigue
+  // cargando cada 60 s aunque la pestaña esté escondida.
+  const [pendientesSocial, setPendientesSocial] = useState(0)
   const [versionNueva, setVersionNueva] = useState(false)
   // 🔖 Etiquetas (lib/etiquetas.js): el catálogo y { telefono: [ids] } de los chats
   // etiquetados. El mapa llega en cada inbox-sync; el catálogo, al abrir y al editar.
@@ -2790,7 +2793,7 @@ export default function App() {
               // no se muestra nada armado.
               armado: linea === CANAL_GENERAL && canalArmado === c.id && !canalSinResolver(),
             })),
-            { id:'SOCIAL',   label:'SOCIAL',   icon:'🌐', color:'#1877F2', sub:'FB · IG' },
+            { id:'SOCIAL',   label:'SOCIAL',   icon:'🌐', color:'#1877F2', sub:'FB · IG', badge: pendientesSocial },
             { id:'CONTACTOS',label:'CONTACTOS',icon:'👥', color:'#38bdf8', sub:'Directorio' },
             { id:'AUTO',     label:'AUTOS',    icon:'⚙️', color:'#f59e0b', sub:'Reglas' },
             { id:'FLUJOS',   label:'FLUJOS',   icon:'🧭', color:'#a78bfa', sub:'Lienzo' },
@@ -3469,7 +3472,7 @@ export default function App() {
 
         {/* ══════ SOCIAL ══════ — FB + IG */}
         <div style={{ flex:1, display: linea === 'SOCIAL' ? 'flex' : 'none', overflow:'hidden', height:'100%' }}>
-          <SocialInbox active={linea === 'SOCIAL'} />
+          <SocialInbox active={linea === 'SOCIAL'} onPendientes={setPendientesSocial} />
         </div>
 
         {/* ══════ CONTACTOS ══════ — directorio + envío por ventana 24h */}

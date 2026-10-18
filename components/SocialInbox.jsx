@@ -334,7 +334,7 @@ function MsgBubble({ msg, channel }) {
 }
 
 // ── COMPONENTE PRINCIPAL ──────────────────────────────────────────────────────
-export default function SocialInbox({ active: isVisible }) {
+export default function SocialInbox({ active: isVisible, onPendientes }) {
   const [convs, setConvs]       = useState([])
   const [selected, setSelected] = useState(null) // clave compuesta: `${canal}__${sender_id}`
   // Bandeja = DÓNDE ESTÁS PARADO (mensajes privados o comentarios públicos), no una
@@ -460,12 +460,21 @@ export default function SocialInbox({ active: isVisible }) {
     return () => mq.removeEventListener?.('change', apply)
   }, [])
 
+  // Abierta: cada 8 s. Escondida: cada 60 s, para que el contador de la pestaña
+  // 🌐 SOCIAL siga al día sin entrar (antes no se cargaba nada y no había contador).
   useEffect(() => {
-    if (!isVisible) return
     load()
-    pollRef.current = setInterval(load, 8000)
+    pollRef.current = setInterval(load, isVisible ? 8000 : 60000)
     return () => clearInterval(pollRef.current)
   }, [isVisible, load])
+
+  // 🔴 por bandeja (Mensajes / Comentarios) → los globos rojos, igual que WhatsApp.
+  const pendientesPorBandeja = {
+    mensajes:    convs.filter(c => c.tipo !== 'COMENTARIO' && c.status === 'pendiente').length,
+    comentarios: convs.filter(c => c.tipo === 'COMENTARIO' && c.status === 'pendiente').length,
+  }
+  const totalPendientes = pendientesPorBandeja.mensajes + pendientesPorBandeja.comentarios
+  useEffect(() => { onPendientes?.(totalPendientes) }, [totalPendientes, onPendientes])
 
   const selectedConv = convs.find(c => convKey(c) === selected) || null
   // CÓMO se responde. Meta pone dos relojes distintos y hay que respetarlos:
@@ -908,8 +917,13 @@ export default function SocialInbox({ active: isVisible }) {
                 borderBottom: `2px solid ${bandeja===key ? color : 'transparent'}`,
                 fontFamily:'Outfit,sans-serif', transition:'all .2s',
               }}>
-                <div style={{ fontSize:11, fontWeight:800, color: bandeja===key ? color : '#334155', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                <div style={{ fontSize:11, fontWeight:800, color: bandeja===key ? color : '#334155', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', display:'flex', alignItems:'center', justifyContent:'center', gap:4 }}>
                   {icon} {label}
+                  {pendientesPorBandeja[key] > 0 && (
+                    <span title="Pendientes" style={{ background:'#f87171', color:'#fff', borderRadius:9, minWidth:16, height:16, display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:9, fontWeight:900, padding:'0 4px' }}>
+                      {pendientesPorBandeja[key]}
+                    </span>
+                  )}
                 </div>
                 <div style={{ fontSize:8, color: bandeja===key ? color+'a0' : '#2a3f55', whiteSpace:'nowrap' }}>{sub}</div>
               </button>
