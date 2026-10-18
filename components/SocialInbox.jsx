@@ -342,6 +342,7 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
   // que en App.jsx (un solo filtro activo, sin opción "Todas").
   const [bandeja, setBandeja]   = useState('mensajes')
   const [filter, setFilter]     = useState('pendiente')
+  const [busqueda, setBusqueda] = useState('')
   // Canal (FB/IG/Ambos) — ORTOGONAL al filtro de estado, no un chip más que
   // compita con él: así se puede ver "solo Instagram Y solo pendientes" a la
   // vez, algo que el viejo chip 💬/✉️ mezclado con el resto no permitía.
@@ -759,7 +760,12 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
   // Un solo filtro activo a la vez (estado O temperatura), igual que en App.jsx —
   // sin opción "Todas": entrar a una bandeja arranca en 🔴 Pendientes, que es lo
   // que hay que atender.
-  const filtered = porBandeja.filter(c => (
+  // Sin tildes ni mayúsculas: "Andrés" encuentra a "andres".
+  const norm = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+  const q = norm(busqueda.trim())
+  const coincide = (c) => norm(c.nombre).includes(q) || String(c.sender_id).includes(q) ||
+    c.messages.some(m => norm(m.text).includes(q))
+  const filtered = q ? porBandeja.filter(coincide) : porBandeja.filter(c => (
     esTemp(filter) ? c.temperatura === filter : esEtapa(filter) ? c.etapa === filter : c.status === filter
   ))
   // Contadores para los chips de filtro, calculados sobre la bandeja actual (no
@@ -949,22 +955,16 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
             })}
           </div>
 
-          {/* Franja fija (no un badge por fila): TODO lo que se ve en esta bandeja es
-              público. Reemplaza al viejo badge 💬 PÚBLICO por fila — ver restricciones. */}
-          {/* Explicación fija de QUÉ es cada bandeja: Rodrigo no distinguía un
-              mensaje de un comentario (18-oct). */}
-          {bandeja === 'comentarios' ? (
-            <div style={{ marginBottom:8, padding:'6px 9px', background:'rgba(245,158,11,.1)', border:'1px solid rgba(245,158,11,.3)', borderRadius:8, color:'#f59e0b', fontSize:10, fontWeight:600, lineHeight:1.45 }}>
-              <b>💬 Lo que la gente escribe DEBAJO de tus publicaciones, reels y anuncios.</b> Lo ve todo el mundo.
-              <br />👉 Respóndele en <b>privado</b> para llevarlo al chat y vender allá.
-              <br />⚠️ En público: sin fotos, catálogo, links de pago ni datos de entrega.
-            </div>
-          ) : (
-            <div style={{ marginBottom:8, padding:'6px 9px', background:'rgba(37,211,102,.08)', border:'1px solid rgba(37,211,102,.25)', borderRadius:8, color:'#4ade80', fontSize:10, fontWeight:600, lineHeight:1.45 }}>
-              <b>✉️ Lo que te escriben por CHAT</b> (mensajes directos de Instagram y Messenger). Solo lo ven tú y el cliente.
-              <br />👉 Aquí se vende: fotos, catálogo y link de pago. Tienes 24 h desde su último mensaje para responder.
-            </div>
-          )}
+          {/* 🔍 Buscador: nombre, usuario o cualquier texto del chat. Mientras hay algo
+              escrito busca en TODOS los estados de esta bandeja (también Atendidos y
+              Archivados), para encontrar a alguien sin saber dónde quedó. */}
+          <div style={{ position:'relative', marginBottom:8 }}>
+            <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="🔍 Buscar nombre o mensaje…"
+              style={{ width:'100%', boxSizing:'border-box', background:'#111c2a', border:'1px solid #1e2d3d', borderRadius:8, color:'#e2e8f0', fontSize:12, padding:'7px 28px 7px 10px', outline:'none', fontFamily:'Outfit,sans-serif' }} />
+            {busqueda && (
+              <button onClick={() => setBusqueda('')} title="Borrar búsqueda" style={{ position:'absolute', right:6, top:'50%', transform:'translateY(-50%)', background:'transparent', border:'none', color:'#64748b', cursor:'pointer', fontSize:13 }}>✕</button>
+            )}
+          </div>
 
           {/* Fila 1 — BANDEJA de estado (Eje 1) */}
           <div style={{ display:'flex', gap:3, flexWrap:'wrap' }}>
