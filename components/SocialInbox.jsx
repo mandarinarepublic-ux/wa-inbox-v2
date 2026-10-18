@@ -2,6 +2,8 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
 import { fmtTime } from '@/lib/utils'
 import { estadoVentana } from '@/lib/social-ventana'
+import { adjuntosDeRespuesta } from '@/lib/adjuntos-respuesta'
+import { adjuntoParaMeta } from '@/lib/social-envio'
 import RightPanel from '@/components/RightPanel'
 
 // La caja de texto del compositor arranca en UNA línea y crece sola — MISMO patrón
@@ -478,7 +480,7 @@ export default function SocialInbox({ active: isVisible }) {
   // comentario (Meta solo permite una respuesta privada, y venció), cae a DM normal.
   // Mandar tipo:'COMENTARIO' en ese caso hace que el servidor rechace con el inútil
   // "An unknown error has occurred" que ya se había arreglado para el compositor de texto.
-  const enviarSocial = useCallback(async ({ texto, imagen }) => {
+  const enviarSocial = useCallback(async ({ texto, imagen, audio, archivo }) => {
     if (!selectedConv) return
     const res = await fetch('/api/social/saliente', {
       method: 'POST',
@@ -491,6 +493,8 @@ export default function SocialInbox({ active: isVisible }) {
         modo: iraAlComentario ? modoRespuesta : 'privado',
         message: texto || '',
         imagen: imagen || '',
+        audio: audio || '',
+        archivo: archivo || '',
       }),
     })
     // /api/social/saliente ya valida (foto en comentario, LINKPAGO en público, etc.)
@@ -507,16 +511,26 @@ export default function SocialInbox({ active: isVisible }) {
   // vencido, que ya sale por DM privado: al cliente no se le podía mandar una foto sin
   // ninguna razón técnica que lo justificara.
   const onQuickReply = useCallback(async (reply, onProgress) => {
-    const imgs = Array.from({ length: 10 }, (_, i) =>
-      i === 0 ? reply.imageUrl : reply[`imageUrl${i + 1}`]
-    ).filter(Boolean)
+    // La lista ORDENADA de adjuntos (fotos, audios, documentos), igual que WhatsApp.
+    // Antes solo se leían las fotos y los audios se saltaban SIN AVISAR.
+    const adjuntos = adjuntosDeRespuesta(reply)
     const soloTexto = iraAlComentario
-    const aMandar = soloTexto ? [] : imgs
+    const omitidos = []
+    const aMandar = []
+    for (const a of (soloTexto ? [] : adjuntos)) {
+      const r = adjuntoParaMeta(a)
+      if (r.campo) aMandar.push({ [r.campo]: a.url })
+      else omitidos.push(r.motivo)
+    }
+    const imgs = adjuntos
     const total = (reply.text ? 1 : 0) + aMandar.length
     let hechas = 0
     try {
       if (reply.text) { await enviarSocial({ texto: reply.text }); onProgress?.(++hechas, total) }
-      for (const url of aMandar) { await enviarSocial({ imagen: url }); onProgress?.(++hechas, total) }
+      for (const adj of aMandar) { await enviarSocial(adj); onProgress?.(++hechas, total) }
+      if (omitidos.length) {
+        alert('⚠️ Esto NO se envió:' + omitidos.map(m => '\n• ' + m).join(''))
+      }
       if (soloTexto && imgs.length) {
         // Ahora este aviso solo aparece cuando el envío fue de verdad al hilo público,
         // que es donde "responde en privado" es cierto: si ya iba por DM, las fotos

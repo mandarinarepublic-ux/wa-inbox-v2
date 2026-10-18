@@ -208,3 +208,17 @@ test('un tipo de adjunto desconocido no se pierde', async () => {
   const { deAdjuntos } = await import('../lib/social-adjuntos.js')
   assert.equal(deAdjuntos([{ type: 'inventado_xyz' }]).etiqueta, '📎 inventado_xyz')
 })
+
+test('audio .ogg de WhatsApp: no sale por Meta y se dice por que', async () => {
+  const { adjuntoParaMeta } = await import('../lib/social-envio.js')
+  assert.match(adjuntoParaMeta({ tipo: 'audio', url: 'https://x/audios/MANDI/a.ogg' }).motivo, /ogg/)
+  assert.deepEqual(adjuntoParaMeta({ tipo: 'audio', url: 'https://x/a.m4a' }), { campo: 'audio' })
+  assert.deepEqual(adjuntoParaMeta({ tipo: 'imagen', url: 'https://x/a.jpg' }), { campo: 'imagen' })
+  assert.deepEqual(adjuntoParaMeta({ tipo: 'documento', url: 'https://x/a.pdf' }), { campo: 'archivo' })
+  assert.ok(adjuntoParaMeta({ tipo: 'documento', url: 'https://x/a.ai' }).motivo)
+})
+
+test('cuerpoMensajeMeta arma audio y archivo', () => {
+  assert.equal(cuerpoMensajeMeta({ audio: 'https://x/a.m4a' }).attachment.type, 'audio')
+  assert.equal(cuerpoMensajeMeta({ archivo: 'https://x/a.pdf' }).attachment.type, 'file')
+})

@@ -38,8 +38,10 @@ export async function POST(req) {
     if (!FB_PAGE_TOKEN) {
       return NextResponse.json({ error: 'FB_PAGE_TOKEN no configurado en el servidor' }, { status: 500 })
     }
-    const { sender_id, message, canal, comment_id, tipo, modo, imagen } = await req.json()
-    if (!sender_id || (!message && !imagen)) {
+    const { sender_id, message, canal, comment_id, tipo, modo, imagen, audio, archivo } = await req.json()
+    // Cualquier adjunto (foto, audio o PDF) se trata igual en las guardias de abajo.
+    const adjunto = imagen || audio || archivo
+    if (!sender_id || (!message && !adjunto)) {
       return NextResponse.json({ error: 'Faltan sender_id y contenido (message o imagen)' }, { status: 400 })
     }
 
@@ -64,7 +66,7 @@ export async function POST(req) {
     // Un comentario es PÚBLICO: una foto ahí quedaría a la vista de todos. Se
     // rechaza acá, con un mensaje que el vendedor entienda, en vez de dejar que
     // Meta conteste un error genérico sobre el adjunto.
-    if (imagen && esComentario) {
+    if (adjunto && esComentario) {
       return NextResponse.json(
         { error: 'Instagram no admite fotos en un comentario. Responde en privado y mándala por el chat.' },
         { status: 400 }
@@ -95,7 +97,7 @@ export async function POST(req) {
       // Si además viene una foto, cuerpoMensajeMeta se queda con la imagen y
       // tira el texto: el link ya estaría cobrado en dLocal pero jamás se
       // manda. Mejor cortar ANTES de crear el cobro que dejar un cobro fantasma.
-      if (imagen) {
+      if (adjunto) {
         return NextResponse.json(
           { error: 'No se puede mandar una foto junto con un LINKPAGO. Mándalos en envíos separados.' },
           { status: 400 }
@@ -107,7 +109,7 @@ export async function POST(req) {
 
     // Meta no admite texto y adjunto en el mismo mensaje: con imagen, el texto
     // (si vino LINKPAGO o algo más) se descarta a favor de la foto.
-    const cuerpo = cuerpoMensajeMeta({ texto: imagen ? '' : texto, imagen })
+    const cuerpo = cuerpoMensajeMeta({ texto: adjunto ? '' : texto, imagen, audio, archivo })
 
     let r
     if (saldraEnPublico) {
@@ -171,7 +173,8 @@ export async function POST(req) {
         tipo: esComentario ? 'COMENTARIO' : 'DM',
         sender_id: String(sender_id),
         direccion: 'SALIENTE',
-        texto: saldraEnPublico ? `↩️ (público) ${texto}` : texto,
+        // El hilo pinta media_url como <img>: un audio o un PDF va como etiqueta.
+        texto: audio ? '🎤 Audio' : archivo ? '📎 Archivo PDF' : saldraEnPublico ? `↩️ (público) ${texto}` : texto,
         media_url: imagen || '',
         msg_id: r.data.message_id || r.data.id || '',
         comment_id: esComentario ? String(comment_id) : '',
