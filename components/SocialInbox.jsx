@@ -910,9 +910,18 @@ export default function SocialInbox({ active: isVisible }) {
 
           {/* Franja fija (no un badge por fila): TODO lo que se ve en esta bandeja es
               público. Reemplaza al viejo badge 💬 PÚBLICO por fila — ver restricciones. */}
-          {bandeja === 'comentarios' && (
-            <div style={{ marginBottom:8, padding:'6px 9px', background:'rgba(245,158,11,.1)', border:'1px solid rgba(245,158,11,.3)', borderRadius:8, color:'#f59e0b', fontSize:10, fontWeight:700, textAlign:'center', lineHeight:1.4 }}>
-              ⚠️ Público — sin fotos, catálogo, links de pago ni datos de entrega acá
+          {/* Explicación fija de QUÉ es cada bandeja: Rodrigo no distinguía un
+              mensaje de un comentario (18-oct). */}
+          {bandeja === 'comentarios' ? (
+            <div style={{ marginBottom:8, padding:'6px 9px', background:'rgba(245,158,11,.1)', border:'1px solid rgba(245,158,11,.3)', borderRadius:8, color:'#f59e0b', fontSize:10, fontWeight:600, lineHeight:1.45 }}>
+              <b>💬 Lo que la gente escribe DEBAJO de tus publicaciones, reels y anuncios.</b> Lo ve todo el mundo.
+              <br />👉 Respóndele en <b>privado</b> para llevarlo al chat y vender allá.
+              <br />⚠️ En público: sin fotos, catálogo, links de pago ni datos de entrega.
+            </div>
+          ) : (
+            <div style={{ marginBottom:8, padding:'6px 9px', background:'rgba(37,211,102,.08)', border:'1px solid rgba(37,211,102,.25)', borderRadius:8, color:'#4ade80', fontSize:10, fontWeight:600, lineHeight:1.45 }}>
+              <b>✉️ Lo que te escriben por CHAT</b> (mensajes directos de Instagram y Messenger). Solo lo ven tú y el cliente.
+              <br />👉 Aquí se vende: fotos, catálogo y link de pago. Tienes 24 h desde su último mensaje para responder.
             </div>
           )}
 
