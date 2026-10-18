@@ -124,7 +124,11 @@ function deMensajeDirecto(item, canal) {
     msg_id,
     fecha: item?.timestamp ? new Date(Number(item.timestamp)).toISOString() : new Date().toISOString(),
     // Vocabulario de estados: el de WhatsApp, en minúsculas (normalizarEstado ya lo exige).
-    estado: esEcho ? 'atendido' : 'pendiente',
+    // Un ECO no decide la bandeja (null): puede ser la bienvenida automática de Meta
+    // ("Gracias por preferirnos…"), y ningún automatismo saca un chat de Pendientes.
+    // Con 'atendido' el mensaje del cliente se iba directo a Atendidos sin que nadie
+    // lo viera (18-oct-2026).
+    estado: esEcho ? null : 'pendiente',
     ...pauta,
     comment_id: '',
     raw: item,

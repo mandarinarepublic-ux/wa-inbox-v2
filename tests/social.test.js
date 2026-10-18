@@ -187,3 +187,12 @@ test('la etiqueta dice las horas que quedan, o que se cerro', () => {
   assert.equal(estadoVentana('2026-07-27T22:30:00Z', AHORA).etiqueta, '⏳ 23 h para responder')
   assert.equal(estadoVentana('2026-07-17T20:55:00Z', AHORA).etiqueta, '🔒 Cerrada')
 })
+
+test('un eco sin estado (bienvenida automatica de Meta) no saca el chat de Pendientes', () => {
+  const convs = agruparConversaciones([
+    { ...base, id: 184, tipo: 'DM', texto: 'Mensaje de prueba', estado: 'pendiente', fecha: '2026-10-18T07:13:45Z' },
+    { ...base, id: 185, tipo: 'DM', direccion: 'SALIENTE', texto: 'Hola, cualvos. Gracias por preferirnos', estado: null, fecha: '2026-10-18T07:13:53Z' },
+  ])
+  assert.equal(convs[0].status, 'pendiente')
+  assert.equal(convs[0].messages.length, 2)
+})
