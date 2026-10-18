@@ -11,9 +11,12 @@ const nextConfig = {
   // esas rutas no existen en Vercel. Se deja afuera del bundle y se copian sus
   // archivos a la función que lo usa (y solo a esa).
   experimental: {
-    serverComponentsExternalPackages: ['tesseract.js', 'tesseract.js-core'],
+    // 🎤 ffmpeg (lib/audio-meta.js) es un BINARIO que se ejecuta por ruta: mismo
+    // trato que tesseract. Solo viaja a la función que manda por FB/IG.
+    serverComponentsExternalPackages: ['tesseract.js', 'tesseract.js-core', 'ffmpeg-static'],
     outputFileTracingIncludes: {
       '/api/guias': ['./node_modules/tesseract.js/**/*', './node_modules/tesseract.js-core/**/*'],
+      '/api/social/saliente': ['./node_modules/ffmpeg-static/ffmpeg*'],
     },
   },
   // El commit con el que se compiló ESTE bundle, horneado en el navegador. El

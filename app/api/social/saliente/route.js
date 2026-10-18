@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { guardarSocialMensajeSupabase, getTokenPagina, getFbPageId } from '@/lib/social-supabase'
 import { esHiloPublico, cuerpoMensajeMeta } from '@/lib/social-envio'
+import { audioParaMeta } from '@/lib/audio-meta'
 import { parseLinkpago, crearLinkPago, mensajeLinkPago } from '@/lib/dlocal'
 
 // Envío saliente del Social Inbox. Casos, cada uno con su endpoint:
@@ -109,7 +110,17 @@ export async function POST(req) {
 
     // Meta no admite texto y adjunto en el mismo mensaje: con imagen, el texto
     // (si vino LINKPAGO o algo más) se descarta a favor de la foto.
-    const cuerpo = cuerpoMensajeMeta({ texto: adjunto ? '' : texto, imagen, audio, archivo })
+    // Nota de voz .ogg (la de WhatsApp) → .m4a, que es lo que Instagram y Messenger
+    // aceptan. La respuesta rápida queda intacta para WhatsApp; la copia se guarda.
+    let audioMeta = audio
+    if (audio) {
+      try { audioMeta = await audioParaMeta(audio) }
+      catch (e) {
+        console.error('[/api/social/saliente] conversión de audio:', e.message)
+        return NextResponse.json({ error: `No se pudo preparar el audio para Instagram/Facebook: ${e.message}` }, { status: 502 })
+      }
+    }
+    const cuerpo = cuerpoMensajeMeta({ texto: adjunto ? '' : texto, imagen, audio: audioMeta, archivo })
 
     let r
     if (saldraEnPublico) {

@@ -209,9 +209,11 @@ test('un tipo de adjunto desconocido no se pierde', async () => {
   assert.equal(deAdjuntos([{ type: 'inventado_xyz' }]).etiqueta, '📎 inventado_xyz')
 })
 
-test('audio .ogg de WhatsApp: no sale por Meta y se dice por que', async () => {
+test('adjuntos de respuesta rapida: que sale por Meta y que se avisa', async () => {
   const { adjuntoParaMeta } = await import('../lib/social-envio.js')
-  assert.match(adjuntoParaMeta({ tipo: 'audio', url: 'https://x/audios/MANDI/a.ogg' }).motivo, /ogg/)
+  // La nota de voz .ogg SÍ sale: el servidor la convierte a .m4a (lib/audio-meta.js).
+  assert.deepEqual(adjuntoParaMeta({ tipo: 'audio', url: 'https://x/audios/MANDI/a.ogg' }), { campo: 'audio' })
+  assert.ok(adjuntoParaMeta({ tipo: 'audio', url: 'https://x/a.amr' }).motivo)
   assert.deepEqual(adjuntoParaMeta({ tipo: 'audio', url: 'https://x/a.m4a' }), { campo: 'audio' })
   assert.deepEqual(adjuntoParaMeta({ tipo: 'imagen', url: 'https://x/a.jpg' }), { campo: 'imagen' })
   assert.deepEqual(adjuntoParaMeta({ tipo: 'documento', url: 'https://x/a.pdf' }), { campo: 'archivo' })
@@ -237,4 +239,12 @@ test('ultimoEntranteAt es el ultimo del CLIENTE, no el nuestro (reloj de la temp
     { ...base, id: 2, tipo: 'DM', direccion: 'SALIENTE', estado: 'atendido', texto: 'te ayudo', fecha: '2026-10-18T08:00:00Z' },
   ])
   assert.equal(convs[0].ultimoEntranteAt, '2026-10-18T07:00:00Z')
+})
+
+test('audio-meta: solo convierte .ogg/.opus y la copia tiene ruta estable', async () => {
+  const { necesitaConversion, rutaCopiaM4a } = await import('../lib/audio-meta.js')
+  assert.equal(necesitaConversion('https://x/a.ogg'), true)
+  assert.equal(necesitaConversion('https://x/a.m4a'), false)
+  const u = 'https://p.supabase.co/storage/v1/object/public/inbox-media/audios/MANDI/c49d.ogg'
+  assert.equal(rutaCopiaM4a(u), 'audios-meta/audios/MANDI/c49d.m4a')
 })
