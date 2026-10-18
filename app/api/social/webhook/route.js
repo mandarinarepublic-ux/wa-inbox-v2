@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { waitUntil } from '@vercel/functions'
-import { guardarSocialMensajeSupabase, getTokenPagina } from '@/lib/social-supabase'
+import { guardarSocialMensajeSupabase, getTokenPagina, getFbPageId } from '@/lib/social-supabase'
+import { resolverNombreSocial } from '@/lib/social-nombre'
 import { guardarEventoCrudoSupabase } from '@/lib/inbox-supabase'
 import { usaSupabaseLectura } from '@/lib/supabase'
 import { deAdjuntos } from '@/lib/social-adjuntos'
@@ -29,7 +30,6 @@ const limpiar = (s) => String(s || '').replace(/[^\x21-\x7E]/g, '')
 
 const VERIFY_TOKEN = limpiar(process.env.SOCIAL_VERIFY_TOKEN || process.env.WHATSAPP_VERIFY_TOKEN || '')
 const APP_SECRET   = limpiar(process.env.META_APP_SECRET || '')
-const GRAPH = 'https://graph.facebook.com/v19.0'
 
 // ── Verificación del webhook (GET) ────────────────────────────────────────────
 export async function GET(req) {
@@ -190,19 +190,13 @@ async function resolverNombre(id, canal, token) {
   if (!token || !id) return ''
   const clave = `${canal}:${id}`
   if (nombreCache.has(clave)) return nombreCache.get(clave)
-  try {
-    const campos = canal === 'IG' ? 'name,username' : 'name'
-    const res = await fetch(`${GRAPH}/${encodeURIComponent(id)}?fields=${campos}&access_token=${encodeURIComponent(token)}`,
-      { cache: 'no-store', signal: AbortSignal.timeout(8000) })
-    const d = await res.json().catch(() => ({}))
-    const nombre = d?.name || d?.username || ''
-    if (nombreCache.size > 500) nombreCache.clear()
-    nombreCache.set(clave, nombre)
-    return nombre
-  } catch (e) {
-    console.error('[social webhook] nombre no resuelto:', e.message)
-    return ''
-  }
+  const pageId = await getFbPageId().catch(() => '')
+  const { nombre, error } = await resolverNombreSocial({ id, canal, token, pageId })
+  // Antes un error de Meta se tiraba sin log y los DMs de FB quedaban sin nombre.
+  if (!nombre) console.error('[social webhook] nombre no resuelto:', canal, String(id).slice(-5), error)
+  if (nombreCache.size > 500) nombreCache.clear()
+  if (nombre) nombreCache.set(clave, nombre)
+  return nombre
 }
 
 // ── Guardado en segundo plano ─────────────────────────────────────────────────

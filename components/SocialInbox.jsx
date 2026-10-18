@@ -5,7 +5,7 @@ import { estadoVentana } from '@/lib/social-ventana'
 import { adjuntosDeRespuesta } from '@/lib/adjuntos-respuesta'
 import { ETAPAS, esEtapa, necesitaConfirmarAtendido } from '@/lib/gestion'
 import { temperaturaDe } from '@/lib/temperatura'
-import { adjuntoParaMeta } from '@/lib/social-envio'
+import { adjuntoParaMeta, enlaceBusinessSuite } from '@/lib/social-envio'
 import RightPanel from '@/components/RightPanel'
 
 // La caja de texto del compositor arranca en UNA línea y crece sola — MISMO patrón
@@ -358,6 +358,12 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
   // Meta rechazó el envío y hay a dónde ir a contestarlo (Business Suite o la
   // publicación). Se pinta sobre el compositor SOLO en el chat donde pasó.
   const [bloqueo, setBloqueo] = useState(null) // { conv, texto, enlace }
+  // Id de la página para el link fijo "Abrir en Meta ↗" de la cabecera: así se
+  // puede ir a Business Suite SIN tener que fallar un envío primero.
+  const [pageId, setPageId] = useState('')
+  useEffect(() => {
+    fetch('/api/social/pagina').then(r => r.json()).then(d => setPageId(d?.pageId || '')).catch(() => {})
+  }, [])
   const [subiendo, setSubiendo] = useState(false)
   const [showEmoji, setShowEmoji] = useState(false)
   const fileRef = useRef(null)
@@ -481,6 +487,24 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
   useEffect(() => { onPendientes?.(totalPendientes) }, [totalPendientes, onPendientes])
 
   const selectedConv = convs.find(c => convKey(c) === selected) || null
+
+  // Chat sin nombre (se ve el PSID): se le pide a Meta al abrirlo y queda guardado.
+  // Una vez por cliente y por sesión, para no martillar a Meta en cada poll.
+  const nombrePedidoRef = useRef(new Set())
+  useEffect(() => {
+    const c = selectedConv
+    if (!c || c.tipo === 'COMENTARIO' || (c.nombre && c.nombre !== c.sender_id)) return
+    const clave = `${c.canal}:${c.sender_id}`
+    if (nombrePedidoRef.current.has(clave)) return
+    nombrePedidoRef.current.add(clave)
+    fetch(`/api/social/nombre?canal=${encodeURIComponent(c.canal)}&id=${encodeURIComponent(c.sender_id)}`)
+      .then(r => r.json())
+      .then(d => {
+        if (!d?.nombre) return
+        setConvs(prev => prev.map(x => (x.canal === c.canal && x.sender_id === c.sender_id) ? { ...x, nombre: d.nombre } : x))
+      })
+      .catch(() => {})
+  }, [selectedConv])
   // CÓMO se responde. Meta pone dos relojes distintos y hay que respetarlos:
   //   · respuesta PRIVADA a un comentario → solo dentro de 7 días, y una sola vez
   //   · respuesta PÚBLICA a un comentario → sin límite de tiempo
@@ -1101,7 +1125,17 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
                   </span>
                 )}
               </div>
-              <div style={{ fontSize:10, color:'#475569', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{CHANNEL_META[selectedConv.canal]?.label} · {selectedConv.sender_id}</div>
+              <div style={{ fontSize:10, color:'#475569', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                {CHANNEL_META[selectedConv.canal]?.label} · {selectedConv.sender_id}
+                {/* Mientras Meta no apruebe pages_messaging, a un cliente real solo se le
+                    puede contestar desde Business Suite: el link va siempre a mano. */}
+                {selectedConv.tipo !== 'COMENTARIO' && pageId && (
+                  <> · <a href={enlaceBusinessSuite({ canal: selectedConv.canal, sender_id: selectedConv.sender_id, pageId })}
+                    target="_blank" rel="noreferrer" style={{ color:'#25d366', fontWeight:800, textDecoration:'none' }}>
+                    Abrir en Meta ↗
+                  </a></>
+                )}
+              </div>
               {/* Aviso fijo (no solo un badge chiquito): un comentario es público y
                   pedir ahí una dirección o teléfono expone al cliente ante cualquiera. */}
               {selectedConv.tipo === 'COMENTARIO' && (
