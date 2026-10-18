@@ -222,3 +222,19 @@ test('cuerpoMensajeMeta arma audio y archivo', () => {
   assert.equal(cuerpoMensajeMeta({ audio: 'https://x/a.m4a' }).attachment.type, 'audio')
   assert.equal(cuerpoMensajeMeta({ archivo: 'https://x/a.pdf' }).attachment.type, 'file')
 })
+
+test('la etapa de la venta sobrevive a un mensaje nuevo del cliente', () => {
+  const convs = agruparConversaciones([
+    { ...base, id: 1, tipo: 'DM', texto: 'cuanto cuesta', etapa: 'cotizando', fecha: '2026-10-18T07:00:00Z' },
+    { ...base, id: 2, tipo: 'DM', texto: 'ya pague', etapa: null, fecha: '2026-10-18T08:00:00Z' },
+  ])
+  assert.equal(convs[0].etapa, 'cotizando')
+})
+
+test('ultimoEntranteAt es el ultimo del CLIENTE, no el nuestro (reloj de la temperatura)', () => {
+  const convs = agruparConversaciones([
+    { ...base, id: 1, tipo: 'DM', texto: 'hola', fecha: '2026-10-18T07:00:00Z' },
+    { ...base, id: 2, tipo: 'DM', direccion: 'SALIENTE', estado: 'atendido', texto: 'te ayudo', fecha: '2026-10-18T08:00:00Z' },
+  ])
+  assert.equal(convs[0].ultimoEntranteAt, '2026-10-18T07:00:00Z')
+})

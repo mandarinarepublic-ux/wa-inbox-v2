@@ -3,6 +3,8 @@ import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react
 import { fmtTime } from '@/lib/utils'
 import { estadoVentana } from '@/lib/social-ventana'
 import { adjuntosDeRespuesta } from '@/lib/adjuntos-respuesta'
+import { ETAPAS, esEtapa, necesitaConfirmarAtendido } from '@/lib/gestion'
+import { temperaturaDe } from '@/lib/temperatura'
 import { adjuntoParaMeta } from '@/lib/social-envio'
 import RightPanel from '@/components/RightPanel'
 
@@ -37,20 +39,46 @@ const STATUS_META = {
   soporte:   { icon:'🎧', label:'Soporte',   filterLabel:'🎧 Soporte',    color:'#a78bfa' },
   archivado: { icon:'⚫', label:'Archivado', filterLabel:'⚫ Archivados', color:'#64748b' },
 }
-const FILTROS_MENSAJES    = ['pendiente', 'atendido', 'venta', 'soporte', 'archivado']
+// Las MISMAS tres bandejas que WhatsApp (App.jsx BANDEJAS). Venta y Soporte ya no
+// son bandejas allá: lo que quedó guardado así se lee como 🔴 (ver derivar()).
+const FILTROS_MENSAJES    = ['pendiente', 'atendido', 'archivado']
 // Comentarios tiene LOS MISMOS filtros que Mensajes (pedido de Rodrigo, 18-oct): la
 // bandeja de Pendientes se limpia igual en los dos lados, y la temperatura se va a
 // usar para configurar opciones que tienen que funcionar en ambos.
 const FILTROS_COMENTARIOS = FILTROS_MENSAJES
 
-// Eje 2 (temperatura del lead): 100% manual, nada la cambia sola. Solo tiene
-// sentido en Mensajes — un comentario público no es un lead que se "enfríe", el
-// lead vive en el DM (ver restricciones.md).
+// Eje 2 (temperatura): AUTOMÁTICA, igual que WhatsApp (lib/temperatura.js): cuánto
+// hace que escribió el cliente. 🔥 <1 h · 🌤️ 1–6 h · ❄️ 6–24 h · 💤 ≥24 h. No se guarda.
 const TEMPERATURAS = [
   { key:'caliente', icon:'🔥', label:'Caliente', color:'#f97316' },
   { key:'tibio',    icon:'🌤️', label:'Tibio',    color:'#fbbf24' },
   { key:'frio',     icon:'❄️', label:'Frío',     color:'#38bdf8' },
+  { key:'dormido',  icon:'💤', label:'Dormido',  color:'#64748b' },
 ]
+// Botón de la cabecera del chat: el MISMO que App.jsx (BotonEje), con icono + nombre
+// (en el celular solo el icono). Antes eran iconos sueltos casi del color del fondo
+// y Rodrigo no los encontraba (18-oct).
+function BotonEje({ on, color, onClick, title, icon, label }) {
+  return (
+    <button onClick={onClick} title={title} style={{
+      padding:'4px 6px', fontWeight: on ? 800 : 600, flexShrink:0,
+      background: on ? `${color}22` : 'transparent',
+      border: `${on ? 2 : 1}px solid ${on ? color : '#1e2d3d'}`,
+      color: on ? color : '#475569',
+      borderRadius:7, cursor:'pointer', fontFamily:'inherit', transition:'all .15s',
+      boxShadow: on ? `0 0 8px ${color}44` : 'none',
+    }}>
+      <span className="hide-mobile" style={{ fontSize:10 }}>{icon} {label}</span>
+      <span className="show-mobile" style={{ fontSize:14 }}>{icon}</span>
+    </button>
+  )
+}
+// Lo que viene de la base → cómo se pinta: bandeja de WhatsApp + temperatura calculada.
+const derivar = (c) => ({
+  ...c,
+  status: ['atendido', 'archivado'].includes(c.status) ? c.status : 'pendiente',
+  temperatura: temperaturaDe(c.ultimoEntranteAt),
+})
 const TEMP_META = Object.fromEntries(TEMPERATURAS.map(t => [t.key, t]))
 
 // Las dos bandejas: DÓNDE ESTÁS PARADO, no una etiqueta que hay que leer en cada
@@ -247,6 +275,11 @@ function ConvRow({ conv, isActive, onClick, filtroActivo }) {
           {conv.temperatura && TEMP_META[conv.temperatura] && conv.temperatura !== filtroActivo && (
             <span title={`Lead ${TEMP_META[conv.temperatura].label}`} style={{ fontSize:11 }}>{TEMP_META[conv.temperatura].icon}</span>
           )}
+          {conv.etapa && ETAPAS[conv.etapa] && conv.etapa !== filtroActivo && (
+            <span title={ETAPAS[conv.etapa].label} style={{ fontSize:9, fontWeight:700, color: ETAPAS[conv.etapa].color }}>
+              {ETAPAS[conv.etapa].icon} {ETAPAS[conv.etapa].label}
+            </span>
+          )}
           {pautaInfo(conv) && (
             <span title="Vino de un anuncio/publicación" style={{ fontSize:10, color:'#f59e0b' }}>📢</span>
           )}
@@ -368,7 +401,7 @@ export default function SocialInbox({ active: isVisible }) {
   // mismo problema y mismo arreglo que `localStatusRef`/`localTempRef` en
   // components/App.jsx: un override local con vencimiento por conversación.
   const localEstadoRef = useRef({}) // { [convKey]: { estado, expiresAt } }
-  const localTempRef   = useRef({}) // { [convKey]: { temperatura, expiresAt } }
+  const localEtapaRef  = useRef({}) // { [convKey]: { etapa, expiresAt } }
 
   // El tipo entra en la llave: un comentario y un DM del mismo cliente son DOS
   // hilos (uno público, uno privado) y no pueden colapsar en una sola fila.
@@ -389,9 +422,9 @@ export default function SocialInbox({ active: isVisible }) {
           let fila = c
           const eo = localEstadoRef.current[key]
           if (eo && eo.expiresAt > now) fila = { ...fila, status: eo.estado }
-          const to = localTempRef.current[key]
-          if (to && to.expiresAt > now) fila = { ...fila, temperatura: to.temperatura }
-          return fila
+          const et = localEtapaRef.current[key]
+          if (et && et.expiresAt > now) fila = { ...fila, etapa: et.etapa }
+          return derivar(fila)
         })
         setConvs(conData)
         setLastSync(new Date())
@@ -717,19 +750,18 @@ export default function SocialInbox({ active: isVisible }) {
   // Un solo filtro activo a la vez (estado O temperatura), igual que en App.jsx —
   // sin opción "Todas": entrar a una bandeja arranca en 🔴 Pendientes, que es lo
   // que hay que atender.
-  const filtered = porBandeja.filter(c => (esTemp(filter) ? c.temperatura === filter : c.status === filter))
+  const filtered = porBandeja.filter(c => (
+    esTemp(filter) ? c.temperatura === filter : esEtapa(filter) ? c.etapa === filter : c.status === filter
+  ))
   // Contadores para los chips de filtro, calculados sobre la bandeja actual (no
   // sobre TODAS las conversaciones): un comentario archivado no debe sumar al
   // contador de Archivados de Mensajes, ni al revés.
   const counts = {
     pendiente: porBandeja.filter(c => c.status === 'pendiente').length,
     atendido:  porBandeja.filter(c => c.status === 'atendido').length,
-    venta:     porBandeja.filter(c => c.status === 'venta').length,
-    soporte:   porBandeja.filter(c => c.status === 'soporte').length,
     archivado: porBandeja.filter(c => c.status === 'archivado').length,
-    caliente:  porBandeja.filter(c => c.temperatura === 'caliente').length,
-    tibio:     porBandeja.filter(c => c.temperatura === 'tibio').length,
-    frio:      porBandeja.filter(c => c.temperatura === 'frio').length,
+    ...Object.fromEntries(TEMPERATURAS.map(t => [t.key, porBandeja.filter(c => c.temperatura === t.key).length])),
+    ...Object.fromEntries(Object.keys(ETAPAS).map(e => [e, porBandeja.filter(c => c.etapa === e).length])),
   }
 
   const handleSend = async () => {
@@ -809,33 +841,28 @@ export default function SocialInbox({ active: isVisible }) {
     }
   }
 
-  // Eje 2 (temperatura): 100% manual. Clic de nuevo sobre la misma = quitarla
-  // (toggle), igual que `changeTemperatura` en App.jsx. Solo se llama desde
-  // Mensajes — el botón ni se pinta en Comentarios (ver cabecera del chat).
-  const cambiarTemperatura = async (temp) => {
+  // Etapa de la venta (💬💳🛒🔁), igual que cambiarEtapa en App.jsx: clic de nuevo
+  // sobre la misma = quitarla. Se guarda en TODAS las filas de la conversación.
+  const cambiarEtapa = async (etapa) => {
     if (!selectedConv) return
     const { canal, sender_id, tipo } = selectedConv
-    const actual = selectedConv.temperatura || ''
-    const nueva = actual === temp ? '' : temp
+    const actual = selectedConv.etapa || ''
+    const nueva = actual === etapa ? '' : etapa
     const key = selected
-    localTempRef.current[key] = { temperatura: nueva, expiresAt: Date.now() + 15000 }
-    setConvs(prev => prev.map(c => convKey(c) === selected ? { ...c, temperatura: nueva } : c))
+    localEtapaRef.current[key] = { etapa: nueva, expiresAt: Date.now() + 15000 }
+    setConvs(prev => prev.map(c => convKey(c) === selected ? { ...c, etapa: nueva } : c))
     try {
-      // `temperatura: ''` es un valor válido ("sin clasificar"): /api/social/estado
-      // ya distingue "no vino el campo" de "vino vacío", así que este POST sí quita
-      // la marca en vez de rebotar con 400.
       const res = await fetch('/api/social/estado', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ canal, sender_id, tipo: tipo || 'DM', temperatura: nueva }),
+        body: JSON.stringify({ canal, sender_id, tipo: tipo || 'DM', etapa: nueva }),
       })
-      // Mismo motivo que en cambiarEstado: un 400/500 no lanza por sí solo.
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
     } catch (e) {
-      console.error('Temperatura error:', e)
-      delete localTempRef.current[key]
-      setConvs(prev => prev.map(c => convKey(c) === selected ? { ...c, temperatura: actual } : c))
-      alert('❌ No se pudo cambiar la temperatura — reintenta')
+      console.error('Etapa error:', e)
+      delete localEtapaRef.current[key]
+      setConvs(prev => prev.map(c => convKey(c) === selected ? { ...c, etapa: actual } : c))
+      alert('❌ No se pudo cambiar la etapa — reintenta')
     }
   }
 
@@ -945,7 +972,7 @@ export default function SocialInbox({ active: isVisible }) {
             })}
           </div>
 
-          {/* Fila 2 — TEMPERATURA del lead (Eje 2, manual). En Mensajes Y en Comentarios. */}
+          {/* Fila 2 — TEMPERATURA automática (cuánto hace que escribió) · Fila 3 — ETAPA de la venta */}
           {(
 
             <div style={{ display:'flex', gap:3, flexWrap:'wrap', marginTop:5 }}>
@@ -966,6 +993,23 @@ export default function SocialInbox({ active: isVisible }) {
               })}
             </div>
           )}
+          <div style={{ display:'flex', gap:3, flexWrap:'wrap', marginTop:5 }}>
+            {Object.entries(ETAPAS).map(([key, { icon, label, color }]) => {
+              const active = filter === key
+              return (
+                <button key={key} onClick={() => cambiarFiltro(key)} style={{
+                  padding:'3px 7px', fontSize:9, fontWeight:700, borderRadius:6, cursor:'pointer',
+                  background: active ? `${color}22` : 'transparent',
+                  border: `1px solid ${active ? color+'60' : '#1a2d40'}`,
+                  color: active ? color : '#334155',
+                  fontFamily:'Outfit,sans-serif', transition:'all .15s',
+                }}>
+                  {icon} {label}
+                  {counts[key] > 0 && <span style={{ marginLeft:3, background: active ? color : '#1a2d40', color: active ? '#080d14' : '#475569', borderRadius:10, padding:'0 4px', fontSize:8, fontWeight:800 }}>{counts[key]}</span>}
+                </button>
+              )
+            })}
+          </div>
         </div>
 
         {/* Lista */}
@@ -1033,47 +1077,32 @@ export default function SocialInbox({ active: isVisible }) {
               )}
               <PautaBadge conv={selectedConv} />
             </div>
-            {/* Botones de estado (Eje 1) + temperatura (Eje 2) — mismos iconos y
-                colores que la cabecera del chat de WhatsApp en App.jsx, PERO leídos
-                de la MISMA lista que los filtros (FILTROS_MENSAJES/COMENTARIOS): si
-                la cabecera tuviera su propio array literal podía volver a divergir,
-                que fue justo el bug de la ronda anterior (Soporte quedaba disponible
-                en un comentario aunque el filtro de Comentarios no lo incluye — el
-                chat se volvía invisible sin forma de sacarlo desde la UI). 'venta' SÍ
-                se marca a mano acá (a diferencia de WhatsApp, donde es automática por
-                pedido): SOCIAL no tiene flujo de pedidos, así que manual es el único
-                camino para que el filtro 💰 Ventas deje de estar muerto. */}
+            {/* Cabecera IGUAL a la de WhatsApp (App.jsx): bandeja con nombre + etapa.
+                La temperatura no es un botón: se calcula sola y se ve en la lista. */}
             <div style={{ display:'flex', gap:4, flexShrink:0, flexWrap:'wrap', justifyContent:'flex-end' }}>
-              {(selectedConv.tipo === 'COMENTARIO' ? FILTROS_COMENTARIOS : FILTROS_MENSAJES).map(s => {
-                const meta = STATUS_META[s]
-                const isActive = selectedConv.status === s
+              {[
+                { key:'pendiente', icon:'🔴', label:'Pendiente', color:'#f87171' },
+                { key:'atendido',  icon:'🟢', label:'Atendido',  color:'#4ade80' },
+                { key:'archivado', icon:'⚫', label:'Archivar',  color:'#94a3b8' },
+              ].map(({ key, icon, label, color }) => (
+                <BotonEje key={key} on={selectedConv.status === key} color={color} icon={icon} label={label} title={label}
+                  onClick={() => {
+                    // Mismo freno que WhatsApp: 🟢 a mano con el cliente hablando de último.
+                    if (key === 'atendido' && selectedConv.status !== 'atendido') {
+                      const ultimo = selectedConv.messages[selectedConv.messages.length - 1]
+                      if (necesitaConfirmarAtendido(ultimo?.from === 'user' ? 'ENTRANTE' : 'SALIENTE') &&
+                          !window.confirm('El cliente escribió de último. ¿Lo contestaste por otro lado?')) return
+                    }
+                    cambiarEstado(key)
+                  }} />
+              ))}
+              <span style={{ width:1, alignSelf:'stretch', background:'#1e2d3d', margin:'2px 2px', flexShrink:0 }} />
+              {Object.entries(ETAPAS).map(([key, e]) => {
+                const on = selectedConv.etapa === key
                 return (
-                  <button key={s} title={meta.label} onClick={() => cambiarEstado(s)} style={{
-                    padding:'3px 6px', fontSize:11, fontWeight:700, borderRadius:5, cursor:'pointer',
-                    background: isActive ? `${meta.color}22` : 'transparent',
-                    border: `1px solid ${isActive ? meta.color + '60' : '#1a2d40'}`,
-                    color: isActive ? meta.color : '#334155',
-                    fontFamily:'Outfit,sans-serif',
-                  }}>{meta.icon}</button>
-                )
-              })}
-              {/* Separador entre los dos ejes (igual que App.jsx:1292): con hasta 8
-                  botones seguidos, sin esta línea no se ve dónde termina la bandeja
-                  de estado y empieza la temperatura. */}
-              {(
-                <span style={{ width:1, alignSelf:'stretch', background:'#1e2d3d', margin:'2px 2px', flexShrink:0 }} />
-              )}
-              {/* Temperatura en los dos tipos de hilo (Mensajes y Comentarios). */}
-              {TEMPERATURAS.map(({ key, icon, label, color }) => {
-                const on = selectedConv.temperatura === key
-                return (
-                  <button key={key} title={on ? `${label} — clic para quitar` : `Marcar ${label}`} onClick={() => cambiarTemperatura(key)} style={{
-                    padding:'3px 6px', fontSize:11, fontWeight:700, borderRadius:5, cursor:'pointer',
-                    background: on ? `${color}22` : 'transparent',
-                    border: `1px solid ${on ? color + '60' : '#1a2d40'}`,
-                    color: on ? color : '#334155',
-                    fontFamily:'Outfit,sans-serif',
-                  }}>{icon}</button>
+                  <BotonEje key={key} on={on} color={e.color} icon={e.icon} label={e.label}
+                    title={on ? `${e.label} — clic para quitar` : `Marcar ${e.label}`}
+                    onClick={() => cambiarEtapa(key)} />
                 )
               })}
             </div>
