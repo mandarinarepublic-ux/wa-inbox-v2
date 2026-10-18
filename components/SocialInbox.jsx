@@ -279,7 +279,9 @@ function MsgBubble({ msg, channel }) {
         {isMandi && <div style={{ fontSize:9, fontWeight:700, opacity:.75, marginBottom:3 }}>🍊 MANDI</div>}
         {imagen && (
           <a href={imagen} target="_blank" rel="noreferrer">
-            <img src={imagen} alt="" style={{ maxWidth:'100%', borderRadius:8, marginBottom: msg.text ? 6 : 0, display:'block' }} />
+            {/* Mismo tope que la burbuja de WhatsApp (Components.jsx): una guía de
+                tallas a tamaño real ocupaba la pantalla entera. Tocarla la abre en grande. */}
+            <img src={imagen} alt="" title="Toca para ver en grande" style={{ maxWidth:'100%', maxHeight:260, borderRadius:8, marginBottom: msg.text ? 6 : 0, display:'block', cursor:'zoom-in' }} />
           </a>
         )}
         {msg.text && <div>{msg.text}</div>}
