@@ -1148,6 +1148,11 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                       .then(() => setNotasRefrescar(n => n + 1))
                       .catch(() => {})
                     setIdVenta(activeConv.telefono, aviso.pedidoId).catch(() => {})
+                    // El historial se carga UNA vez por teléfono (histLoadedRef):
+                    // sin esto el pedido nuevo no aparecía hasta refrescar la página.
+                    // Va con el pedidoId para que salga aunque el cliente sea nuevo
+                    // y el CRM todavía no lo haya enlazado a este teléfono.
+                    loadHistorial(activeConv.telefono, aviso.pedidoId)
                     setPedidoRes({ ok: true, pedidoId: aviso.pedidoId, montoTotal: aviso.montoTotal, url: aviso.url })
                     // Cerrar el formulario: el aviso "✅ Pedido creado" se pinta
                     // DEBAJO del iframe de 70vh y, si no, hay que bajar para
