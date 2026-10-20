@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { filaDeProducto, csvDelFeed } from '../lib/feed-catalogo.js'
+import { filaDeProducto, csvDelFeed, filasSeguras, MINIMO_PRODUCTOS } from '../lib/feed-catalogo.js'
 
 const prod = (o = {}) => ({
   id: 8184165007453, handle: 'camiseta-web-of-spider-man', title: 'Camiseta Web of Spider-Man',
@@ -37,4 +37,13 @@ test('feed: CSV con encabezado y comillas escapadas', () => {
   assert.equal(lineas.length, 2)
   assert.ok(lineas[0].startsWith('id,title,description'))
   assert.ok(lineas[1].includes('"Hoodie ""Krang"", edición"'))
+})
+
+test('feed: lista demasiado corta = error, para que REEMPLAZAR no vacíe el catálogo', () => {
+  const muchos = Array.from({ length: MINIMO_PRODUCTOS }, (_, i) => prod({ id: 1000 + i }))
+  assert.equal(filasSeguras(muchos).length, MINIMO_PRODUCTOS)
+  assert.throws(() => filasSeguras(muchos.slice(1)), /mínimo/)
+  // Los sin foto no cuentan: 100 productos sin foto tampoco son una lista válida.
+  assert.throws(() => filasSeguras(muchos.map((p) => ({ ...p, images: [] }))), /solo 0/)
+  assert.throws(() => csvDelFeed([], undefined, MINIMO_PRODUCTOS), /mínimo/)
 })

@@ -1,4 +1,4 @@
-import { csvDelFeed } from '@/lib/feed-catalogo'
+import { csvDelFeed, MINIMO_PRODUCTOS } from '@/lib/feed-catalogo'
 
 // 🛍️ GET /api/feed-catalogo → CSV de los productos publicados en Shopify, para la
 // "fuente de datos programada" de CatMandSF en Commerce Manager (lib/feed-catalogo.js).
@@ -28,12 +28,12 @@ async function productosDeShopify() {
 export async function GET() {
   try {
     const productos = await productosDeShopify()
-    if (!productos.length) throw new Error('Shopify no devolvió productos')
-    return new Response(csvDelFeed(productos, TIENDA), {
+    // Con el REEMPLAZAR diario, una lista corta BORRARÍA el catálogo: mejor error.
+    return new Response(csvDelFeed(productos, TIENDA, MINIMO_PRODUCTOS), {
       headers: {
         'Content-Type': 'text/csv; charset=utf-8',
-        // Meta la lee una vez al día: una hora de caché en el borde basta y ahorra.
-        'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=600',
+        // Meta la lee cada hora: 10 min de caché en el borde para que lo nuevo no se atrase.
+        'Cache-Control': 'public, s-maxage=600, stale-while-revalidate=300',
       },
     })
   } catch (err) {
