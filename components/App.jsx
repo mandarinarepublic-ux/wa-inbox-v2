@@ -19,7 +19,7 @@ import { MenuEtiquetas, AdminEtiquetas, ChipEtiqueta } from '@/components/Etique
 import { expandirEtiquetas } from '@/lib/etiquetas-mapa'
 import CarruselModal from '@/components/CarruselModal'
 import { guardadoCarrusel } from '@/lib/carrusel'
-import { hilosDelCanal } from '@/lib/hilos'
+import { hilosDelCanal, pedidosPorResolver } from '@/lib/hilos'
 
 import SocialInbox from '@/components/SocialInbox'
 import Contactos, { PlantillaModal } from '@/components/Contactos'
@@ -936,6 +936,20 @@ export default function App() {
       return armado ? { ...c, msgs: armado.msgs, last: armado.last } : c
     }))
   }, [])
+
+  // 📦 Un pedido del catálogo que llega con el chat ABIERTO entra por el poll, que
+  // no trae el crudo de Meta: sin esto se quedaba "1 × $35.00 (8063557763165)"
+  // hasta refrescar. Se vuelve a leer el hilo, que es quien le pone nombre y foto.
+  // Cada pedido se pide UNA vez (pedidosPedidosRef) aunque no se pueda resolver.
+  const pedidosPedidosRef = useRef(new Set())
+  useEffect(() => {
+    if (!active) return
+    const conv = convs.find(c => c.telefono === active && (!activeCanalRef.current || !c.phoneId || c.phoneId === activeCanalRef.current))
+    const ids = pedidosPorResolver(conv?.msgs, pedidosPedidosRef.current)
+    if (!ids.length) return
+    ids.forEach(id => pedidosPedidosRef.current.add(id))
+    cargarHilo(active)
+  }, [active, convs, cargarHilo])
 
   // Cambiar de bandeja CIERRA el chat abierto: si no, al terminar de escribirle a un
   // cliente y pasar a "Pendientes" quedaba en pantalla la conversación anterior, que
