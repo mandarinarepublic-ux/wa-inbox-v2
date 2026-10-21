@@ -31,6 +31,7 @@ export async function GET(req) {
       if (!(tel === objetivo || tel.endsWith(objetivo.slice(-9)) || objetivo.endsWith(tel.slice(-9)))) continue
       const contenido = String(r[4] || '').trim()
       if (!contenido) continue
+      if (String(r[7] || '').toUpperCase() === 'INTERNO') continue // aviso del CRM: no es del cliente
       const dir = String(r[7] || 'ENTRANTE').toUpperCase()
       msgs.push({ role: dir === 'SALIENTE' ? 'assistant' : 'user', content: contenido })
     }

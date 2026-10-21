@@ -926,9 +926,42 @@ function UbicacionCard({ u }) {
   )
 }
 
+// 🛒 Aviso INTERNO (direccion 'INTERNO'): lo deja el CRM cuando entra un pedido
+// web SIN PAGAR. Nunca se le envía al cliente: es para quien atiende. Va
+// centrado y en ámbar para que no se confunda con un mensaje del chat.
+export function AvisoInterno({ msg }) {
+  const d = parseDate(msg.timestamp)
+  const hora = isNaN(d) ? '' : d.toLocaleString('es-EC', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+  const lineas = String(msg.mensaje || '').split('\n')
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', margin: '10px 0' }}>
+      <div style={{
+        maxWidth: 'min(92%, 440px)', padding: '10px 14px', borderRadius: 12,
+        background: 'rgba(245,158,11,.13)', border: '1px solid rgba(245,158,11,.6)',
+        color: '#fde68a', fontSize: 13, lineHeight: 1.45, boxShadow: '0 0 0 3px rgba(245,158,11,.08)',
+      }}>
+        <div style={{ fontSize: 10, letterSpacing: '.08em', textTransform: 'uppercase', opacity: .75, marginBottom: 4 }}>
+          Aviso interno · el cliente no lo ve
+        </div>
+        {lineas.map((l, i) => (
+          <div key={i} style={{
+            minHeight: l ? undefined : 6,
+            fontWeight: i === 0 || l.startsWith('⚠️') ? 700 : 400,
+            color: l.startsWith('⚠️') ? '#fbbf24' : undefined,
+            whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+          }}>{l}</div>
+        ))}
+        {hora && <div style={{ fontSize: 10, opacity: .6, textAlign: 'right', marginTop: 4 }}>{hora}</div>}
+      </div>
+    </div>
+  )
+}
+
 export function MessageBubble({ msg, allMsgs, onResponder, onAbrirChat, onReenviar, reaccion = '', onReaccionar = null }) {
   const [accion, setAccion] = useState(false)
   const [hover, setHover] = useState(false)
+  // Después de los hooks: un return antes rompería el orden de los useState.
+  if (msg.direccion === 'INTERNO') return <AvisoInterno msg={msg} />
   const isMe     = msg.direccion === 'SALIENTE'
 
   // Un clic sobre una foto, un link o un botón hace LO SUYO, no abre el "Responder".
