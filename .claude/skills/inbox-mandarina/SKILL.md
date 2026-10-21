@@ -267,6 +267,38 @@ contradice + UN pedido posible. Todo lo demás queda con pedido propuesto y bot�
 - El CRM tiene celulares con un dígito cambiado respecto a la guía: el emparejado por
   nombre los encuentra, pero eso es justamente lo que queda "en duda".
 
+### 13. Lo que se resuelve AL LEER solo existe en el HILO, no en el poll (oct-2026)
+
+El nombre y la foto de un pedido del catálogo (`conPedidosResueltos`, `lib/inbox-supabase.js`)
+y el producto de `referred_product` se resuelven al leer el **hilo**, que trae el crudo
+(`raw`). El poll (`inbox-sync`, `COLS_MSG` sin `raw`) no puede. Y el hilo solo se leía **al
+abrir el chat**: un pedido que llegaba con el chat ABIERTO se quedaba como
+`1 × $35.00 (8063557763165)` hasta refrescar (20-oct, prueba de Rodrigo).
+
+- Arreglado en los dos: un efecto en `App.jsx` relee el hilo **una vez por pedido** sin
+  resolver (`pedidosPorResolver`: `lib/hilos.js` en MANDI, `lib/pedido-en-vivo.js` en IND).
+  El `Set` evita releer en cada poll cuando un id no resuelve nunca (catálogos de IND).
+- Diagnóstico rápido: si `inbox.catalogo_cache` no tiene ese `retailer_id`, el servidor **ni
+  lo intentó** (el salto por `crm.productos_shopify` siempre guarda en la caché).
+- ⚠️ `referred_product` que llega en vivo **sigue sin releer**: el poll no trae `raw`, así que
+  el navegador no puede saber que el mensaje venía de una tarjeta. Se ve al reabrir el chat.
+- Cualquier campo nuevo "resuelto al leer" tiene el mismo hueco: pensar cómo llega en vivo.
+
+### 14. Hilo plegado por MES (oct-2026)
+
+`lib/meses-chat.js` (`tramosPorMes`, idéntico en los dos repos) parte el hilo por mes: el
+mes en curso **y el último con mensajes** van siempre abiertos (si no, un chat sin
+movimiento este mes se abría vacío y parecía borrado). Los demás: línea
+"▾ Mostrar septiembre 2026 · N mensajes". Estado en `mesesAbiertos` (clave
+`tel|canal|AAAA-MM`, no se guarda: al refrescar todo vuelve a plegarse).
+
+- Abrir/cerrar un mes usa el MISMO `anclaScrollRef` que el historial infinito, y el efecto
+  que restaura el scroll depende de `[convs, mesesAbiertos]`. Sin eso la pantalla salta.
+- ☠️ Mientras el mes más viejo está plegado, `handleMsgsScroll` **no** llama a
+  `cargarMasHistorial` (`primerMesPlegadoRef`): con todo plegado el scroll queda siempre
+  cerca del tope y se descargaría el chat entero, página tras página.
+- Un mensaje sin fecha legible va con el tramo anterior: nunca se esconde solo.
+
 ---
 
 ## Reglas que ya se pagaron
