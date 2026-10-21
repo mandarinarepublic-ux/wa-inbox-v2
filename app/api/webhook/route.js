@@ -15,6 +15,7 @@ import { archivarMedia } from '@/lib/media-archive'
 import { parseLinkpago, crearLinkPago, mensajeLinkPago } from '@/lib/dlocal'
 import { getAutomatizaciones } from '@/lib/automatizaciones'
 import { enviarPush, avisoDeEntrante } from '@/lib/push'
+import { archivoRechazadoDeEstado } from '@/lib/archivo-rechazado'
 import { decidirIA } from '@/lib/ia-canal'
 import { extraer } from '@/lib/wa-mensaje'
 import { extraerEchoes } from '@/lib/echoes'
@@ -716,6 +717,27 @@ async function procesarHistorial(filas) {
   console.log(`[/api/webhook historial] ${guardados}/${filas.length} guardados`)
 }
 
+// 📎 Archivo que el cliente mandó y WhatsApp no pudo entregar (lib/archivo-rechazado.js).
+// Carril MÍNIMO, como los ecos: se guarda como ENTRANTE (el chat vuelve a Pendientes)
+// y suena el push. Sin saludos, flujos ni IA: no hay nada que contestar en automático,
+// hay que pedirle al cliente que lo mande de otra forma.
+async function procesarArchivosRechazados(lista) {
+  for (const r of lista) {
+    try {
+      if (await existeWamidSupabase(r.wamid).catch(() => false)) continue
+      await guardarMensajeSupabase({
+        id: r.wamid, telefono: r.telefono, nombre: '', tipo: 'texto',
+        mensaje: r.contenido, mediaUrl: '', timestamp: r.fecha,
+        direccion: 'ENTRANTE', raw: r.raw, phoneId: r.phoneId,
+      })
+      await enviarPush({ ...avisoDeEntrante({ telefono: r.telefono, tipo: 'texto', contenido: r.contenido }, null, Date.now()),
+        titulo: `📎 Archivo que no llegó · ${r.telefono}` })
+    } catch (err) {
+      console.error('[/api/webhook archivo rechazado]', r.wamid, err.message)
+    }
+  }
+}
+
 // Agenda del celular (coexistencia): solo completa nombres que faltan.
 async function procesarAgenda(contactos) {
   for (const c of contactos) {
@@ -757,6 +779,7 @@ export async function POST(req) {
     const echoes = []
     const historial = [] // coexistencia: mensajes viejos del celular
     const agenda = []    // coexistencia: nombres de la agenda del celular
+    const rechazados = [] // archivos del cliente que Meta no pudo entregar (131052)
     for (const entry of entries) {
       for (const change of entry?.changes || []) {
         const value    = change?.value || {}
@@ -798,6 +821,10 @@ export async function POST(req) {
         // Estados de entrega (✓✓) de mensajes que ENVIAMOS.
         for (const st of value?.statuses || []) {
           if (st?.id && st?.status) statuses.push({ wamid: String(st.id), estado: String(st.status).toLowerCase() })
+          // 📎 Un `failed` 131052 NO es de algo nuestro: es un archivo que el CLIENTE
+          // mandó y Meta no pudo bajar (p. ej. >100 MB). Ver lib/archivo-rechazado.js.
+          const rechazado = archivoRechazadoDeEstado(st, phoneId)
+          if (rechazado && marcarNuevo(rechazado.wamid)) rechazados.push(rechazado)
         }
 
         for (const msg of value?.messages || []) {
@@ -823,6 +850,7 @@ export async function POST(req) {
     if (echoes.length && usaSupabaseLectura()) waitUntil(procesarEchoes(echoes))
     if (historial.length && usaSupabaseLectura()) waitUntil(procesarHistorial(historial))
     if (agenda.length && usaSupabaseLectura()) waitUntil(procesarAgenda(agenda))
+    if (rechazados.length && usaSupabaseLectura()) waitUntil(procesarArchivosRechazados(rechazados))
     return NextResponse.json({ ok: true })
   } catch (err) {
     console.error('[/api/webhook]', err)
