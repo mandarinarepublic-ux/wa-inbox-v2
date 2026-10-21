@@ -20,6 +20,7 @@ import { expandirEtiquetas } from '@/lib/etiquetas-mapa'
 import CarruselModal from '@/components/CarruselModal'
 import { guardadoCarrusel } from '@/lib/carrusel'
 import { hilosDelCanal, pedidosPorResolver } from '@/lib/hilos'
+import { tramosPorMes } from '@/lib/meses-chat'
 
 import SocialInbox from '@/components/SocialInbox'
 import Contactos, { PlantillaModal } from '@/components/Contactos'
@@ -648,7 +649,7 @@ export default function App() {
     autoScroll.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60
     // Cerca del tope: traer el tramo anterior. 120px de margen para que llegue
     // antes de que el vendedor choque con el borde.
-    if (el.scrollTop < 120) cargarMasHistorial()
+    if (el.scrollTop < 120 && !primerMesPlegadoRef.current) cargarMasHistorial()
   }
 
   // ── Panel derecho redimensionable ─────────────────────────────
@@ -1109,6 +1110,19 @@ export default function App() {
   const sinMasRef      = useRef({})   // clave → ya no queda historial
   const anclaScrollRef = useRef(null) // para no saltar al agregar arriba
 
+  // 🗓️ Meses del hilo que el vendedor abrió a mano: clave `tel|canal|AAAA-MM`.
+  // Abrir uno agrega mensajes ARRIBA de lo que estás leyendo: se ancla el scroll
+  // igual que al traer historial, para que la pantalla no salte.
+  const [mesesAbiertos, setMesesAbiertos] = useState({})
+  // Mientras el mes más viejo esté plegado no se baja más historial al subir: lo
+  // que llegara iría a parar a un mes plegado y se descargaría el chat entero.
+  const primerMesPlegadoRef = useRef(false)
+  const alternarMes = (clave) => {
+    const el = msgsRef.current
+    anclaScrollRef.current = el ? { alto: el.scrollHeight, top: el.scrollTop } : null
+    setMesesAbiertos(prev => ({ ...prev, [clave]: !prev[clave] }))
+  }
+
   const cargarMasHistorial = useCallback(async () => {
     const tel = activeRef.current
     if (!tel || cargandoMasRef.current) return
@@ -1168,7 +1182,7 @@ export default function App() {
     const el = msgsRef.current
     if (!el) return
     el.scrollTop = el.scrollHeight - ancla.alto + ancla.top
-  }, [convs])
+  }, [convs, mesesAbiertos])
 
   // ── Recordar en qué pestaña quedaste ─────────────────────────────────────
   // Antes arrancaba SIEMPRE en MANDI: estaba fijo en el código y no se guardaba
@@ -3154,8 +3168,28 @@ export default function App() {
                 for (const [k, v] of Object.entries(reaccionLocal)) mias.set(k, v)
                 const ids = new Set(activeConv.msgs.map(m => String(m.id)))
                 const visibles = activeConv.msgs.filter(m => seMuestraComoBurbuja(m, ids))
-                return visibles.map((msg, idx) => {
-                const showDate = idx===0 || parseDate(msg.timestamp).toDateString() !== parseDate(visibles[idx-1].timestamp).toDateString()
+                // 🗓️ Meses anteriores plegados (lib/meses-chat.js): el mes en curso
+                // siempre abierto, los demás detrás de una línea que se abre con un clic.
+                const tramos = tramosPorMes(visibles, m => parseDate(m.timestamp))
+                const claveChat = `${activeConv.telefono}|${activeCanal || ''}`
+                const abierto = (t) => t.siempreAbierto || !!mesesAbiertos[`${claveChat}|${t.clave}`]
+                primerMesPlegadoRef.current = !!tramos[0] && !abierto(tramos[0])
+                return tramos.map((t) => {
+                const estaAbierto = abierto(t)
+                return (
+                  <div key={t.clave || 'sin-fecha'}>
+                    {!t.siempreAbierto && (
+                      <div style={{ display:'flex', alignItems:'center', gap:10, margin:'14px 0 8px' }}>
+                        <div style={{ flex:1, height:1, background:'rgba(255,255,255,.08)' }} />
+                        <button onClick={() => alternarMes(`${claveChat}|${t.clave}`)}
+                          style={{ background:'rgba(37,211,102,.08)', border:'1px solid rgba(37,211,102,.25)', color:'#25d366', borderRadius:20, padding:'4px 14px', fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:'Outfit,sans-serif' }}>
+                          {estaAbierto ? '▴ Ocultar' : '▾ Mostrar'} {t.nombre} · {t.msgs.length} {t.msgs.length === 1 ? 'mensaje' : 'mensajes'}
+                        </button>
+                        <div style={{ flex:1, height:1, background:'rgba(255,255,255,.08)' }} />
+                      </div>
+                    )}
+                    {estaAbierto && t.msgs.map((msg, idx) => {
+                const showDate = idx===0 || parseDate(msg.timestamp).toDateString() !== parseDate(t.msgs[idx-1].timestamp).toDateString()
                 return (
                   <div key={msg.id}>
                     {showDate && (
@@ -3166,6 +3200,9 @@ export default function App() {
                     <MessageBubble msg={msg} allMsgs={activeConv.msgs} onResponder={responderA} onAbrirChat={openConv} onReenviar={setReenviando}
                       reaccion={mias.get(String(msg.id)) || ''}
                       onReaccionar={windowOpen && puedeReaccionar(msg) ? (emoji) => reaccionar(msg, emoji) : null} />
+                  </div>
+                )
+                    })}
                   </div>
                 )
               })
