@@ -299,6 +299,26 @@ movimiento este mes se abría vacío y parecía borrado). Los demás: línea
   cerca del tope y se descargaría el chat entero, página tras página.
 - Un mensaje sin fecha legible va con el tramo anterior: nunca se esconde solo.
 
+### 15. `direccion='INTERNO'`: avisos que NO son del cliente ni nuestros (oct-2026)
+
+El CRM (webhook de Shopify, `MANDARINACRM/lib/pedidoWebPendiente.js` +
+`avisarPedidoEnInbox`) escribe DIRECTO en `inbox.mensajes` un aviso con
+`direccion='INTERNO'`, `tipo='pedido_web'`, `wa_message_id='pedido_web_<order.id>'`
+cuando entra un pedido web SIN PAGAR. Pone la bandeja en PENDIENTE a mano.
+
+- ☠️ **Un mensaje sintético NUNCA va como ENTRANTE** si no lo escribió el cliente
+  (`cambio-numero.js` sí lo hace, y es la excepción): `ultimo_entrante_at` abre una
+  ventana de 24 h falsa → texto libre que Meta rechaza (131047) y sin botón de plantilla.
+- Toda la base compara `= 'ENTRANTE'` / `= 'SALIENTE'`, así que un tercer valor queda
+  fuera de conteos, embudo y `pagos_sin_pedido`. En el código, **cuidado con los
+  ternarios** `=== 'SALIENTE' ? 'assistant' : 'user'`: tratan cualquier otra cosa como
+  del cliente. Los del historial de la IA ya saltan INTERNO (`lib/inbox-supabase.js`,
+  `app/api/conversacion/route.js`); uno nuevo tiene que hacer lo mismo.
+- Se pinta con `AvisoInterno` (`components/Components.jsx`), devuelto por
+  `MessageBubble` DESPUÉS de sus `useState`.
+- IND: el botón «📋 Enviar plantilla» pedía `lastIncoming`; un chat creado por el CRM
+  no tiene ninguno → ahora basta cualquier mensaje. MANDI ya usaba `lastMsg`.
+
 ---
 
 ## Reglas que ya se pagaron
