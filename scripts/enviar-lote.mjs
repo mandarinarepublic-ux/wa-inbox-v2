@@ -83,7 +83,12 @@ async function main() {
         method: 'POST',
         headers: { ...auth, 'Content-Type': 'application/json' },
         // auto:true = no cuenta como respuesta de una persona (no toca push, flujo ni 📌).
-        body: JSON.stringify({ Telefono: d.telefono, Mensaje: d.texto, Nombre: d.nombre || '', Canal: d.phone_id, auto: true }),
+        // Con `doc_url` el texto viaja como PIE del documento: UN solo mensaje, con el
+        // nombre que ve el cliente (`doc_nombre`). Sin él, un texto normal.
+        body: JSON.stringify(d.doc_url
+          ? { Telefono: d.telefono, Nombre: d.nombre || '', Canal: d.phone_id, auto: true,
+              DocURL: d.doc_url, DocNombre: d.doc_nombre || 'documento.pdf', DocCaption: d.texto }
+          : { Telefono: d.telefono, Mensaje: d.texto, Nombre: d.nombre || '', Canal: d.phone_id, auto: true }),
       })
       const data = await rs.json().catch(() => ({}))
       if (!rs.ok || !data.ok) throw new Error(data.error || `HTTP ${rs.status}`)
