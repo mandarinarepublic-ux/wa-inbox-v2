@@ -111,5 +111,4 @@ mensaje nuestro, el cliente no escribió después (ni reacción), ventana con �
 08:00–22:00 Ecuador, no repetir el mismo texto. Sale con `auto:true`: no cuenta como respuesta de
 una persona.
 
-**Credencial:** `INBOX_API_TOKEN` en `.env.local` (gitignored), copiado de Vercel
-(`wa-inbox-v2`). Nunca imprimirlo. Si el script da 401, la clave está mal o tiene BOM.
+**Credencial:** `INBOX_API_TOKEN` en `.env.local` (gitignored). ☠️ En Vercel la clave de siempre está como SECRETO y no se puede copiar: desde el 20-oct la de la terminal es OTRA, generada en la PC y cargada en Vercel como `INBOX_API_TOKEN_TERMINAL` (middleware acepta las dos). Si se pierde: generar una nueva, `vercel env rm/add INBOX_API_TOKEN_TERMINAL production` y redesplegar (Edge la incrusta al compilar). Nunca imprimirla. Si el script da 401, la clave está mal o tiene BOM. Con `doc_url` + `doc_nombre` el texto sale como pie de un documento.
