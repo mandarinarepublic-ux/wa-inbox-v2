@@ -33,16 +33,25 @@ const LOGIN = 'https://crm.apps.mandarinaec.com'
 
 const modo = () => (process.env.AUTH_MODO || 'observar').trim().toLowerCase()
 
-function tokenDeMaquina(req) {
-  const esperado = String(process.env.INBOX_API_TOKEN || '').replace(/[^\x21-\x7E]/g, '')
-  if (!esperado) return false
-  const recibido = (req.headers.get('authorization') || '')
-    .replace(/^Bearer\s+/i, '').replace(/[^\x21-\x7E]/g, '')
-  // Comparación de largo constante: el tiempo de respuesta no delata aciertos.
-  if (recibido.length !== esperado.length) return false
+// Comparación de largo constante: el tiempo de respuesta no delata aciertos.
+function igualSeguro(recibido, esperado) {
+  if (!esperado || recibido.length !== esperado.length) return false
   let dif = 0
   for (let i = 0; i < recibido.length; i++) dif |= recibido.charCodeAt(i) ^ esperado.charCodeAt(i)
   return dif === 0
+}
+
+// Dos claves de máquina. INBOX_API_TOKEN es la de siempre (la usan las rutinas y
+// el CRM) y en Vercel está como SECRETO: no se puede volver a leer. La de la
+// TERMINAL (scripts/enviar-lote.mjs en la PC de Rodrigo) es aparte (20-oct-2026)
+// para no tener que rotar la otra y romper a quien ya la usa. Se revoca sola
+// borrando la variable y redesplegando.
+function tokenDeMaquina(req) {
+  const limpiar = (s) => String(s || '').replace(/[^\x21-\x7E]/g, '')
+  const recibido = limpiar(req.headers.get('authorization')).replace(/^Bearer/i, '')
+  return [process.env.INBOX_API_TOKEN, process.env.INBOX_API_TOKEN_TERMINAL]
+    .map(limpiar).filter(Boolean)
+    .some((esperado) => igualSeguro(recibido, esperado))
 }
 
 export async function middleware(req) {
