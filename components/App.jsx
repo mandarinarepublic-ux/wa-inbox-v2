@@ -92,7 +92,12 @@ function BotonEje({ on, color, onClick, title, icon, label }) {
       boxShadow: on ? `0 0 8px ${color}44` : 'none',
     }}>
       <span className="hide-mobile" style={{ fontSize:10 }}>{icon} {label}</span>
-      <span className="show-mobile" style={{ fontSize:14 }}>{icon}</span>
+      {/* En el celular no hay "pasar el mouse" para ver el title: el nombre va
+          debajo del emoji, si no hay que saberse los 15 botones de memoria. */}
+      <span className="show-mobile eje-mob">
+        <span style={{ fontSize:15, lineHeight:1 }}>{icon}</span>
+        <span className="eje-mob-lbl">{label}</span>
+      </span>
     </button>
   )
 }
@@ -358,6 +363,17 @@ export default function App() {
   const pollRef    = useRef(null)
   const fileRef    = useRef(null)
   const msgsRef    = useRef(null)
+  // 📱 Mismo corte que el CSS (767px). Solo para textos que el CSS no puede
+  // cambiar, como el placeholder: el diseño de celular vive en el <style>.
+  const [esCelular, setEsCelular] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia?.('(max-width: 767px)')
+    if (!mq) return
+    const alCambiar = () => setEsCelular(mq.matches)
+    alCambiar()
+    mq.addEventListener?.('change', alCambiar)
+    return () => mq.removeEventListener?.('change', alCambiar)
+  }, [])
   const autoScroll = useRef(true)
   const prevMsgLen = useRef(0)
   const taRef      = useRef(null)  // caja de texto del compositor (para que crezca sola)
@@ -735,9 +751,16 @@ export default function App() {
     setRightWidth(w => Math.min(ANCHO_MAX, w))
   }, [])
 
+  // 📱 En el celular el cajón derecho mide 300 px: el formulario del CRM ahí no
+  // entra. Con algo del CRM abierto EN EL CAJÓN, el cajón pasa a pantalla completa.
+  const [crmEnCajon, setCrmEnCajon] = useState(false)
+  const recalcularCrmEnCajon = () => setCrmEnCajon(!!(manualesRef.current.cajon || veresRef.current.cajon))
+
   const alPedidoManual = useCallback((donde, abierto) => {
     anotarManuales({ ...manualesRef.current, [donde]: abierto })
     ajustarAnchoDelCrm(abierto)
+    recalcularCrmEnCajon()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anotarManuales, ajustarAnchoDelCrm])
 
   // El camino de VER PEDIDO: ensancha igual y no toca `manualesRef`, o sea que
@@ -745,6 +768,8 @@ export default function App() {
   const alVerPedido = useCallback((donde, abierto) => {
     anotarVeres({ ...veresRef.current, [donde]: abierto })
     ajustarAnchoDelCrm(abierto)
+    recalcularCrmEnCajon()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anotarVeres, ajustarAnchoDelCrm])
 
   // Una por instancia, y ESTABLES: `RightPanel` las tiene como dependencia de un
@@ -2768,6 +2793,7 @@ export default function App() {
         .hide-mobile{ display:inline !important; }
         .show-mobile{ display:none !important; }
         .overlay    { display:none; }
+        .filtros-toggle{ display:none !important; }
         @media (max-width:767px){
           /* Los cajones arrancan DEBAJO de la barra de pestañas (alto 38px, z-index
              200), no en top:0. Si no, la barra tapa la cabecera del sidebar (logo,
@@ -2796,6 +2822,32 @@ export default function App() {
           .tab-selector > button > div{ letter-spacing:0 !important; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
           .tab-selector > button > div:first-child{ font-size:8.5px !important; }
           .tab-selector > button > div:last-child{ font-size:7px !important; }
+          /* Ya son 8 pestañas, no 5: en una línea "📥 GENERAL 6" no entraba en 51px
+             y el contador tapaba el nombre. Ahora: ícono arriba, nombre abajo, el
+             contador flotando en la esquina y sin la línea de subtítulo. */
+          .tab-selector > button{ position:relative; }
+          .tab-selector > button > div:first-child > span:first-child{ display:flex; flex-direction:column; align-items:center; line-height:1.15; min-width:0; max-width:100%; }
+          .tab-ico{ font-size:15px; }
+          .tab-lbl{ font-size:8px; letter-spacing:0; max-width:100%; overflow:hidden; text-overflow:ellipsis; }
+          .tab-badge{ position:absolute; top:1px; right:2px; min-width:14px !important; height:14px !important; font-size:8px !important; padding:0 3px !important; }
+          .tab-sub{ display:none !important; }
+          /* ☰ volver a la lista: el botón más usado en el celular medía 22×20. */
+          .chat-header .mob-ham{ min-width:40px; min-height:40px; font-size:24px !important; align-items:center; justify-content:center; }
+          /* Botones de la cabecera del chat: emoji + nombre debajo, 40px de alto. */
+          .chat-actions > button{ min-height:40px; }
+          .eje-mob{ display:inline-flex !important; flex-direction:column; align-items:center; gap:2px; }
+          .eje-mob-lbl{ font-size:8.5px; font-weight:700; white-space:nowrap; max-width:60px; overflow:hidden; text-overflow:ellipsis; }
+          /* Filtros: en la compu se ven todos; en el celular, detrás de un botón. */
+          .filtros-toggle{ display:flex !important; }
+          .filtros-extra{ display:none; }
+          .filtros-extra.abiertos{ display:block; }
+          /* Respuestas rápidas: botones de 21px → 34px, y el 🗑 apartado del resto. */
+          .rr-fila{ flex-direction:column; align-items:stretch !important; }
+          .rr-acciones{ gap:6px !important; justify-content:flex-end; }
+          .rr-acciones > button{ min-height:34px; min-width:34px; font-size:13px !important; }
+          .rr-acciones > .rr-borrar{ margin-left:8px; }
+          /* El formulario del CRM no entra en 300px: pantalla completa. */
+          .right-col.crm-abierto{ width:100% !important; max-width:100% !important; }
         }
       `}</style>
 
@@ -2895,16 +2947,18 @@ export default function App() {
               fontFamily:'Outfit,sans-serif', transition:'all .2s', height:'100%',
             }}>
               <div style={{ fontSize:10, fontWeight:800, color: linea===id ? color : '#334155', letterSpacing:'1.5px', display:'flex', alignItems:'center', justifyContent:'center', gap:5 }}>
-                <span>{icon} {label}{armado ? ' ◉' : ''}</span>
+                {/* Ícono y nombre por separado: en el celular van uno ENCIMA del
+                    otro y el contador flota en la esquina (ver CSS .tab-ico). */}
+                <span><span className="tab-ico">{icon}</span> <span className="tab-lbl">{label}{armado ? ' ◉' : ''}</span></span>
                 {badge > 0 && (
-                  <span style={{
+                  <span className="tab-badge" style={{
                     background:'#f87171', color:'#fff', borderRadius:9, minWidth:16, height:16,
                     display:'inline-flex', alignItems:'center', justifyContent:'center',
                     fontSize:9, fontWeight:900, padding:'0 4px', letterSpacing:0,
                   }}>{badge}</span>
                 )}
               </div>
-              <div style={{ fontSize:8, color: linea===id ? color+'80' : '#2a3f55', letterSpacing:'1px' }}>{sub}</div>
+              <div className="tab-sub" style={{ fontSize:8, color: linea===id ? color+'80' : '#2a3f55', letterSpacing:'1px' }}>{sub}</div>
             </button>
           ))}
         </div>
@@ -3458,7 +3512,7 @@ export default function App() {
                       360px y hacía ver la caja vacía del doble de alto. */}
                   <textarea ref={setTaRef} value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKey}
                     onPaste={handlePaste}
-                    placeholder={getModoIA(activeConv?.telefono) ? '🤖 IA respondiendo automáticamente...' : 'Mensaje... (Ctrl+Enter envía)'}
+                    placeholder={getModoIA(activeConv?.telefono) ? '🤖 IA respondiendo automáticamente...' : esCelular ? 'Mensaje...' : 'Mensaje... (Ctrl+Enter envía)'}
                     rows={1}
                     style={{
                       width:'100%', background:'transparent', border:'none', outline:'none',
@@ -3553,7 +3607,7 @@ export default function App() {
           </div>
         )}
         {showRight && (
-          <div className="right-col">
+          <div className={`right-col${crmEnCajon ? ' crm-abierto' : ''}`}>
             <div style={{ display:'flex', justifyContent:'flex-end', padding:'10px 10px 0' }}>
               <button onClick={cerrarCajonDerecho} style={{ background:'transparent', border:'none', color:'#475569', cursor:'pointer', fontSize:17 }}>✕</button>
             </div>

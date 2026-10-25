@@ -30,6 +30,11 @@ const TONO_TEMP = { caliente: '#fb923c', tibio: '#fbbf24', frio: '#38bdf8', dorm
 
 export default function FiltrosLista({ filtro, conteos, onCambiar, etiquetas = [], onAdministrarEtiquetas }) {
   const n = conteos || { bandeja: {}, temp: {}, etapa: {} }
+  // 📱 En el celular las filas de abajo ocupaban media pantalla antes del primer
+  // chat. Ahí quedan plegadas detrás de "Más filtros" (el CSS vive en App.jsx);
+  // en la compu se ven siempre y el botón no existe.
+  const [abiertos, setAbiertos] = React.useState(false)
+  const activos = [filtro.temp, filtro.etapa, filtro.deuda, filtro.ia, filtro.alerta, filtro.interno, filtro.etiqueta].filter(Boolean).length
   return (
     <div>
       <Fila>
@@ -37,6 +42,16 @@ export default function FiltrosLista({ filtro, conteos, onCambiar, etiquetas = [
         <Chip activo={filtro.bandeja === 'atendido'} color="#4ade80" n={n.bandeja.atendido} onClick={() => onCambiar('bandeja', 'atendido')} title="Ya contestamos">🟢 Atendidos</Chip>
         <Chip activo={filtro.bandeja === 'archivado'} color={P.creamDim} n={n.bandeja.archivado} onClick={() => onCambiar('bandeja', 'archivado')} title="Archivados">⚫ Archivo</Chip>
       </Fila>
+      <button className="filtros-toggle" onClick={() => setAbiertos(v => !v)} style={{
+        width: '100%', marginTop: 6, padding: '8px', fontSize: 11, fontWeight: 700,
+        background: activos ? 'rgba(251,191,36,.1)' : 'transparent',
+        border: `1px solid ${activos ? 'rgba(251,191,36,.45)' : P.border}`,
+        color: activos ? '#fbbf24' : P.creamDim, borderRadius: 7, cursor: 'pointer',
+        fontFamily: 'inherit', alignItems: 'center', justifyContent: 'center', gap: 6,
+      }}>
+        {abiertos ? '▴ Menos filtros' : '▾ Más filtros'}{activos > 0 ? ` · ${activos} activo${activos === 1 ? '' : 's'}` : ''}
+      </button>
+      <div className={`filtros-extra${abiertos ? ' abiertos' : ''}`}>
       <Fila>
         {Object.entries(TEMPERATURAS).map(([k, t]) => (
           <Chip key={k} activo={filtro.temp === k} color={TONO_TEMP[k]} n={n.temp[k]} onClick={() => onCambiar('temp', k)}
@@ -82,6 +97,7 @@ export default function FiltrosLista({ filtro, conteos, onCambiar, etiquetas = [
             border: `1px dashed ${P.border}`, color: P.creamFaint, borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit',
           }}>{etiquetas.length ? '⚙️' : '🔖 Etiquetas ⚙️'}</button>
         )}
+      </div>
       </div>
     </div>
   )

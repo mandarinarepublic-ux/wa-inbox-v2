@@ -1045,11 +1045,11 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                         </div>
                       )}
                       {/* Texto + botones */}
-                      <div style={{ padding:'7px 8px', display:'flex', alignItems:'flex-start', gap:4 }}>
+                      <div className="rr-fila" style={{ padding:'7px 8px', display:'flex', alignItems:'flex-start', gap:4 }}>
                         <span style={{ flex:1, fontSize:12, color:'#94a3b8', lineHeight:1.4, overflow:'hidden', textOverflow:'ellipsis', display:'-webkit-box', WebkitLineClamp:3, WebkitBoxOrient:'vertical', minWidth:0 }}>
                           {imgs.filter(a => a.tipo !== 'audio').length > 0 && `🖼×${imgs.filter(a => a.tipo !== 'audio').length} `}{imgs.filter(a => a.tipo === 'audio').length > 0 && `🎤×${imgs.filter(a => a.tipo === 'audio').length} `}{reply.botones?.length > 0 && <span style={{ color:'#f59e0b', fontWeight:700 }}>{`🔘×${reply.botones.length} `}</span>}{reply.carrusel?.length > 0 && <span style={{ color:'#25d366', fontWeight:700 }}>{`🛍️×${reply.carrusel.length} `}</span>}{(grupoFiltro || TODAS) === TODAS && GRUPOS_RESPUESTA.find(g => g.id === normalizarGrupo(reply.grupo)) ? `${GRUPOS_RESPUESTA.find(g => g.id === normalizarGrupo(reply.grupo)).emoji} ` : ''}{reply.text}
                         </span>
-                        <div style={{ display:'flex', gap:4, flexShrink:0 }}>
+                        <div className="rr-acciones" style={{ display:'flex', gap:4, flexShrink:0, flexWrap:'wrap', justifyContent:'flex-end' }}>
                           <button onClick={() => reordenar(idx, arriba)} disabled={arriba < 0 || hayAltaPendiente}
                             title={hayAltaPendiente ? 'Espera a que se confirme el alta pendiente' : 'Subir'}
                             style={{ background:'transparent', border:'1px solid #1e2d3d', color: (arriba < 0 || hayAltaPendiente) ? '#334155' : '#64748b', borderRadius:5, padding:'3px 5px', fontSize:10, cursor: (arriba < 0 || hayAltaPendiente) ? 'default' : 'pointer', fontFamily:'inherit' }}>↑</button>
@@ -1058,7 +1058,7 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                             style={{ background:'transparent', border:'1px solid #1e2d3d', color: (abajo < 0 || hayAltaPendiente) ? '#334155' : '#64748b', borderRadius:5, padding:'3px 5px', fontSize:10, cursor: (abajo < 0 || hayAltaPendiente) ? 'default' : 'pointer', fontFamily:'inherit' }}>↓</button>
                           <button onClick={() => handleSendQuick(idx)} disabled={!!sending[idx]||!windowOpen} title="Enviar" style={{ background:'rgba(37,211,102,.12)', border:'1px solid rgba(37,211,102,.2)', color:'#25d366', borderRadius:5, padding:'3px 8px', fontSize:10, fontWeight:700, cursor:'pointer', fontFamily:'inherit', minWidth:56 }}>{sending[idx] || '▶ Enviar'}</button>
                           <button onClick={() => startEdit(idx)} disabled={guardando} title={guardando ? 'Espera a que se confirme el alta' : undefined} style={{ background:'transparent', border:'1px solid #1e2d3d', color: guardando ? '#334155' : '#64748b', borderRadius:5, padding:'3px 6px', fontSize:10, cursor: guardando ? 'default' : 'pointer', fontFamily:'inherit' }}>✏️</button>
-                          <button onClick={() => deleteReply(idx)} style={{ background:'transparent', border:'1px solid #1e2d3d', color:'#64748b', borderRadius:5, padding:'3px 6px', fontSize:10, cursor:'pointer', fontFamily:'inherit' }}>🗑</button>
+                          <button className="rr-borrar" onClick={() => deleteReply(idx)} title="Borrar respuesta" style={{ background:'transparent', border:'1px solid #1e2d3d', color:'#64748b', borderRadius:5, padding:'3px 6px', fontSize:10, cursor:'pointer', fontFamily:'inherit' }}>🗑</button>
                         </div>
                       </div>
                     </div>
