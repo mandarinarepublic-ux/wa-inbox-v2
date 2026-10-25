@@ -21,6 +21,7 @@ import CarruselModal from '@/components/CarruselModal'
 import { guardadoCarrusel } from '@/lib/carrusel'
 import { hilosDelCanal, pedidosPorResolver } from '@/lib/hilos'
 import { tramosPorMes } from '@/lib/meses-chat'
+import { claveSalto, tramoDelCitado, estaCargado } from '@/lib/ir-a-cita'
 
 import SocialInbox from '@/components/SocialInbox'
 import Contactos, { PlantillaModal } from '@/components/Contactos'
@@ -1438,6 +1439,60 @@ export default function App() {
                    || convs.find(c => c.telefono === active)
                    || null
   const totalUnread = convs.reduce((s, c) => s + c.unread, 0)
+
+  // ── ↩️ Tocar una cita lleva al mensaje original (lib/ir-a-cita.js) ─────────
+  // Primero se asegura que el original esté DESCARGADO (si es viejo, se traen
+  // páginas de historial como al subir con el scroll) y después el efecto de abajo
+  // abre su mes si estaba plegado, baja hasta él y lo hace brillar un momento.
+  const [saltoA, setSaltoA] = useState(null)   // contextoId del original
+  const buscandoCitaRef = useRef(false)
+  const irACita = async (contextoId) => {
+    if (estaCargado(activeConv?.msgs, contextoId)) { setSaltoA(contextoId); return }
+    const tel = activeRef.current
+    if (!tel || buscandoCitaRef.current) return
+    const clave = `${tel}|${activeCanalRef.current || ''}`
+    buscandoCitaRef.current = true
+    try {
+      // Tope: 15 páginas de 800. Una cita más vieja que eso no justifica bajar
+      // el chat entero de golpe.
+      for (let i = 0; i < 15; i++) {
+        if (activeRef.current !== tel) return          // cambió de chat a mitad
+        if (estaCargado(hilosRef.current[clave], contextoId)) { setSaltoA(contextoId); return }
+        if (sinMasRef.current[clave]) break
+        if (cargandoMasRef.current) { await new Promise(r => setTimeout(r, 300)); continue }
+        const antes = (hilosRef.current[clave] || []).length
+        await cargarMasHistorial()
+        // No creció y tampoco se acabó el historial = la petición falló: no insistir.
+        if ((hilosRef.current[clave] || []).length <= antes && !sinMasRef.current[clave]) break
+      }
+      avisar('No encontré el mensaje original en el historial de este chat')
+    } finally { buscandoCitaRef.current = false }
+  }
+
+  useEffect(() => {
+    if (!saltoA) return
+    if (!activeConv) { setSaltoA(null); return }
+    // Los tramos se arman IGUAL que al pintar el hilo, para que el mes coincida.
+    const ids = new Set(activeConv.msgs.map(m => String(m.id)))
+    const visibles = activeConv.msgs.filter(m => seMuestraComoBurbuja(m, ids))
+    const tramo = tramoDelCitado(tramosPorMes(visibles, m => parseDate(m.timestamp)), saltoA)
+    if (!tramo) { setSaltoA(null); avisar('Ese mensaje no se puede mostrar en el hilo'); return }
+    const claveMesChat = `${activeConv.telefono}|${activeCanal || ''}|${tramo.clave}`
+    if (!tramo.siempreAbierto && !mesesAbiertos[claveMesChat]) {
+      // Al pintarse el mes este efecto vuelve a correr y ahí sí encuentra la burbuja.
+      setMesesAbiertos(prev => ({ ...prev, [claveMesChat]: true }))
+      return
+    }
+    const el = msgsRef.current?.querySelector(`[data-salto="${CSS.escape(claveSalto(saltoA))}"]`)
+    setSaltoA(null)
+    if (!el) return
+    autoScroll.current = false   // que un poll no lo devuelva al final mientras lee
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    el.querySelector('.msg-bubble')?.animate(
+      [{ boxShadow: '0 0 0 3px rgba(37,211,102,.85)' }, { boxShadow: '0 2px 8px rgba(0,0,0,.3)' }],
+      { duration: 2000, delay: 300, easing: 'ease-out' })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saltoA, activeConv, mesesAbiertos])
 
   /**
    * Step 3c (Tarea 4): en GENERAL, si el chat abierto no tiene un canal que se
@@ -3191,7 +3246,7 @@ export default function App() {
                     {estaAbierto && t.msgs.map((msg, idx) => {
                 const showDate = idx===0 || parseDate(msg.timestamp).toDateString() !== parseDate(t.msgs[idx-1].timestamp).toDateString()
                 return (
-                  <div key={msg.id}>
+                  <div key={msg.id} data-salto={claveSalto(msg.id)}>
                     {showDate && (
                       <div style={{ display:'flex', justifyContent:'center', margin:'12px 0 8px' }}>
                         <span style={{ background:'rgba(255,255,255,.04)', borderRadius:20, padding:'3px 14px', fontSize:11, color:'#475569' }}>{fmtDate(msg.timestamp)}</span>
@@ -3199,7 +3254,8 @@ export default function App() {
                     )}
                     <MessageBubble msg={msg} allMsgs={activeConv.msgs} onResponder={responderA} onAbrirChat={openConv} onReenviar={setReenviando}
                       reaccion={mias.get(String(msg.id)) || ''}
-                      onReaccionar={windowOpen && puedeReaccionar(msg) ? (emoji) => reaccionar(msg, emoji) : null} />
+                      onReaccionar={windowOpen && puedeReaccionar(msg) ? (emoji) => reaccionar(msg, emoji) : null}
+                      onIrACita={irACita} />
                   </div>
                 )
                     })}

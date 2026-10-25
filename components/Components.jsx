@@ -647,7 +647,9 @@ function ReferralCard({ referral, texto = '' }) {
 }
 
 // ── QUOTED MESSAGE (cita) ────────────────────────────────────────
-function QuotedMessage({ contextoId, allMsgs, esReaccion = false }) {
+// `onIrA` (opcional): tocar la cita sube el hilo hasta el mensaje original, como en
+// WhatsApp. Solo cuando la cita se resolvió: si no tenemos el original, no hay a dónde ir.
+function QuotedMessage({ contextoId, allMsgs, esReaccion = false, onIrA = null }) {
   const [fetched, setFetched] = useState(null)
   const valid    = !!contextoId && contextoId.startsWith('wamid.')
   const inWindow = valid && allMsgs ? allMsgs.find(m => hashWamid(m.id) === hashWamid(contextoId)) : null
@@ -689,8 +691,12 @@ function QuotedMessage({ contextoId, allMsgs, esReaccion = false }) {
 
   const isImage = ['image','sticker'].includes(cited.tipo) || !!cited.mediaUrl?.match(/\.(jpg|jpeg|png|webp|gif)(\?|$)/i)
 
+  // El stopPropagation evita que el mismo clic abra el "↩ Responder" de la burbuja.
   return (
-    <div style={{
+    <div
+      onClick={onIrA ? (e) => { e.stopPropagation(); onIrA(contextoId) } : undefined}
+      title={onIrA ? 'Ir al mensaje original' : undefined}
+      style={{
       borderLeft: '3px solid rgba(37,211,102,.5)',
       background: 'rgba(0,0,0,.25)',
       borderRadius: '0 8px 8px 0',
@@ -698,6 +704,7 @@ function QuotedMessage({ contextoId, allMsgs, esReaccion = false }) {
       marginBottom: 6,
       maxWidth: '100%',
       overflow: 'hidden',
+      cursor: onIrA ? 'pointer' : 'inherit',
     }}>
       <div style={{ fontSize: 10, fontWeight: 700, color: '#25d366', marginBottom: 2 }}>
         {cited.direccion === 'SALIENTE' ? 'Tú' : cited.nombre || cited.telefono}
@@ -957,7 +964,7 @@ export function AvisoInterno({ msg }) {
   )
 }
 
-export function MessageBubble({ msg, allMsgs, onResponder, onAbrirChat, onReenviar, reaccion = '', onReaccionar = null }) {
+export function MessageBubble({ msg, allMsgs, onResponder, onAbrirChat, onReenviar, reaccion = '', onReaccionar = null, onIrACita = null }) {
   const [accion, setAccion] = useState(false)
   const [hover, setHover] = useState(false)
   // Después de los hooks: un return antes rompería el orden de los useState.
@@ -1051,7 +1058,7 @@ export function MessageBubble({ msg, allMsgs, onResponder, onAbrirChat, onReenvi
         {msg.referral && <ReferralCard referral={msg.referral} texto={msg.mensaje} />}
 
         {msg.contextoId && (
-          <QuotedMessage contextoId={msg.contextoId} allMsgs={allMsgs} esReaccion={msg.tipo === 'reaction'} />
+          <QuotedMessage contextoId={msg.contextoId} allMsgs={allMsgs} esReaccion={msg.tipo === 'reaction'} onIrA={onIrACita} />
         )}
 
         {hasMedia && (
