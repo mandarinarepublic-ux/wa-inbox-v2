@@ -1,15 +1,15 @@
 import { NextResponse } from 'next/server'
 import { getContactos, marcarAvisoTelegram } from '@/lib/contactos'
 import { enviarTelegram, telegramConfigurado } from '@/lib/telegram'
-import { chatsQueAvisar, textoAviso, enHorarioLaboral, partirPorAntiguedad } from '@/lib/pendientes'
+import { enHorarioLaboral, esHoraDeResumen, urgentesSinAvisar, textoUrgente, textoResumen } from '@/lib/pendientes'
 import { autorizadoCron } from '@/lib/cron-auth'
 
-// Recordatorio de chats sin contestar, por Telegram. Lo llama Vercel Cron cada
+// Resumen de chats sin contestar, por Telegram. Lo llama Vercel Cron cada
 // 5 min (ver vercel.json).
 //
 // Por qué existe, además del push: el push avisa de un EVENTO (entró un mensaje).
 // Si te lo perdiste, se perdió. Esto avisa de un ESTADO (hay gente esperando) e
-// insiste cada 30 min hasta que la bandeja quede vacía. El 12-ago-2026 había 12
+// insiste cada hora hasta que la bandeja quede vacía. El 12-ago-2026 había 12
 // chats pendientes en MANDI y el más viejo llevaba 31 horas: todos habían
 // disparado su push, y todos se habían apagado.
 //
@@ -60,43 +60,49 @@ export async function GET(req) {
 
   // Los contactos internos (equipo, taller, proveedores) no cuentan como clientes
   // esperando (port desde IND, diseño 2026-09-22).
-  const aAvisar = chatsQueAvisar(contactos.filter(c => c.tipoContacto !== 'interno'), ahora)
-  if (!aAvisar.length) {
-    // `sin-pendientes` cubre bandeja vacía de verdad Y todo lo que está dentro del
-    // enfriamiento de 30 min — ambos son "no toca avisar todavía". `fuera-de-horario`
-    // es la otra causa posible (fuera de 08:00-21:00 Ecuador). Sin distinguirlas,
-    // Rodrigo llama la ruta de noche, ve ceros, y no sabe si está sana o rota.
-    const motivo = enHorarioLaboral(ahora) ? 'sin-pendientes' : 'fuera-de-horario'
-    console.log(`[cron/pendientes] nada que avisar (${motivo})`)
-    return NextResponse.json({ ok: true, avisados: 0, pendientes: 0, motivo })
+  const clientes = contactos.filter(c => c.tipoContacto !== 'interno')
+
+  if (!enHorarioLaboral(ahora)) {
+    console.log('[cron/pendientes] nada que avisar (fuera-de-horario)')
+    return NextResponse.json({ ok: true, avisados: 0, motivo: 'fuera-de-horario' })
+  }
+
+  // Dos clases de aviso (25-oct-2026, antes era uno por chat cada 30 min y se
+  // encadenaban casi cada 5 min):
+  //   · a la hora en punto, un RESUMEN con todos los pendientes por urgencia;
+  //   · entre resúmenes, un aviso solo cuando alguien cruza los 30 min, una vez.
+  const resumen = esHoraDeResumen(ahora)
+  const urgentes = urgentesSinAvisar(clientes, ahora)
+  const texto = resumen ? textoResumen(clientes, ahora, BASE_URL) : textoUrgente(urgentes, ahora, BASE_URL)
+  const tipo = resumen ? 'resumen' : 'urgentes'
+
+  if (!texto) {
+    console.log(`[cron/pendientes] nada que avisar (${tipo})`)
+    return NextResponse.json({ ok: true, avisados: 0, tipo, motivo: 'sin-pendientes' })
   }
 
   if (!telegramConfigurado()) {
     // Desplegado y mudo. Se reporta para que el silencio sea VISIBLE en los
     // registros: un cron que no manda nada tiene que poder distinguirse de un
     // cron que no corre.
-    console.log(`[cron/pendientes] ${aAvisar.length} pendientes, Telegram sin configurar`)
-    return NextResponse.json({ ok: true, avisados: 0, pendientes: aAvisar.length, motivo: 'sin-config' })
+    console.log(`[cron/pendientes] ${tipo} listo, Telegram sin configurar`)
+    return NextResponse.json({ ok: true, avisados: 0, tipo, motivo: 'sin-config' })
   }
 
-  // El arrastre (pasado el techo de 24h) se MENCIONA en el texto pero nunca se
-  // estampa ni decide el titular — ver `partirPorAntiguedad` en lib/pendientes.js.
-  // Estamparlo lo apagaría para siempre, que es el bug que esto arregla.
-  const { arrastre } = partirPorAntiguedad(contactos, ahora)
-  const r = await enviarTelegram(textoAviso(aAvisar, ahora, BASE_URL, arrastre.length))
+  const r = await enviarTelegram(texto)
   if (!r.ok) {
     // NO se estampa la marca si el envío falló: así el próximo ciclo reintenta.
     console.error('[cron/pendientes] Telegram falló:', r.motivo)
-    return NextResponse.json({ ok: false, avisados: 0, pendientes: aAvisar.length, motivo: r.motivo })
+    return NextResponse.json({ ok: false, avisados: 0, tipo, motivo: r.motivo })
   }
 
-  // Recién ahora se marca, y con await: sin await la función serverless devuelve
-  // la respuesta y se congela antes del update, y el aviso se repetiría cada 5
-  // minutos para siempre.
-  for (const c of aAvisar) {
+  // Se marcan los urgentes también cuando salió el resumen: ya los nombró, así
+  // que no merecen un aviso aparte a los 5 min. Con await: sin await la función
+  // se congela antes del update y el aviso se repetiría en cada corrida.
+  for (const c of urgentes) {
     await marcarAvisoTelegram(c.telefono).catch((e) =>
       console.error('[cron/pendientes] marcar', c.telefono, e?.message || e))
   }
 
-  return NextResponse.json({ ok: true, avisados: aAvisar.length, pendientes: aAvisar.length })
+  return NextResponse.json({ ok: true, tipo, urgentes: urgentes.length })
 }

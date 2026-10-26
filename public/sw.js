@@ -64,3 +64,19 @@ self.addEventListener('notificationclick', (event) => {
     if (self.clients.openWindow) return self.clients.openWindow(destino)
   })())
 })
+
+// Chrome puede renovar la suscripción por su cuenta (Android lo hace). Sin esto la
+// nueva nunca llega al servidor y los avisos dejan de llegar sin que nada lo diga.
+self.addEventListener('pushsubscriptionchange', (event) => {
+  event.waitUntil((async () => {
+    const opciones = event.oldSubscription?.options
+    const nueva = event.newSubscription ||
+      (opciones ? await self.registration.pushManager.subscribe(opciones) : null)
+    if (!nueva) return
+    await fetch('/api/push/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subscription: nueva.toJSON() }),
+    })
+  })())
+})

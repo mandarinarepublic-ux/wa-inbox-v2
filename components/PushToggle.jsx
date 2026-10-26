@@ -31,6 +31,17 @@ export default function PushToggle() {
         const reg = await navigator.serviceWorker.ready
         const sub = await reg.pushManager.getSubscription()
         if (vivo) setEstado(sub ? 'on' : 'off')
+        // La campana prendida solo dice que ESTE aparato tiene suscripción, no que
+        // el servidor la tenga: si la fila se borró (o Chrome renovó la suscripción)
+        // la campana sigue en 🔔 y no llega nada. Se vuelve a registrar en cada
+        // apertura; es un upsert por endpoint, no duplica.
+        if (sub) {
+          fetch('/api/push/subscribe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ subscription: sub.toJSON() }),
+          }).catch(() => {})
+        }
       } catch (e) {
         if (vivo) setEstado('off')
       }
