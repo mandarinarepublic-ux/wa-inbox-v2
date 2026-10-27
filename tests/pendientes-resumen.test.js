@@ -68,3 +68,16 @@ test('sin pendientes de hoy no hay resumen; el arrastre solo se menciona a las 8
   const ocho = Date.parse('2026-08-11T13:00:00.000Z')
   assert.match(textoResumen([chat({ ultimoEntranteAt: haceMin(30 * 60, ocho) })], ocho, 'x'), /\+1 de más de un día/)
 })
+
+test('los chats de pauta llevan la marca 📣 y se cuentan entre los verdes', () => {
+  const t = textoResumen([
+    chat({ telefono: '1', nombre: 'Ana', ultimoEntranteAt: haceMin(80), pauta: true }),
+    chat({ telefono: '2', nombre: 'Luis', ultimoEntranteAt: haceMin(40) }),
+    chat({ telefono: '3', ultimoEntranteAt: haceMin(5), pauta: true }),
+    chat({ telefono: '4', ultimoEntranteAt: haceMin(6) }),
+  ], AHORA, 'x')
+  assert.match(t, /Ana<\/a> · 1 h 20 min · 📣 pauta/)
+  assert.doesNotMatch(t, /Luis<\/a> · 40 min · 📣/)
+  assert.match(t, /🟢 2 de menos de 30 min \(1 de pauta\)/)
+  assert.match(textoUrgente([chat({ pauta: true })], AHORA, 'x'), /📣 pauta/)
+})

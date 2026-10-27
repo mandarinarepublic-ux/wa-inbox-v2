@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getContactos, marcarAvisoTelegram } from '@/lib/contactos'
+import { getContactos, marcarAvisoTelegram, telefonosConPauta } from '@/lib/contactos'
 import { enviarTelegram, telegramConfigurado } from '@/lib/telegram'
 import { enHorarioLaboral, esHoraDeResumen, urgentesSinAvisar, textoUrgente, textoResumen } from '@/lib/pendientes'
 import { autorizadoCron } from '@/lib/cron-auth'
@@ -60,7 +60,14 @@ export async function GET(req) {
 
   // Los contactos internos (equipo, taller, proveedores) no cuentan como clientes
   // esperando (port desde IND, diseño 2026-09-22).
-  const clientes = contactos.filter(c => c.tipoContacto !== 'interno')
+  // "📣 pauta" en el aviso. Si la consulta falla, el aviso sale igual sin la marca.
+  const conPauta = await telefonosConPauta().catch((e) => {
+    console.error('[cron/pendientes] pauta:', e?.message || e)
+    return new Set()
+  })
+  const clientes = contactos
+    .filter(c => c.tipoContacto !== 'interno')
+    .map(c => ({ ...c, pauta: conPauta.has(String(c.telefono).replace(/D/g, '').slice(-9)) }))
 
   if (!enHorarioLaboral(ahora)) {
     console.log('[cron/pendientes] nada que avisar (fuera-de-horario)')
