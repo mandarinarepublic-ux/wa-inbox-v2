@@ -29,6 +29,7 @@ import Automatizaciones from '@/components/Automatizaciones'
 import Guias from '@/components/Guias'
 import PushToggle from '@/components/PushToggle'
 import AvisoSesion from '@/components/AvisoSesion'
+import AvisoBloqueoCuenta from '@/components/AvisoBloqueoCuenta'
 import { actualizarNoLeidos, notificar } from '@/lib/notif'
 import { hayQueConfirmarDescarte, AVISO_DESCARTAR_PEDIDO, anchoPanelPedido, anchoPanelMinimo, bytesDeDataUrl, MAX_HOJA_BYTES } from '@/lib/pedido-manual'
 import { decidirArrastre } from '@/lib/arrastre'
@@ -2752,6 +2753,7 @@ export default function App() {
       {/* Va lo primero y fuera de todo layout: es fixed y tiene que verse aunque
           la pantalla esté en cualquier pestaña o con el cajón móvil abierto. */}
       <AvisoSesion />
+      <AvisoBloqueoCuenta />
       {versionNueva && (
         <button onClick={() => window.location.reload()} title="Hay una versión nueva del inbox. Se recarga sola cuando cierres el chat; o toca para recargar ya." style={{
           position:'fixed', bottom:10, left:10, zIndex:9999,

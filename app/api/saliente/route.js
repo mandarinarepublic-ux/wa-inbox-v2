@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { destinoMeta, esBsuid } from '@/lib/cliente-sin-telefono'
+import { registrarBloqueo } from '@/lib/bloqueo-cuenta'
 import { guardarMensajeSupabase, getVentanaSupabase } from '@/lib/inbox-supabase'
 import { validarCarrusel, ventanaAbiertaCarrusel, plantillaCarrusel, payloadInteractivo, payloadPlantilla, guardadoCarrusel, CATALOGO_POR_DEFECTO } from '@/lib/carrusel'
 import { ponerEtiquetaAuto } from '@/lib/etiquetas'
@@ -461,6 +462,8 @@ export async function POST(req) {
     if (!res.ok || !data?.messages?.[0]?.id) {
       const msg = data?.error?.message || `HTTP ${res.status}`
       console.error('[/api/saliente] Meta rechazó el envío:', msg)
+      // Un token vencido (190) se rechaza aquí mismo y nunca llega por el webhook.
+      waitUntil(registrarBloqueo(data?.error?.code))
       return NextResponse.json({ ok: false, error: msg }, { status: 502 })
     }
 

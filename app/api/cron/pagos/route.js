@@ -7,6 +7,7 @@ import {
 } from '@/lib/inbox-supabase'
 import { textoAvisoPagos } from '@/lib/pagos-sin-pedido'
 import { autorizadoCron } from '@/lib/cron-auth'
+import { revisarVencimientoToken } from '@/lib/bloqueo-cuenta'
 
 // Aviso diario de POSIBLES pagos sin pedido. Lo llama Vercel Cron (vercel.json).
 //
@@ -41,6 +42,9 @@ export async function GET(req) {
     if (!autorizado(req)) {
       return NextResponse.json({ error: 'no autorizado' }, { status: 401 })
     }
+    // Va aquí por ser el único cron diario de los que tocan WhatsApp. Primero y
+    // aparte: no lanza, y un fallo de los pagos no puede dejar sin revisar el token.
+    await revisarVencimientoToken()
     const marca = await getMarcaAvisoPagosSupabase()
     const desde = marca || new Date(Date.now() - VENTANA_INICIAL_HORAS * 3600e3).toISOString()
 

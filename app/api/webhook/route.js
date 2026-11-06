@@ -9,6 +9,7 @@ import { mandarEscribiendo } from '@/lib/escribiendo'
 import { getEstadoFlujo, guardarEstadoFlujo, borrarEstadoFlujo, registrarPasos } from '@/lib/flujos'
 import { getRespuestas } from '@/lib/respuestas'
 import { enviarTelegram, enviarAlerta } from '@/lib/telegram'
+import { procesarEstadosCuenta } from '@/lib/bloqueo-cuenta'
 import { usaSupabaseLectura, CUENTA } from '@/lib/supabase'
 import { guardarMensajeSupabase, existeWamidSupabase, guardarEventoCrudoSupabase, actualizarEstadoEntregaSupabase, asegurarConversacionSalienteSupabase, getFlujosPublicadosSupabase } from '@/lib/inbox-supabase'
 import { archivarMedia } from '@/lib/media-archive'
@@ -776,6 +777,7 @@ export async function POST(req) {
 
     const nuevos = []
     const statuses = [] // read receipts: {wamid, estado}
+    const estadosCrudos = [] // tal como los manda Meta: traen el código de error y la hora
     const echoes = []
     const historial = [] // coexistencia: mensajes viejos del celular
     const agenda = []    // coexistencia: nombres de la agenda del celular
@@ -821,6 +823,7 @@ export async function POST(req) {
         // Estados de entrega (✓✓) de mensajes que ENVIAMOS.
         for (const st of value?.statuses || []) {
           if (st?.id && st?.status) statuses.push({ wamid: String(st.id), estado: String(st.status).toLowerCase() })
+          estadosCrudos.push(st)
           // 📎 Un `failed` 131052 NO es de algo nuestro: es un archivo que el CLIENTE
           // mandó y Meta no pudo bajar (p. ej. >100 MB). Ver lib/archivo-rechazado.js.
           const rechazado = archivoRechazadoDeEstado(st, phoneId)
@@ -847,6 +850,8 @@ export async function POST(req) {
     // Meta exige un 200 rápido: lo damos YA y hacemos hoja+IA en segundo plano.
     if (nuevos.length) waitUntil(procesar(nuevos, origin))
     if (statuses.length) waitUntil(procesarStatuses(statuses))
+    // ¿Meta frenó toda la cuenta, o ya volvió? No espera al cron de cada 30 min.
+    if (estadosCrudos.length) waitUntil(procesarEstadosCuenta(estadosCrudos))
     if (echoes.length && usaSupabaseLectura()) waitUntil(procesarEchoes(echoes))
     if (historial.length && usaSupabaseLectura()) waitUntil(procesarHistorial(historial))
     if (agenda.length && usaSupabaseLectura()) waitUntil(procesarAgenda(agenda))
