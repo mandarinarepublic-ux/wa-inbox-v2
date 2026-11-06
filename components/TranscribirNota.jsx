@@ -1,6 +1,6 @@
 'use client'
-import { useState } from 'react'
-import { transcribirNota } from '@/lib/transcribir-navegador'
+import { useState, useEffect } from 'react'
+import { transcribirNota, esComputadora } from '@/lib/transcribir-navegador'
 
 // 📝 Botón "Transcribir" de una nota de voz. El texto se guarda en la base, así el
 // resto del equipo lo ve sin volver a transcribir. Ver lib/transcripcion.js.
@@ -27,6 +27,8 @@ export default function TranscribirNota({ src, mensajeId, transcripcion = '' }) 
   const [propia, setPropia] = useState('')
   const [estado, setEstado] = useState(null)
   const [aviso, setAviso] = useState('')
+  const [enCompu, setEnCompu] = useState(false)
+  useEffect(() => { setEnCompu(esComputadora()) }, [])
   const texto = transcripcion || propia
 
   async function transcribir() {
@@ -65,6 +67,9 @@ export default function TranscribirNota({ src, mensajeId, transcripcion = '' }) 
       {avisoEl}
     </div>
   )
+
+  // En celular se lee lo ya transcrito (arriba), pero no se ofrece transcribir.
+  if (!enCompu) return null
 
   if (estado) return (
     <div role="status" style={{ marginTop: 6, fontSize: 11, color: '#94a3b8' }}>⏳ {textoEstado(estado)}</div>
