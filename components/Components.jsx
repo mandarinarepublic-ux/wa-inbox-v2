@@ -10,6 +10,7 @@ import { EMOJIS_REACCION } from '@/lib/reacciones'
 import { leerCarrusel } from '@/lib/carrusel'
 import { urlDeDescarga, nombreDeDescarga } from '@/lib/descarga'
 import { restoProductoTocado } from '@/lib/producto-tocado'
+import TranscribirNota from '@/components/TranscribirNota'
 
 // ── SPINNER ──────────────────────────────────────────────────────
 export function Spinner({ size = 24 }) {
@@ -417,7 +418,7 @@ function VisorFoto({ src, onCerrar }) {
 }
 
 // ── MEDIA CONTENT ────────────────────────────────────────────────
-function MediaContent({ tipo, mediaUrl, mediaId, nombre = '' }) {
+function MediaContent({ tipo, mediaUrl, mediaId, nombre = '', mensajeId = '', transcripcion = '' }) {
   // Va ANTES de cualquier return condicional: los hooks no pueden quedar
   // detrás de un if.
   const [verFoto, setVerFoto] = useState(false)
@@ -486,6 +487,7 @@ function MediaContent({ tipo, mediaUrl, mediaId, nombre = '' }) {
         <a href={src} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 4, fontSize: 11, color: '#25d366', textDecoration: 'none', fontWeight: 600 }}>
           🎧 Abrir audio ↗
         </a>
+        {mensajeId && <TranscribirNota src={src} mensajeId={mensajeId} transcripcion={transcripcion} />}
       </div>
     )
   }
@@ -1063,6 +1065,7 @@ export function MessageBubble({ msg, allMsgs, onResponder, onAbrirChat, onReenvi
 
         {hasMedia && (
           <MediaContent tipo={msg.tipo} mediaUrl={msg.mediaUrl} mediaId={msg.mediaId}
+            mensajeId={msg.id} transcripcion={msg.transcripcion}
             nombre={['document', 'documento'].includes(String(msg.tipo || '').toLowerCase()) ? msg.mensaje : ''} />
         )}
 
