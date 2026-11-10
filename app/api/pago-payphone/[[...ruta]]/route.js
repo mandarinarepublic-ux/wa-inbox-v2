@@ -17,8 +17,7 @@ export const revalidate = 0
 //
 // ── Quién puede llamar acá ─────────────────────────────────────────────────
 // Payphone NO firma sus avisos. Dos defensas, igual que /api/pago-dlocal:
-//   1. Secreto en la URL (?k=). Con PAYPHONE_NOTIFY_SECRET vacío no se exige
-//      (todavía sin configurar), pero la 2 sigue valiendo.
+//   1. Secreto en la URL (?k=). Con PAYPHONE_NOTIFY_SECRET vacío se rechaza TODO.
 //   2. El aviso NO se cree: se vuelve a consultar la transacción a Payphone con
 //      NUESTRO token (GET /Sale/{TransactionId}). Solo si Payphone dice que está
 //      aprobada se marca el pago. Un aviso inventado no pinta nada.
@@ -31,7 +30,6 @@ export const revalidate = 0
 //   000 ok · 111 no se pudo leer el objeto · 222 error genérico
 //   333 TransactionId ya existe · 444 faltan datos obligatorios
 const NOTIFY_SECRET = String(process.env.PAYPHONE_NOTIFY_SECRET || '').replace(/[^\x21-\x7E]/g, '')
-const soloDigitos = (s) => String(s || '').replace(/\D/g, '')
 
 const responder = (ok, codigo, status = 200) =>
   NextResponse.json({ Response: ok, ErrorCode: codigo }, { status })
@@ -44,7 +42,10 @@ function mismoSecreto(a, b) {
 }
 
 function llamadaLegitima(req) {
-  if (!NOTIFY_SECRET) return true
+  // Cerrado por defecto: sin PAYPHONE_NOTIFY_SECRET no se acepta nada. Payphone
+  // no avisa hasta que aprueben la notificación externa, y para eso ya hay que
+  // tener la URL con la llave, así que no hay avisos "viejos" que perder.
+  if (!NOTIFY_SECRET) return false
   const llave = new URL(req.url).searchParams.get('k') || req.headers.get('x-notify-key') || ''
   return mismoSecreto(String(llave).replace(/[^\x21-\x7E]/g, ''), NOTIFY_SECRET)
 }
@@ -70,16 +71,20 @@ export async function POST(req) {
       return responder(true, '000') // nada que marcar; que no reintente
     }
 
-    // El teléfono va dentro del clientTransactionId (lib/payphone.js
-    // idTransaccion). Si el id no lo trae, se usa el additionalData del aviso.
-    const telefono = telefonoDeId(t?.clientTransactionId) || soloDigitos(body?.AdditionalData)
+    // El teléfono sale SOLO de lo que Payphone confirma (el clientTransactionId
+    // de la transacción consultada, ver lib/payphone.js idTransaccion). NUNCA
+    // del cuerpo del aviso: ese lo puede escribir cualquiera, y con él se
+    // podría pintar "PAGADO" en el chat de otro cliente usando un pago real.
+    // Si el id no trae teléfono (links sin chat, p. ej. de FB/IG), no hay nota.
+    const telefono = telefonoDeId(t?.clientTransactionId)
     if (!telefono) {
-      console.error(`[/api/pago-payphone] pago #${transactionId} aprobado pero sin teléfono para la nota`)
+      console.error(`[/api/pago-payphone] pago #${transactionId} aprobado pero su id no trae teléfono: sin nota`)
       return responder(true, '000')
     }
 
     // Aviso repetido (Payphone reintenta): si la nota de esta transacción ya
-    // existe, no se duplica.
+    // existe, no se duplica. Revisar solo este chat alcanza: el teléfono sale
+    // de la transacción verificada, así que una transacción = un solo chat.
     const marca = `Payphone #${t?.transactionId ?? transactionId}`
     const previas = await listarNotas(telefono).catch(() => [])
     if (previas.some(n => String(n?.texto || '').includes(marca))) return responder(true, '333')
