@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server'
 import { guardarSocialMensajeSupabase, getTokenPagina, getFbPageId } from '@/lib/social-supabase'
 import { esHiloPublico, cuerpoMensajeMeta, enlaceBusinessSuite } from '@/lib/social-envio'
 import { audioParaMeta } from '@/lib/audio-meta'
-import { parseLinkpago, crearLinkPago, mensajeLinkPago } from '@/lib/dlocal'
+import { parseLinkpago, mensajeLinkPago } from '@/lib/dlocal'
+import { crearLink, proveedorPorDefecto } from '@/lib/linkpago'
 
 // Envío saliente del Social Inbox. Casos, cada uno con su endpoint:
 //   FB · DM         → Send API, recipient {id: PSID}
@@ -104,7 +105,7 @@ export async function POST(req) {
           { status: 400 }
         )
       }
-      const link = await crearLinkPago(monto, `SOCIAL-${Date.now()}`)
+      const link = await crearLink(proveedorPorDefecto(), monto, 'SOCIAL')
       texto = mensajeLinkPago(monto, link)
     }
 

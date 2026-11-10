@@ -119,6 +119,6 @@ export const config = {
     // fuera porque lo carga un Worker, y un Worker que recibe el HTML del login
     // en vez del JS falla con un error que no se parece en nada a "te falta
     // sesión". `transcribir/` es igual: el Worker de Whisper, sin nada privado.
-    '/((?!api/webhook|api/social/webhook|api/cron/seguimientos|api/cron/pendientes|api/cron/entregas|api/cron/pagos|api/cron/flujos|api/cron/catalogo|api/pago-dlocal|api/feed-catalogo|_next/static|_next/image|opus/|transcribir/|favicon.ico|sw.js|icon-|manifest.webmanifest).*)',
+    '/((?!api/webhook|api/social/webhook|api/cron/seguimientos|api/cron/pendientes|api/cron/entregas|api/cron/pagos|api/cron/flujos|api/cron/catalogo|api/pago-dlocal|api/pago-payphone|api/feed-catalogo|_next/static|_next/image|opus/|transcribir/|favicon.ico|sw.js|icon-|manifest.webmanifest).*)',
   ],
 }

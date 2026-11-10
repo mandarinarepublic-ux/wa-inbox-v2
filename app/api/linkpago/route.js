@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { crearLinkPago, mensajeLinkPago, validarMonto } from '@/lib/dlocal'
+import { mensajeLinkPago, validarMonto } from '@/lib/dlocal'
+import { crearLink, normalizarProveedor, proveedorPorDefecto } from '@/lib/linkpago'
 import { crearNota } from '@/lib/notas'
 import { soloDigitos } from '@/lib/supabase'
 
@@ -15,7 +16,9 @@ export const revalidate = 0
 // Esta ruta va detrás del candado del middleware a propósito (NO está en
 // lib/rutas-publicas.js): solo la usa el panel logueado.
 //
-// POST { telefono, monto } → { ok:true, link, texto }
+// POST { telefono, monto, proveedor? } → { ok:true, link, texto, proveedor }
+// `proveedor` = 'dlocal' | 'payphone' (el selector del panel). Sin él, o con un
+// valor raro, se usa el de LINKPAGO_PROVEEDOR (dLocal por defecto).
 export async function POST(req) {
   try {
     const body = await req.json().catch(() => ({}))
@@ -32,15 +35,15 @@ export async function POST(req) {
       )
     }
 
-    // Mismo formato de order_id que usa el camino LINKPAGO<monto> del chat
-    // (app/api/saliente/route.js), para que ambos se vean idénticos en dLocal.
-    const orderId = `${soloDigitos(telefono)}-${Date.now()}`
+    const proveedor = normalizarProveedor(body?.proveedor) || proveedorPorDefecto()
 
     let link
     try {
-      link = await crearLinkPago(monto, orderId)
+      // Mismo camino que el LINKPAGO<monto> del chat (lib/linkpago.js), para
+      // que los dos se vean idénticos en dLocal y en Payphone.
+      link = await crearLink(proveedor, monto, soloDigitos(telefono))
     } catch (e) {
-      console.error('[/api/linkpago] dLocal falló:', e.message)
+      console.error(`[/api/linkpago] ${proveedor} falló:`, e.message)
       return NextResponse.json(
         { ok: false, error: `No se pudo generar el link de pago: ${e.message}` },
         { status: 502 },
@@ -64,7 +67,7 @@ export async function POST(req) {
       console.error('[/api/linkpago] no se pudo guardar la nota del link:', e.message)
     }
 
-    return NextResponse.json({ ok: true, link, texto })
+    return NextResponse.json({ ok: true, link, texto, proveedor })
   } catch (err) {
     console.error('[/api/linkpago]', err.message)
     return NextResponse.json({ ok: false, error: err.message }, { status: 500 })

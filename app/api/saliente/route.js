@@ -7,7 +7,8 @@ import { ponerEtiquetaAuto } from '@/lib/etiquetas'
 import { waitUntil } from '@vercel/functions'
 import { limpiarPush, revisarPromesa, marcarRespuestaHumana } from '@/lib/contactos'
 import { borrarEstadoFlujo } from '@/lib/flujos'
-import { parseLinkpago, crearLinkPago, mensajeLinkPago } from '@/lib/dlocal'
+import { parseLinkpago, mensajeLinkPago } from '@/lib/dlocal'
+import { crearLink, proveedorPorDefecto } from '@/lib/linkpago'
 import { resolverMediaId, invalidarMediaId, esErrorDeMediaId, urlLiviana, META_PHONE_ID } from '@/lib/media-id'
 import { CANALES } from '@/lib/canales'
 
@@ -334,7 +335,8 @@ export async function POST(req) {
       const monto = parseLinkpago(body.Mensaje)
       if (monto) {
         try {
-          const link = await crearLinkPago(monto, `${soloDigitos(body.Telefono)}-${Date.now()}`)
+          // Proveedor: el de LINKPAGO_PROVEEDOR (dLocal si no está). Ver lib/linkpago.js
+          const link = await crearLink(proveedorPorDefecto(), monto, soloDigitos(body.Telefono))
           body.Mensaje = mensajeLinkPago(monto, link)   // seguimos el flujo normal de texto
         } catch (e) {
           console.error('[/api/saliente] LINKPAGO falló:', e.message)

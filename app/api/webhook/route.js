@@ -13,7 +13,8 @@ import { procesarEstadosCuenta } from '@/lib/bloqueo-cuenta'
 import { usaSupabaseLectura, CUENTA } from '@/lib/supabase'
 import { guardarMensajeSupabase, existeWamidSupabase, guardarEventoCrudoSupabase, actualizarEstadoEntregaSupabase, asegurarConversacionSalienteSupabase, getFlujosPublicadosSupabase } from '@/lib/inbox-supabase'
 import { archivarMedia } from '@/lib/media-archive'
-import { parseLinkpago, crearLinkPago, mensajeLinkPago } from '@/lib/dlocal'
+import { parseLinkpago, mensajeLinkPago } from '@/lib/dlocal'
+import { crearLink, proveedorPorDefecto } from '@/lib/linkpago'
 import { getAutomatizaciones } from '@/lib/automatizaciones'
 import { enviarPush, avisoDeEntrante } from '@/lib/push'
 import { archivoRechazadoDeEstado } from '@/lib/archivo-rechazado'
@@ -626,7 +627,7 @@ async function procesar(nuevos, origin) {
       const monto = parseLinkpago(m.contenido)
       if (monto) {
         try {
-          const link = await crearLinkPago(monto, `${m.telefono}-${Date.now()}`)
+          const link = await crearLink(proveedorPorDefecto(), monto, m.telefono)
           await enviarSaliente(origin, { Telefono: m.telefono, Nombre: m.nombre || '', Mensaje: mensajeLinkPago(monto, link), Canal: m.phoneId })
         } catch (e) {
           console.error('[webhook LINKPAGO] falló:', e.message)

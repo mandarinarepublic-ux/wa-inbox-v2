@@ -13,6 +13,8 @@ const PUBLICAS = [
   '/api/cron/flujos',       // cron de Vercel, cada 5 min — esperas de los flujos
   '/api/cron/pendientes',    // cron de Vercel, cada 5 min — recordatorio Telegram
   '/api/pago-dlocal',        // dLocal, ya protegida con secreto en la URL
+  '/api/pago-payphone',      // Payphone: secreto en la URL + re-consulta de la transacción
+  '/api/pago-payphone/NotificacionPago',
   '/api/feed-catalogo',      // Meta lee la lista de productos de Shopify para CatMandSF
 ]
 
