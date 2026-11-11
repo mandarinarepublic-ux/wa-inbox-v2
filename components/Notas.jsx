@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { fetchNotas, addNota, editNota, deleteNota } from '@/lib/api-client'
 import { pedidoIdDeNota } from '@/lib/pedido-manual'
+import { partirNotas } from '@/lib/notas-vista'
 
 /**
  * Notas internas del chat: varias, cada una con su fecha, en acordeón.
@@ -56,6 +57,10 @@ export default function Notas({ telefono, refrescar = 0, onVerPedido }) {
   // un title es invisible en celular y esa exacta trampa ya costó 17 días de
   // un teléfono que no sonaba.
   const [copiadoId, setCopiadoId] = useState(null)
+  // Las notas viejas van escondidas (pedido de Rodrigo, 10-nov-2026): se ven
+  // las 3 más recientes y el resto detrás de "Ver N notas anteriores".
+  // Vuelve a esconderlas al cambiar de chat (ver `cargar`).
+  const [verAntiguas, setVerAntiguas] = useState(false)
 
   const cargar = useCallback(async () => {
     if (!telefono) return
@@ -68,6 +73,7 @@ export default function Notas({ telefono, refrescar = 0, onVerPedido }) {
       // media pestaña VENTAS empujando el historial hacia abajo. Cerrada se sigue
       // leyendo su primera línea.
       setAbiertas(new Set())
+      setVerAntiguas(false)
     } catch (e) {
       setError(e.message)
     } finally {
@@ -173,7 +179,29 @@ export default function Notas({ telefono, refrescar = 0, onVerPedido }) {
         <div style={{ fontSize: 10, color: '#475569', marginTop: 8 }}>Sin notas todavía.</div>
       ) : (
         <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {notas.map(nota => {
+          {(() => {
+            const { recientes, antiguas } = partirNotas(notas)
+            const visibles = verAntiguas ? notas : recientes
+            return (
+              <>
+                {visibles.map(pintarNota)}
+                {antiguas.length > 0 && (
+                  <button onClick={() => setVerAntiguas(v => !v)}
+                    style={{ marginTop: 2, padding: '5px 8px', background: 'rgba(255,255,255,.03)', border: '1px dashed #2a3f55', color: '#94a3b8', borderRadius: 7, fontSize: 10, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    {verAntiguas
+                      ? '▲ Ocultar notas anteriores'
+                      : `▼ Ver ${antiguas.length} nota${antiguas.length === 1 ? '' : 's'} anterior${antiguas.length === 1 ? '' : 'es'}`}
+                  </button>
+                )}
+              </>
+            )
+          })()}
+        </div>
+      )}
+    </div>
+  )
+
+  function pintarNota(nota) {
             const abierta = abiertas.has(nota.id)
             const editando = editandoId === nota.id
             // pago_ok = verde, pago_error = rojo, null = exactamente como antes.
@@ -266,11 +294,7 @@ export default function Notas({ telefono, refrescar = 0, onVerPedido }) {
                 )}
               </div>
             )
-          })}
-        </div>
-      )}
-    </div>
-  )
+  }
 }
 
 function primeraLinea(texto) {

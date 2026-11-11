@@ -532,20 +532,12 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
   const [montoLink,     setMontoLink]     = useState('')
   const [generandoLink, setGenerandoLink] = useState(false)
   const [linkPagoError, setLinkPagoError] = useState('')
-  // Con quién se cobra: 'dlocal' | 'payphone'. Se recuerda en ESTE navegador
-  // (cada vendedor deja el suyo), y arranca en dLocal como siempre. Envuelto en
-  // try/catch: en modo incógnito localStorage puede tirar.
-  const [proveedorLink, setProveedorLink] = useState('dlocal')
-  useEffect(() => {
-    try {
-      const p = localStorage.getItem('linkpago-proveedor')
-      if (p === 'dlocal' || p === 'payphone') setProveedorLink(p)
-    } catch {}
-  }, [])
-  const elegirProveedor = (p) => {
-    setProveedorLink(p)
-    try { localStorage.setItem('linkpago-proveedor', p) } catch {}
-  }
+  // Con quién se cobra: 'dlocal' | 'payphone'. SIEMPRE arranca en Payphone
+  // (pedido de Rodrigo, 10-nov-2026: comisión ≈ 5,75 % contra ≈ 8,9 % de
+  // dLocal). dLocal se puede elegir para un link puntual, pero no se recuerda:
+  // al cambiar de chat vuelve a Payphone (ver el useEffect del monto).
+  const [proveedorLink, setProveedorLink] = useState('payphone')
+  const elegirProveedor = (p) => setProveedorLink(p)
 
   // ── PEDIDO MANUAL: el formulario del CRM dentro de este panel ──
   const [manualAbierto, setManualAbierto] = useState(false)
@@ -629,7 +621,7 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
 
   // Mismo motivo que arriba: el monto es del chat anterior, no de este.
   useEffect(() => {
-    setMontoLink(''); setLinkPagoError('')
+    setMontoLink(''); setLinkPagoError(''); setProveedorLink('payphone')
   }, [activeConv?.telefono])
 
   async function generarLink() {
@@ -1298,8 +1290,8 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                   disabled={generandoLink}
                   aria-label="Proveedor del link de pago"
                   style={{ flexShrink:0, background:'#111c2a', border:'1px solid #1e2d3d', borderRadius:7, color:'#ffffff', fontSize:11, padding:'6px 4px', outline:'none', fontFamily:'inherit', cursor:'pointer' }}>
-                  <option value="dlocal">Link dLocal</option>
                   <option value="payphone">Link Payphone</option>
+                  <option value="dlocal">Link dLocal</option>
                 </select>
                 <input
                   type="number"
