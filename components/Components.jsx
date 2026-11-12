@@ -960,6 +960,12 @@ export function AvisoInterno({ msg }) {
             whiteSpace: 'pre-wrap', wordBreak: 'break-word',
           }}>{l}</div>
         ))}
+        {/* 🏦 Transferencia de la tienda web: la foto del comprobante (CRM, 12-nov-2026). */}
+        {msg.mediaUrl && /^https:\/\//.test(msg.mediaUrl) && (
+          <a href={msg.mediaUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'block', marginTop: 8 }}>
+            <img src={msg.mediaUrl} alt="Comprobante" style={{ maxWidth: '100%', maxHeight: 320, borderRadius: 8, display: 'block' }} />
+          </a>
+        )}
         {hora && <div style={{ fontSize: 10, opacity: .6, textAlign: 'right', marginTop: 4 }}>{hora}</div>}
       </div>
     </div>
