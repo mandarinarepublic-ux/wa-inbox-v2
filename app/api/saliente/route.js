@@ -9,6 +9,8 @@ import { limpiarPush, revisarPromesa, marcarRespuestaHumana } from '@/lib/contac
 import { borrarEstadoFlujo } from '@/lib/flujos'
 import { parseLinkpago, mensajeLinkPago } from '@/lib/dlocal'
 import { crearLink, proveedorPorDefecto } from '@/lib/linkpago'
+import { usuarioDeCookie } from '@/lib/acceso'
+import { secretoSesion } from '@/lib/sesion'
 import { resolverMediaId, invalidarMediaId, esErrorDeMediaId, urlLiviana, META_PHONE_ID } from '@/lib/media-id'
 import { CANALES } from '@/lib/canales'
 
@@ -336,7 +338,10 @@ export async function POST(req) {
       if (monto) {
         try {
           // Proveedor: el de LINKPAGO_PROVEEDOR (dLocal si no está). Ver lib/linkpago.js
-          const link = await crearLink(proveedorPorDefecto(), monto, soloDigitos(body.Telefono))
+          // El ejecutivo que lo escribió (cookie firmada), para el reporte de pagos del CRM.
+          // Si llama el propio webhook (token de máquina) no hay persona: queda sin vendedor.
+          const usuarioId = await usuarioDeCookie(req.headers.get('cookie'), secretoSesion())
+          const link = await crearLink(proveedorPorDefecto(), monto, soloDigitos(body.Telefono), { usuarioId })
           body.Mensaje = mensajeLinkPago(monto, link)   // seguimos el flujo normal de texto
         } catch (e) {
           console.error('[/api/saliente] LINKPAGO falló:', e.message)
