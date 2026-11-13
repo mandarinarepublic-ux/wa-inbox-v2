@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { esAvisoCambioNumero } from '@/lib/bandeja'
 import { waitUntil } from '@vercel/functions'
 import { registrarContactoEntrante, getContactos, updateEstado, updateModoIA, marcarPush, marcarReceta, registrarAnuncioVisto, reclamarAvisoAnuncio, liberarAvisoAnuncio, updateEtapa, updateDeuda } from '@/lib/contactos'
 import { identificadorEntrante, perfilesDeContactos } from '@/lib/cliente-sin-telefono'
@@ -541,6 +542,12 @@ async function procesar(nuevos, origin) {
 
     try { await registrarContactoEntrante(m.telefono, m.nombre, m.telefono, m.username) }
     catch (e) { console.error('[/api/webhook] contacto:', e.message) }
+
+    // Aviso de CAMBIO DE NÚMERO: lo manda Meta, no el cliente. Ya quedó ARCHIVADO
+    // al guardarse (lib/bandeja.js). Acá se corta TODO lo demás: ni push, ni
+    // reabrir a PENDIENTE, ni flujo, ni saludo, ni IA. El 12-nov-2026 el saludo
+    // automático le mandó "Bienvenid@" al número VIEJO, que la persona ya no usa.
+    if (esAvisoCambioNumero(m.raw)) continue
 
     // ── Señales a Meta (Conversions API) ─────────────────────────────────────
     // 1) Guardar de qué anuncio vino, si vino de uno. Va DESPUÉS de
