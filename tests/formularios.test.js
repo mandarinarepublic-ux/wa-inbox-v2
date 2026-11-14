@@ -64,10 +64,10 @@ test('un botón tocado sigue leyéndose como antes', () => {
 
 test('los dos celulares vienen prellenados con el número del chat', () => {
   const j = flowJsonDatosPedido()
-  const campos = j.screens.flatMap(sc => sc.layout.children[0].children)
-  for (const n of ['factura_celular', 'envio_celular']) {
-    assert.equal(campos.find(c => c.name === n)['init-value'], '${data.celular}', n)
-  }
+  const forms = j.screens.map(sc => sc.layout.children[0])
+  assert.deepEqual(forms.map(f => f['init-values']), [{ factura_celular: '${data.celular}' }, { envio_celular: '${data.celular}' }])
+  const campos = forms.flatMap(f => f.children)
+  assert.ok(campos.every(c => !('init-value' in c)), 'Meta no acepta init-value en un campo de Form')
   assert.ok(j.screens.every(sc => sc.data.celular))
   const nav = campos.find(c => c.type === 'Footer' && c['on-click-action'].name === 'navigate')
   assert.deepEqual(nav['on-click-action'].payload, { celular: '${data.celular}' })
