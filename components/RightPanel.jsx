@@ -532,6 +532,11 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
   const [montoLink,     setMontoLink]     = useState('')
   const [generandoLink, setGenerandoLink] = useState(false)
   const [linkPagoError, setLinkPagoError] = useState('')
+  // 📤 El último link generado, con su texto, para mandarlo al chat con un clic
+  // (pedido de Rodrigo, 14-nov-2026: "hoy estoy dando clic en copiar y luego lo
+  // pego"). Sigue quedando la nota; esto solo ahorra el copiar y pegar.
+  // estado: '' | 'enviando' | 'enviado' | 'error'.
+  const [linkListo, setLinkListo] = useState(null)
   // Con quién se cobra: 'dlocal' | 'payphone'. SIEMPRE arranca en Payphone
   // (pedido de Rodrigo, 10-nov-2026: comisión ≈ 5,75 % contra ≈ 8,9 % de
   // dLocal). dLocal se puede elegir para un link puntual, pero no se recuerda:
@@ -626,14 +631,15 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
 
   // Mismo motivo que arriba: el monto es del chat anterior, no de este.
   useEffect(() => {
-    setMontoLink(''); setLinkPagoError(''); setProveedorLink('payphone')
+    setMontoLink(''); setLinkPagoError(''); setProveedorLink('payphone'); setLinkListo(null)
   }, [activeConv?.telefono])
 
   async function generarLink() {
     if (generandoLink || !activeConv) return
     setGenerandoLink(true); setLinkPagoError('')
     try {
-      await generarLinkPago(activeConv.telefono, Number(montoLink), proveedorLink)
+      const d = await generarLinkPago(activeConv.telefono, Number(montoLink), proveedorLink)
+      if (d?.texto) setLinkListo({ texto: d.texto, telefono: activeConv.telefono, estado: '' })
       // El texto completo ya quedó guardado como nota en el servidor (con su
       // propio botón de copiar) — acá solo se limpia el monto para dejar el
       // panel listo si toca generar otro, sin nada que reconstruir.
@@ -644,6 +650,16 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
     } finally {
       setGenerandoLink(false)
     }
+  }
+
+  // 📤 ENVIAR: el texto del link sale al chat por el mismo camino que un mensaje
+  // escrito (fila por cliente, canal del chat). Solo si el link es de ESTE chat.
+  async function enviarLinkListo() {
+    if (!linkListo || !onSendText || linkListo.estado === 'enviando') return
+    if (linkListo.telefono !== activeConv?.telefono) { setLinkListo(null); return }
+    setLinkListo(l => ({ ...l, estado: 'enviando' }))
+    const r = await Promise.resolve(onSendText(linkListo.texto)).catch(() => ({ ok: false }))
+    setLinkListo(l => l && ({ ...l, estado: (!r || r.ok === false) ? 'error' : 'enviado' }))
   }
 
   // Avisarle al padre cuando se abre o se cierra el PEDIDO MANUAL: con eso
@@ -1296,10 +1312,9 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                 abierto mientras lees su pedido vale más que esos 90 px. */}
             <div style={{ display: (manualAbierto || verPedidoId != null) ? 'none' : 'contents' }}>
 
-            {/* LINK PAGO — arma el link dLocal y el texto listo para copiar.
-                A propósito NO manda nada al chat: el vendedor lo copia y decide
-                cuándo y cómo mandarlo (distinto del LINKPAGO<monto> del chat,
-                que sí envía directo). */}
+            {/* LINK PAGO — arma el link y el texto. Generar NO manda nada al chat:
+                aparece la vista previa con 📤 ENVIAR (o 📋 Copiar) y el vendedor
+                decide. Distinto del LINKPAGO<monto> del chat, que sí envía directo. */}
             <div style={{ padding:'10px 12px', borderTop:'1px solid #111c2a', marginTop:8, background:'#0a1019' }}>
               <p style={{ fontSize:10, color:'#10b981', fontWeight:700, letterSpacing:'.08em', margin:'0 0 6px' }}>
                 💳 LINK PAGO
@@ -1345,6 +1360,40 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                   invisible en celular y ese bug ya se arregló una vez acá. */}
               {linkPagoError && (
                 <div style={{ marginTop:6, fontSize:11, color:'#f87171' }}>⚠️ {linkPagoError}</div>
+              )}
+
+              {/* 📤 El link recién generado, listo para mandarlo sin copiar/pegar. */}
+              {linkListo && linkListo.telefono === activeConv.telefono && (
+                <div style={{ marginTop:8, background:'#111c2a', border:'1px solid rgba(16,185,129,.35)', borderRadius:8, padding:8 }}>
+                  <div style={{ fontSize:11, color:'#cbd5e1', whiteSpace:'pre-wrap', wordBreak:'break-word', maxHeight:110, overflowY:'auto', lineHeight:1.4 }}>
+                    {linkListo.texto}
+                  </div>
+                  <div style={{ display:'flex', gap:6, marginTop:8 }}>
+                    <button
+                      onClick={enviarLinkListo}
+                      disabled={!windowOpen || linkListo.estado === 'enviando' || linkListo.estado === 'enviado'}
+                      title={windowOpen ? 'Mandar este mensaje al cliente' : 'La ventana de 24 h está cerrada: solo se puede con plantilla'}
+                      style={{
+                        flex:1, padding:'7px', borderRadius:7, fontSize:11, fontWeight:800, fontFamily:'inherit',
+                        background: linkListo.estado === 'enviado' ? '#111c2a' : 'linear-gradient(135deg,#25d366,#128c7e)',
+                        border:'1px solid rgba(37,211,102,.45)', color:'#fff',
+                        cursor: !windowOpen || linkListo.estado ? 'default' : 'pointer',
+                        opacity: !windowOpen ? .45 : 1,
+                      }}>
+                      {linkListo.estado === 'enviando' ? '⏳ Enviando…' : linkListo.estado === 'enviado' ? '✅ Enviado' : linkListo.estado === 'error' ? '↻ Reintentar ENVIAR' : '📤 ENVIAR'}
+                    </button>
+                    <button
+                      onClick={() => { navigator.clipboard?.writeText(linkListo.texto).catch(() => {}) }}
+                      title="Copiar el texto"
+                      style={{ flexShrink:0, padding:'7px 10px', borderRadius:7, fontSize:11, fontWeight:700, fontFamily:'inherit', background:'transparent', border:'1px solid #1e2d3d', color:'#94a3b8', cursor:'pointer' }}>
+                      📋 Copiar
+                    </button>
+                    <button onClick={() => setLinkListo(null)} title="Cerrar"
+                      style={{ flexShrink:0, padding:'7px 8px', borderRadius:7, fontSize:11, background:'transparent', border:'1px solid #1e2d3d', color:'#64748b', cursor:'pointer' }}>✕</button>
+                  </div>
+                  {!windowOpen && <div style={{ marginTop:6, fontSize:10, color:'#f59e0b' }}>Ventana de 24 h cerrada: este texto no se puede mandar suelto.</div>}
+                  {linkListo.estado === 'error' && <div style={{ marginTop:6, fontSize:10, color:'#f87171' }}>⚠️ No salió. Reintenta o cópialo.</div>}
+                </div>
               )}
             </div>
 

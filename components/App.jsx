@@ -2071,6 +2071,8 @@ export default function App() {
       if (r && r.ok !== false) changeStatus(telefono, estadoDestino, canal)
       else { setToast(r || { ok: false, error: 'No se pudo enviar' }); setTimeout(() => setToast(null), 4000) }
       setTimeout(load, 4000)
+      // Lo usa el 📤 ENVIAR del link de pago para decir si salió.
+      return r || { ok: false }
     })
   }
 
