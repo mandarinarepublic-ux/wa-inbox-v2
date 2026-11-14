@@ -436,7 +436,7 @@ const CATALOGO_LABEL = 'Mandarina'
 // (WhatsApp), así App.jsx sigue igual sin tocar una línea. SOCIAL pasa un subconjunto:
 // nunca 'ventas' (escribiría contactos basura con el sender_id como si fuera teléfono),
 // y en un hilo de COMENTARIO tampoco 'tienda' (es público).
-export default function RightPanel({ activeConv, onQuickReply, onSendText, onSendImage, onSendProducto, contactInfo, onUpdateContact, windowOpen, ventanaPautaHasta = null, onPedidoManual, onVerPedido, onEnviarHojaPedido, onEnviandoHoja, pestanas = ['respuestas', 'ventas', 'tienda'] }) {
+export default function RightPanel({ activeConv, onQuickReply, onSendText, onSendImage, onSendProducto, contactInfo, onUpdateContact, windowOpen, ventanaPautaHasta = null, prefillPedido = null, onPedidoManual, onVerPedido, onEnviarHojaPedido, onEnviandoHoja, pestanas = ['respuestas', 'ventas', 'tienda'] }) {
   const [tab, setTab]           = useState(pestanas[0] || 'respuestas')
   // El panel NO se desmonta al cambiar de conversación (SOCIAL reutiliza la misma
   // instancia entre chats): si `tab` quedó en una pestaña que la conversación nueva
@@ -541,6 +541,11 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
 
   // ── PEDIDO MANUAL: el formulario del CRM dentro de este panel ──
   const [manualAbierto, setManualAbierto] = useState(false)
+  // 🧾 Datos del formulario de WhatsApp para precargar el PEDIDO MANUAL (botón
+  // "Crear pedido" de la burbuja, lib/formularios.js). `manualKey` remonta el
+  // formulario en cada clic: su URL se congela al montar (ver ☠️ más abajo).
+  const [prefillManual, setPrefillManual] = useState(null)
+  const [manualKey, setManualKey] = useState(0)
 
   // ── VER PEDIDO: un pedido del CRM, de solo lectura, en este mismo panel ──
   // Guarda el NÚMERO del pedido que se está mirando (null = ninguno). El número
@@ -662,7 +667,21 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
   // componente se MONTA de nuevo. Esta línea es lo único que fuerza ese
   // desmontaje. Sin ella, la URL conserva el teléfono del cliente anterior y el
   // siguiente pedido sale a nombre equivocado, sin ningún error a la vista.
-  useEffect(() => { setManualAbierto(false) }, [activeConv?.telefono])
+  useEffect(() => { setManualAbierto(false); setPrefillManual(null) }, [activeConv?.telefono])
+
+  // 🧾 "Crear pedido" desde la burbuja del formulario. Solo si es de ESTE chat y
+  // reciente: el cajón del celular se monta DESPUÉS del clic (por eso no basta con
+  // mirar cambios) y sin el tope de tiempo, cada vez que se abriera el cajón
+  // volvería a abrir el formulario.
+  useEffect(() => {
+    const p = prefillPedido
+    if (!p || p.telefono !== activeConv?.telefono || Date.now() - p.n > 8000) return
+    setVerPedidoId(null)
+    setTab('ventas')
+    setPrefillManual(p.datos)
+    setManualKey(p.n)
+    setManualAbierto(true)
+  }, [prefillPedido?.n])
 
   // Avisarle al padre cuando se abre o se cierra VER PEDIDO: con eso ensancha el
   // panel, que es lo ÚNICO que comparte con el formulario. NO toca el guard.
@@ -1145,9 +1164,11 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
               // queda de red por si el 100% no resolviera: nunca invisible.
               <div style={{ height:'100%', minHeight:380 }}>
                 <PedidoManual
+                  key={manualKey}
                   telefono={activeConv.telefono}
                   nombre={contactName}
-                  onCerrar={() => setManualAbierto(false)}
+                  prefill={prefillManual}
+                  onCerrar={() => { setManualAbierto(false); setPrefillManual(null) }}
                   onCreado={(aviso) => {
                     // Deja la nota fechada con el link y marca la venta. El texto
                     // lo arma `textoNotaPedido` porque el monto y el link son
@@ -1163,6 +1184,7 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                     // y el CRM todavía no lo haya enlazado a este teléfono.
                     loadHistorial(activeConv.telefono, aviso.pedidoId)
                     setPedidoRes({ ok: true, pedidoId: aviso.pedidoId, montoTotal: aviso.montoTotal, url: aviso.url })
+                    setPrefillManual(null)
                     // Cerrar el formulario: el aviso "✅ Pedido creado" se pinta
                     // DEBAJO del iframe de 70vh y, si no, hay que bajar para
                     // verlo — parecería que apretaste y no pasó nada.

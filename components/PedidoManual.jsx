@@ -13,7 +13,7 @@ import MarcoCRM from './MarcoCRM'
 // ⚠️ La URL se congela al montar. Eso pasa dentro de `MarcoCRM` y depende de que
 // `RightPanel` desmonte esto al cambiar de teléfono: está explicado ahí con ☠️,
 // léelo antes de tocar cualquiera de los dos.
-export default function PedidoManual({ telefono, nombre, onCreado, onCerrar }) {
+export default function PedidoManual({ telefono, nombre, prefill = null, onCreado, onCerrar }) {
   // `onCreado` cambia en cada render del padre; sin la ref, el efecto se
   // volvería a suscribir todo el tiempo y podríamos perder el aviso.
   const alCrear = useRef(onCreado)
@@ -40,7 +40,7 @@ export default function PedidoManual({ telefono, nombre, onCreado, onCerrar }) {
   return (
     <MarcoCRM
       titulo="🧾 PEDIDO MANUAL"
-      src={urlPedidoManual(telefono, nombre)}
+      src={urlPedidoManual(telefono, nombre, prefill || {})}
       tituloIframe="Nuevo pedido"
       onCerrar={onCerrar}
       iframeRef={iframeRef}

@@ -80,3 +80,49 @@ test('celularLocal: formato ecuatoriano y extranjero', () => {
   assert.equal(celularLocal('525512345678'), '+525512345678')
   assert.equal(celularLocal(''), '')
 })
+
+import { datosDesdeTexto, prefillPedido } from '../lib/formularios.js'
+import { urlPedidoManual } from '../lib/pedido-manual.js'
+
+const lleno = (extra = {}) => textoRespuestaFormulario(nfm({
+  factura_nombre: 'Ana Pérez', factura_cedula: '0912345678', factura_correo: 'ana@x.com', factura_celular: '0991234567',
+  envio_nombre: 'Ana Pérez', envio_celular: '0991234567', envio_provincia: 'GUAYAS', envio_ciudad: 'Guayaquil',
+  envio_direccion: 'Av. 9 de Octubre 100 y Malecón', envio_referencia: 'Edificio azul', ...extra,
+}).interactive)
+
+test('🧾 del texto guardado se recuperan los campos (el Celular de cada bloque por separado)', () => {
+  const d = datosDesdeTexto(lleno({ envio_celular: '0987654321' }))
+  assert.equal(d.factura_cedula, '0912345678')
+  assert.equal(d.factura_celular, '0991234567')
+  assert.equal(d.envio_celular, '0987654321')
+  assert.equal(d.envio_provincia, 'Guayas')
+  assert.equal(datosDesdeTexto('Hola, quiero un hoodie'), null)
+  assert.equal(datosDesdeTexto(''), null)
+})
+
+test('prefill para el CRM: cédula con su 0, ciudad aparte y la dirección con referencia y provincia', () => {
+  const p = prefillPedido(datosDesdeTexto(lleno()))
+  assert.deepEqual(p, {
+    nombre: 'Ana Pérez', cedula: '0912345678', celular: '0991234567', email: 'ana@x.com', ciudad: 'Guayaquil',
+    direccion: 'Dirección: Av. 9 de Octubre 100 y Malecón\nLugar de referencia: Edificio azul\nProvincia: Guayas',
+  })
+})
+
+test('si recibe OTRA persona, va en la dirección para que llegue a la guía', () => {
+  const p = prefillPedido(datosDesdeTexto(lleno({ envio_nombre: 'Luis Pérez', envio_celular: '0987654321' })))
+  assert.match(p.direccion, /Recibe: Luis Pérez · 0987654321$/)
+  assert.equal(p.nombre, 'Ana Pérez')
+})
+
+test('la URL del PEDIDO MANUAL lleva los datos del formulario por encima del perfil', () => {
+  const u = new URL(urlPedidoManual('593990000000', 'Anita 🌸', prefillPedido(datosDesdeTexto(lleno()))))
+  assert.equal(u.searchParams.get('nombre'), 'Ana Pérez')
+  assert.equal(u.searchParams.get('celular'), '0991234567')
+  assert.equal(u.searchParams.get('cedula'), '0912345678')
+  assert.equal(u.searchParams.get('ciudad'), 'Guayaquil')
+  assert.match(u.searchParams.get('direccion'), /^Dirección: Av\. 9/)
+  // Sin formulario, como siempre
+  const v = new URL(urlPedidoManual('593990000000', 'Anita'))
+  assert.equal(v.searchParams.get('celular'), '0990000000')
+  assert.equal(v.searchParams.get('cedula'), null)
+})

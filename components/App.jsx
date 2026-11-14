@@ -3,6 +3,7 @@ import { queBuscar as queBuscarPedido } from '@/lib/buscar-pedido'
 import { imagenParaWhatsapp } from '@/lib/imagen-whatsapp'
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
 import dynamic from 'next/dynamic'
+import { prefillPedido as prefillDeFormulario } from '@/lib/formularios'
 import { sendReaction, fetchInboxSync, fetchHilo, buscarEnMensajes, sendReply, updateContact, updateEtapa, updateDeuda, updateSinAutomaticos, updateTipoContacto, fetchPedidosChat, isDemo, sendInteractiveButtons, sendFormulario, toggleIAMode, sendVideo, sendDocumento, sendAudio, enviarAudioUrl, enviarDocumentoUrl, sendImageFile, precacheMedia, setCanalActivo, getCanalActivo, reenviarPieza, hayVersionNueva, fetchEtiquetas, crearEtiquetaApi, editarEtiquetaApi, ponerEtiquetaApi, quitarEtiquetaApi, sendCarrusel } from '@/lib/api-client'
 import { buildConvs, fmtDate, parseDate } from '@/lib/utils'
 import { Spinner, Avatar, ContactRow, MessageBubble, Toast } from '@/components/Components'
@@ -300,6 +301,10 @@ export default function App() {
   const [reaccionLocal, setReaccionLocal] = useState({})
   const [showSidebar,  setShowSidebar]  = useState(true)
   const [showRight,    setShowRight]    = useState(false)
+  // 🧾 "Crear pedido" desde la respuesta de un formulario de WhatsApp: el panel
+  // derecho (escritorio o cajón) abre el PEDIDO MANUAL con estos datos.
+  // { telefono, datos: prefillPedido(...), n: marca de tiempo del clic }.
+  const [prefillPedido, setPrefillPedido] = useState(null)
   const [showTplModal, setShowTplModal] = useState(false) // plantilla desde el chat (fuera de 24h)
   // Reenviar: el mensaje elegido, el buscador de destino y el candado del envío.
   const [reenviando, setReenviando] = useState(null)
@@ -3356,7 +3361,11 @@ export default function App() {
                     <MessageBubble msg={msg} allMsgs={activeConv.msgs} onResponder={responderA} onAbrirChat={openConv} onReenviar={setReenviando}
                       reaccion={mias.get(String(msg.id)) || ''}
                       onReaccionar={windowOpen && puedeReaccionar(msg) ? (emoji) => reaccionar(msg, emoji) : null}
-                      onIrACita={irACita} />
+                      onIrACita={irACita}
+                      onCrearPedido={(datos) => {
+                        setPrefillPedido({ telefono: activeConv.telefono, datos: prefillDeFormulario(datos), n: Date.now() })
+                        if (window.matchMedia?.('(max-width:767px)').matches) setShowRight(true)
+                      }} />
                   </div>
                 )
                     })}
@@ -3645,6 +3654,7 @@ export default function App() {
                 onUpdateContact={handleUpdateContact}
                 windowOpen={windowOpen}
                 ventanaPautaHasta={enPauta ? activeConv?.pautaVenceEn : null}
+                prefillPedido={prefillPedido}
                 onPedidoManual={alPedidoManualEscritorio}
                 onVerPedido={alVerPedidoEscritorio}
                 onEnviarHojaPedido={handleEnviarHojaPedido}
@@ -3667,6 +3677,7 @@ export default function App() {
               onUpdateContact={handleUpdateContact}
               windowOpen={windowOpen}
                 ventanaPautaHasta={enPauta ? activeConv?.pautaVenceEn : null}
+                prefillPedido={prefillPedido}
               onPedidoManual={alPedidoManualCajon}
               onVerPedido={alVerPedidoCajon}
               onEnviarHojaPedido={handleEnviarHojaPedido}

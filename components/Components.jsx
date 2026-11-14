@@ -7,6 +7,7 @@ import { puedeReenviar } from '@/lib/reenvio'
 import { fuenteDeMedia } from '@/lib/fuente-media'
 import { etiquetaTelefono } from '@/lib/cliente-sin-telefono'
 import { EMOJIS_REACCION } from '@/lib/reacciones'
+import { datosDesdeTexto } from '@/lib/formularios'
 import { leerCarrusel } from '@/lib/carrusel'
 import { urlDeDescarga, nombreDeDescarga } from '@/lib/descarga'
 import { restoProductoTocado } from '@/lib/producto-tocado'
@@ -972,7 +973,7 @@ export function AvisoInterno({ msg }) {
   )
 }
 
-export function MessageBubble({ msg, allMsgs, onResponder, onAbrirChat, onReenviar, reaccion = '', onReaccionar = null, onIrACita = null }) {
+export function MessageBubble({ msg, allMsgs, onResponder, onAbrirChat, onReenviar, reaccion = '', onReaccionar = null, onIrACita = null, onCrearPedido = null }) {
   const [accion, setAccion] = useState(false)
   const [hover, setHover] = useState(false)
   // Después de los hooks: un return antes rompería el orden de los useState.
@@ -1019,6 +1020,22 @@ export function MessageBubble({ msg, allMsgs, onResponder, onAbrirChat, onReenvi
         fontSize: 14, lineHeight: 1, padding: 4, color: '#94a3b8',
         opacity: (hover || accion) ? 1 : 0, transition: 'opacity .15s',
       }}>☺</button>
+  ) : null
+
+  // 🧾 Crear pedido: solo en la respuesta de un formulario de datos de WhatsApp
+  // (lib/formularios.js). Abre el PEDIDO MANUAL con esos datos ya puestos. Visible
+  // siempre (no tenue): es la acción que se espera después de ese mensaje.
+  const datosFormulario = !isMe && onCrearPedido ? datosDesdeTexto(msg.mensaje) : null
+  const botonCrearPedido = datosFormulario ? (
+    <button
+      onClick={(e) => { e.stopPropagation(); onCrearPedido(datosFormulario) }}
+      title="Abrir PEDIDO MANUAL con estos datos"
+      style={{
+        alignSelf: 'center', flexShrink: 0, margin: '0 4px',
+        background: 'linear-gradient(135deg,#10b981,#059669)', border: '1px solid rgba(16,185,129,.4)',
+        color: '#fff', borderRadius: 14, padding: '4px 10px', fontSize: 11, fontWeight: 800,
+        cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+      }}>🧾 Crear pedido</button>
   ) : null
 
   return (
@@ -1180,6 +1197,7 @@ export function MessageBubble({ msg, allMsgs, onResponder, onAbrirChat, onReenvi
         )}
       </div>
       {!isMe && botonReaccionar}
+      {!isMe && botonCrearPedido}
       {!isMe && botonReenviar}
     </div>
   )
