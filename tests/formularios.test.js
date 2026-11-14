@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { flowJsonDatosPedido, payloadFormulario, textoRespuestaFormulario, formularioValido, FORMULARIOS } from '../lib/formularios.js'
+import { flowJsonDatosPedido, payloadFormulario, celularLocal, textoRespuestaFormulario, formularioValido, FORMULARIOS } from '../lib/formularios.js'
 import { extraer } from '../lib/wa-mensaje.js'
 
 test('el Flow JSON tiene las dos pantallas y la última cierra con todos los campos', () => {
@@ -17,13 +17,13 @@ test('el Flow JSON tiene las dos pantallas y la última cierra con todos los cam
 })
 
 test('payload del mensaje: flow por NOMBRE, abre en FACTURACION y el token dice qué formulario es', () => {
-  const p = payloadFormulario({ to: '593991234567' }, 'Llena tus datos', 'datos_pedido', 123)
+  const p = payloadFormulario({ to: '593991234567' }, 'Llena tus datos', 'datos_pedido', { telefono: '593991234567', ahora: 123 })
   assert.equal(p.type, 'interactive')
   assert.equal(p.interactive.type, 'flow')
   const prm = p.interactive.action.parameters
   assert.equal(prm.flow_name, FORMULARIOS.datos_pedido.flowName)
   assert.equal(prm.flow_token, 'datos_pedido:123')
-  assert.deepEqual(prm.flow_action_payload, { screen: 'FACTURACION' })
+  assert.deepEqual(prm.flow_action_payload, { screen: 'FACTURACION', data: { celular: '0991234567' } })
   assert.ok(prm.flow_cta.length <= 30)
 })
 
@@ -60,4 +60,23 @@ test('un nfm_reply sin datos igual deja constancia (nunca vacío)', () => {
 test('un botón tocado sigue leyéndose como antes', () => {
   const m = extraer({ type: 'interactive', interactive: { type: 'button_reply', button_reply: { id: 'rc_1', title: 'Sí, quiero' } } })
   assert.equal(m.contenido, 'Sí, quiero')
+})
+
+test('los dos celulares vienen prellenados con el número del chat', () => {
+  const j = flowJsonDatosPedido()
+  const campos = j.screens.flatMap(sc => sc.layout.children[0].children)
+  for (const n of ['factura_celular', 'envio_celular']) {
+    assert.equal(campos.find(c => c.name === n)['init-value'], '${data.celular}', n)
+  }
+  assert.ok(j.screens.every(sc => sc.data.celular))
+  const nav = campos.find(c => c.type === 'Footer' && c['on-click-action'].name === 'navigate')
+  assert.deepEqual(nav['on-click-action'].payload, { celular: '${data.celular}' })
+})
+
+test('celularLocal: formato ecuatoriano y extranjero', () => {
+  assert.equal(celularLocal('593991234567'), '0991234567')
+  assert.equal(celularLocal('991234567'), '0991234567')
+  assert.equal(celularLocal('0991234567'), '0991234567')
+  assert.equal(celularLocal('525512345678'), '+525512345678')
+  assert.equal(celularLocal(''), '')
 })

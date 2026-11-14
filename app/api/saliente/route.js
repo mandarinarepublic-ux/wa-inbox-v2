@@ -147,7 +147,7 @@ function construir(body) {
       contenido: body.Cuerpo || '',
       botones: [{ id: `flow_${clave}`, title: `📝 ${FORMULARIOS[clave].cta}` }],
       mediaUrl: '', mediaId: '',
-      payload: payloadFormulario(dest, body.Cuerpo, clave),
+      payload: payloadFormulario(dest, body.Cuerpo, clave, { telefono: esBsuid(body.Telefono) ? '' : body.Telefono }),
     }
   }
 
