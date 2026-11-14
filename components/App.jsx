@@ -1,4 +1,5 @@
 'use client'
+import { queBuscar as queBuscarPedido } from '@/lib/buscar-pedido'
 import { imagenParaWhatsapp } from '@/lib/imagen-whatsapp'
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
 import dynamic from 'next/dynamic'
@@ -341,7 +342,9 @@ export default function App() {
     try { localStorage.setItem('mandi_pend_nuevos_arriba', v ? '0' : '1') } catch { /* modo privado */ }
     return !v
   })
-  const [searchMode,   setSearchMode]   = useState('contacto') // 'contacto' | 'mensaje'
+  const [searchMode,   setSearchMode]   = useState('contacto') // 'contacto' | 'mensaje' | 'pedido'
+  // Búsqueda por ID de pedido (lib/buscar-pedido.js): { [t9]: { pedido_id, estado_pedido, cliente } }
+  const [pedidoHits,   setPedidoHits]   = useState(null)
   const [msgHits,      setMsgHits]      = useState(null)        // búsqueda por mensaje (server-side): mensajes que casan en TODO el historial
   // Ancho del panel derecho (notas / respuestas rápidas), redimensionable con el mouse
   const [rightWidth,   setRightWidth]   = useState(340)
@@ -1574,6 +1577,23 @@ export default function App() {
     return () => { vivo = false; clearTimeout(t) }
   }, [search, searchMode])
 
+  // Búsqueda por ID de pedido: el pedido vive en el CRM, así que se pregunta al
+  // servidor (lib/buscar-pedido.js) y se cruza con los chats por los últimos 9
+  // dígitos. Mismo debounce que la de mensajes.
+  useEffect(() => {
+    const term = search.trim()
+    if (searchMode !== 'pedido' || !queBuscarPedido(term)) { setPedidoHits(null); return }
+    let vivo = true
+    const t = setTimeout(async () => {
+      try {
+        const r = await fetch(`/api/buscar-pedido?q=${encodeURIComponent(term)}`, { cache: 'no-store' })
+        const d = await r.json().catch(() => ({}))
+        if (vivo) setPedidoHits(r.ok ? (d.pedidos || {}) : {})
+      } catch { if (vivo) setPedidoHits({}) }
+    }, 350)
+    return () => { vivo = false; clearTimeout(t) }
+  }, [search, searchMode])
+
   const demo        = isDemo()
 
   // El estado de flujo (pendiente/atendido/…) es INDEPENDIENTE de tener venta.
@@ -1688,6 +1708,7 @@ export default function App() {
   const q = search.trim().toLowerCase()
   const isSearching = q.length > 0
   const searchingMsgs = isSearching && searchMode === 'mensaje'
+  const searchingPedido = isSearching && searchMode === 'pedido'
 
   const tel9 = (t) => String(t || '').replace(/\D/g, '').slice(-9)
   // Índice de la búsqueda por mensaje (server-side, TODO el historial): últimos 9
@@ -1712,7 +1733,15 @@ export default function App() {
     return (start > 0 ? '…' : '') + t.slice(start, end) + (end < t.length ? '…' : '')
   }
 
+  // Lo que se muestra bajo el chat en modo Pedido: "MAN-XAV-6558 · EN_FABRICA".
+  const snippetPedido = (c) => {
+    const h = pedidoHits?.[tel9(c.telefono)]
+    return h ? `Pedido ${h.pedido_id}${h.estado_pedido ? ` · ${h.estado_pedido}` : ''}` : ''
+  }
+
   const searched = !isSearching ? convs
+    : searchingPedido
+      ? convs.filter(c => pedidoHits?.[tel9(c.telefono)])   // pedido del CRM → chat por celular
     : searchingMsgs
       ? convs.filter(c => msgHitMap[tel9(c.telefono)])   // matches sobre TODO el historial (server-side)
       : convs.filter(c => {
@@ -1737,7 +1766,7 @@ export default function App() {
       counts: conteos(vistas, filtro),
       totalPendientes: vistas.filter(v => v.estado === 'pendiente').length,
     }
-  }, [convs, search, searchMode, msgHits, contacts, pedidosChat, ahora, filtro, pendNuevosArriba, etiquetasChat])
+  }, [convs, search, searchMode, msgHits, pedidoHits, contacts, pedidosChat, ahora, filtro, pendNuevosArriba, etiquetasChat])
   /* eslint-enable react-hooks/exhaustive-deps */
 
   const lastMsg      = activeConv?.last
@@ -2999,8 +3028,8 @@ export default function App() {
             <div style={{ position:'relative', marginBottom:6 }}>
               <span style={{ position:'absolute', left:9, top:'50%', transform:'translateY(-50%)', color:'#2a3f55', fontSize:12, pointerEvents:'none' }}>🔍</span>
               <input value={search} onChange={e => setSearch(e.target.value)}
-                placeholder={searchMode === 'mensaje' ? 'Buscar en mensajes (ej: Hoodie)...' : 'Buscar nombre o número...'}
-                style={{ width:'100%', padding:'7px 28px 7px 28px', background:'#111c2a', border:`1px solid ${searchMode==='mensaje' ? 'rgba(96,165,250,.4)' : '#1a2d40'}`, borderRadius:8, color:'#e2e8f0', fontSize:12, outline:'none' }} />
+                placeholder={searchMode === 'mensaje' ? 'Buscar en mensajes (ej: Hoodie)...' : searchMode === 'pedido' ? 'ID de pedido (ej: 6558 o MAN-XAV-6558)...' : 'Buscar nombre o número...'}
+                style={{ width:'100%', padding:'7px 28px 7px 28px', background:'#111c2a', border:`1px solid ${searchMode!=='contacto' ? 'rgba(96,165,250,.4)' : '#1a2d40'}`, borderRadius:8, color:'#e2e8f0', fontSize:12, outline:'none' }} />
               {search && (
                 <button onClick={() => setSearch('')} style={{ position:'absolute', right:8, top:'50%', transform:'translateY(-50%)', background:'transparent', border:'none', color:'#475569', cursor:'pointer', fontSize:13, padding:0, lineHeight:1 }}>✕</button>
               )}
@@ -3010,6 +3039,7 @@ export default function App() {
               {[
                 { key:'contacto', label:'👤 Contactos' },
                 { key:'mensaje',  label:'💬 Mensajes'  },
+                { key:'pedido',   label:'📦 Pedido'    },
               ].map(({ key, label }) => (
                 <button key={key} onClick={() => setSearchMode(key)} style={{
                   flex:1, padding:'5px 2px', fontSize:10, fontWeight:700,
@@ -3045,7 +3075,9 @@ export default function App() {
             ) : filtered.length === 0 ? (
               <div style={{ padding:28, textAlign:'center', color:'#2a3f55', fontSize:12 }}>
                 {isSearching
-                  ? (searchingMsgs ? `Ningún mensaje dice "${search.trim()}"` : `Sin resultados para "${search.trim()}"`)
+                  ? (searchingMsgs ? `Ningún mensaje dice "${search.trim()}"`
+                    : searchingPedido ? (pedidoHits === null && queBuscarPedido(search) ? 'Buscando el pedido…' : `Ningún chat con el pedido "${search.trim()}"`)
+                    : `Sin resultados para "${search.trim()}"`)
                   : 'Sin conversaciones con estos filtros'}
               </div>
             ) : (<>
@@ -3073,7 +3105,7 @@ export default function App() {
                   estado={estadoFila(conv)}
                   modoIA={getModoIA(conv.telefono)}
                   chips={[...chipsDeChat(datosGestion(conv), ahora), ...chipsEtiquetas(conv.telefono)]}
-                  msgSnippet={searchingMsgs ? matchSnippet(conv) : null}
+                  msgSnippet={searchingMsgs ? matchSnippet(conv) : searchingPedido ? snippetPedido(conv) : null}
                   // El color y la etiqueta salen del canal DE LA FILA, que ahora
                   // es un hecho y no una deducción: la lista viene de
                   // `ultimos_mensajes_canal`, o sea una fila por (cliente, número).
