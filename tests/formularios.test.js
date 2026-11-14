@@ -1,0 +1,63 @@
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { flowJsonDatosPedido, payloadFormulario, textoRespuestaFormulario, formularioValido, FORMULARIOS } from '../lib/formularios.js'
+import { extraer } from '../lib/wa-mensaje.js'
+
+test('el Flow JSON tiene las dos pantallas y la última cierra con todos los campos', () => {
+  const j = flowJsonDatosPedido()
+  assert.deepEqual(j.screens.map(s => s.id), ['FACTURACION', 'ENVIO'])
+  assert.equal(j.screens[1].terminal, true)
+  const form = j.screens[1].layout.children[0].children
+  const footer = form.find(c => c.type === 'Footer')
+  assert.equal(footer['on-click-action'].name, 'complete')
+  const p = footer['on-click-action'].payload
+  assert.equal(p.factura_correo, '${screen.FACTURACION.form.factura_correo}')
+  assert.equal(p.envio_direccion, '${form.envio_direccion}')
+  assert.equal(Object.keys(p).length, 10)
+})
+
+test('payload del mensaje: flow por NOMBRE, abre en FACTURACION y el token dice qué formulario es', () => {
+  const p = payloadFormulario({ to: '593991234567' }, 'Llena tus datos', 'datos_pedido', 123)
+  assert.equal(p.type, 'interactive')
+  assert.equal(p.interactive.type, 'flow')
+  const prm = p.interactive.action.parameters
+  assert.equal(prm.flow_name, FORMULARIOS.datos_pedido.flowName)
+  assert.equal(prm.flow_token, 'datos_pedido:123')
+  assert.deepEqual(prm.flow_action_payload, { screen: 'FACTURACION' })
+  assert.ok(prm.flow_cta.length <= 30)
+})
+
+test('formulario desconocido o sin texto no se arma', () => {
+  assert.equal(formularioValido('otro'), '')
+  assert.throws(() => payloadFormulario({ to: '1' }, 'hola', 'otro'))
+  assert.throws(() => payloadFormulario({ to: '1' }, '  ', 'datos_pedido'))
+})
+
+const nfm = (datos) => ({
+  type: 'interactive',
+  interactive: { type: 'nfm_reply', nfm_reply: { name: 'flow', body: 'Sent', response_json: JSON.stringify({ flow_token: 'datos_pedido:1', ...datos }) } },
+})
+
+test('la respuesta llega como texto legible, con la provincia con tildes y sin referencia vacía', () => {
+  const m = extraer(nfm({
+    factura_nombre: 'Ana Pérez', factura_cedula: '1712345678', factura_correo: 'ana@x.com', factura_celular: '0991234567',
+    envio_nombre: 'Ana Pérez', envio_celular: '0991234567', envio_provincia: 'MANABI', envio_ciudad: 'Manta',
+    envio_direccion: 'Av. 4 y calle 13', envio_referencia: '',
+  }))
+  assert.equal(m.tipo, 'texto')
+  assert.match(m.contenido, /Datos de facturación y envío/)
+  assert.match(m.contenido, /Cédula\/RUC: 1712345678/)
+  assert.match(m.contenido, /Provincia: Manabí/)
+  assert.match(m.contenido, /Dirección: Av\. 4 y calle 13/)
+  assert.doesNotMatch(m.contenido, /Referencia/)
+})
+
+test('un nfm_reply sin datos igual deja constancia (nunca vacío)', () => {
+  assert.equal(textoRespuestaFormulario(nfm({}).interactive), '📝 Envió un formulario (sin datos)')
+  assert.ok(extraer({ type: 'interactive', interactive: { type: 'nfm_reply', nfm_reply: { response_json: 'xx' } } }).contenido)
+})
+
+test('un botón tocado sigue leyéndose como antes', () => {
+  const m = extraer({ type: 'interactive', interactive: { type: 'button_reply', button_reply: { id: 'rc_1', title: 'Sí, quiero' } } })
+  assert.equal(m.contenido, 'Sí, quiero')
+})

@@ -13,6 +13,7 @@ import { usuarioDeCookie } from '@/lib/acceso'
 import { secretoSesion } from '@/lib/sesion'
 import { resolverMediaId, invalidarMediaId, esErrorDeMediaId, urlLiviana, META_PHONE_ID } from '@/lib/media-id'
 import { CANALES } from '@/lib/canales'
+import { payloadFormulario, formularioValido, FORMULARIOS } from '@/lib/formularios'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -132,6 +133,21 @@ function construir(body) {
         type: 'reaction',
         reaction: { message_id: String(body.ReaccionA || '').trim(), emoji: String(body.Emoji || '') },
       },
+    }
+  }
+
+  // 📝 Formulario de WhatsApp (lib/formularios.js): texto + botón que abre el
+  // formulario dentro del chat. Se guarda como interactivo con ese botón, para que
+  // la burbuja lo pinte igual que los botones de siempre.
+  if (body.TipoMensaje === 'flow') {
+    const clave = formularioValido(body.Formulario)
+    if (!clave) { const e = new Error(`Formulario desconocido: ${body.Formulario || '(vacío)'}`); e.status = 400; throw e }
+    return {
+      tipo: 'interactive',
+      contenido: body.Cuerpo || '',
+      botones: [{ id: `flow_${clave}`, title: `📝 ${FORMULARIOS[clave].cta}` }],
+      mediaUrl: '', mediaId: '',
+      payload: payloadFormulario(dest, body.Cuerpo, clave),
     }
   }
 
@@ -368,7 +384,10 @@ export async function POST(req) {
         return NextResponse.json({ ok: false, error: e.message }, { status: e.status || 500 })
       }
     } else {
-      construido = construir(body)
+      try { construido = construir(body) } catch (e) {
+        if (!e.status) throw e
+        return NextResponse.json({ ok: false, error: e.message }, { status: e.status })
+      }
     }
     const { payload, tipo, contenido, mediaUrl, botones } = construido
     let mediaId = construido.mediaId

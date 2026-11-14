@@ -3,7 +3,7 @@ import { queBuscar as queBuscarPedido } from '@/lib/buscar-pedido'
 import { imagenParaWhatsapp } from '@/lib/imagen-whatsapp'
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
 import dynamic from 'next/dynamic'
-import { sendReaction, fetchInboxSync, fetchHilo, buscarEnMensajes, sendReply, updateContact, updateEtapa, updateDeuda, updateSinAutomaticos, updateTipoContacto, fetchPedidosChat, isDemo, sendInteractiveButtons, toggleIAMode, sendVideo, sendDocumento, sendAudio, enviarAudioUrl, enviarDocumentoUrl, sendImageFile, precacheMedia, setCanalActivo, getCanalActivo, reenviarPieza, hayVersionNueva, fetchEtiquetas, crearEtiquetaApi, editarEtiquetaApi, ponerEtiquetaApi, quitarEtiquetaApi, sendCarrusel } from '@/lib/api-client'
+import { sendReaction, fetchInboxSync, fetchHilo, buscarEnMensajes, sendReply, updateContact, updateEtapa, updateDeuda, updateSinAutomaticos, updateTipoContacto, fetchPedidosChat, isDemo, sendInteractiveButtons, sendFormulario, toggleIAMode, sendVideo, sendDocumento, sendAudio, enviarAudioUrl, enviarDocumentoUrl, sendImageFile, precacheMedia, setCanalActivo, getCanalActivo, reenviarPieza, hayVersionNueva, fetchEtiquetas, crearEtiquetaApi, editarEtiquetaApi, ponerEtiquetaApi, quitarEtiquetaApi, sendCarrusel } from '@/lib/api-client'
 import { buildConvs, fmtDate, parseDate } from '@/lib/utils'
 import { Spinner, Avatar, ContactRow, MessageBubble, Toast } from '@/components/Components'
 import RightPanel from '@/components/RightPanel'
@@ -2531,7 +2531,19 @@ export default function App() {
       const botones = (reply.botones || []).filter(Boolean).slice(0, 3)
       const carrusel = Array.isArray(reply.carrusel) ? reply.carrusel : []
       let motivoFallo = ''   // el porqué concreto, si lo hay, para el aviso final
-      if (carrusel.length >= 2 && reply.text) {
+      if (reply.formulario && reply.text) {
+        // 📝 Respuesta rápida que abre un FORMULARIO de WhatsApp (lib/formularios.js):
+        // el texto sale con el botón "Llenar mis datos". Va primero: el formulario
+        // reemplaza a los botones y al carrusel.
+        const r = await sendFormulario(telefono, nombre, reply.text, reply.formulario, canal, tomarCita()).catch(e => ({ ok: false, error: e.message }))
+        if (r?.ok === false) {
+          todoOk = false
+          motivoFallo = `📝 El formulario no salió: ${r?.error || 'error al enviar'}`
+        } else {
+          pintarOptimista(telefono, canal, { id: r?.wamid || 'tmp_' + Date.now(), telefono, nombre, mensaje: reply.text, botones: [{ id: 'flow', title: '📝 Llenar mis datos' }], direccion: 'SALIENTE', timestamp: new Date().toISOString(), estado: 'enviado' })
+        }
+        avanzar()
+      } else if (carrusel.length >= 2 && reply.text) {
         // 🛍️ Respuesta rápida CON productos → carrusel con el texto encima (lib/carrusel.js).
         // El servidor decide interactivo o plantilla. Productos O botones: si
         // hubiera las dos cosas, manda el carrusel (el editor ya no lo deja).
