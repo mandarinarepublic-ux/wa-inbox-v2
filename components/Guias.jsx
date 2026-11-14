@@ -21,6 +21,7 @@ const ESTADOS = {
   REGISTRADA: { icono: '✅', texto: 'Registrada', color: VERDE },
   PENDIENTE:  { icono: '⚠️', texto: 'Sin asignar', color: '#f59e0b' },
   NUEVA:      { icono: '🆕', texto: 'Sin procesar', color: '#38bdf8' },
+  EXCLUIDA:   { icono: '🚫', texto: 'Excluida', color: '#64748b' },
 }
 
 const METODO = { cedula: 'por cédula', celular: 'por celular', nombre: 'por nombre', manual: 'a mano', crm: 'desde el CRM' }
@@ -136,10 +137,11 @@ function Fila({ g, onRecargar }) {
           )}
           {g.estado === 'REGISTRADA' && g.nota && <div style={{ color: '#64748b' }}>{g.nota}</div>}
           {g.estado === 'PENDIENTE' && <div style={{ color: '#f59e0b' }}>{g.motivo}</div>}
+          {g.estado === 'EXCLUIDA' && <div style={{ color: '#64748b' }}>{g.motivo}</div>}
           {g.pedido_sugerido && <Confirmar g={g} onListo={onRecargar} />}
           {g.estado === 'NUEVA' && <div style={{ color: '#64748b' }}>Aprieta "Procesar guías" para leerla.</div>}
         </div>
-        {g.estado !== 'REGISTRADA' && (
+        {g.estado !== 'REGISTRADA' && g.estado !== 'EXCLUIDA' && (
           <button onClick={() => setAsignando(a => !a)} style={{
             flexShrink: 0, padding: '7px 11px', borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 800, fontSize: 12,
             background: asignando ? '#1e2d3d' : 'rgba(245,158,11,.14)', border: '1px solid rgba(245,158,11,.4)', color: '#f59e0b',
@@ -179,7 +181,7 @@ export default function Guias({ active }) {
   const guias = datos?.guias || []
   const n = (est) => guias.filter(g => g.estado === est).length
   const visibles = filtro === 'TODAS' ? guias : guias.filter(g => g.estado === filtro)
-  const chips = [['TODAS', 'Todas', guias.length], ['PENDIENTE', '⚠️ Sin asignar', n('PENDIENTE')], ['NUEVA', '🆕 Sin procesar', n('NUEVA')], ['REGISTRADA', '✅ Registradas', n('REGISTRADA')]]
+  const chips = [['TODAS', 'Todas', guias.length], ['PENDIENTE', '⚠️ Sin asignar', n('PENDIENTE')], ['NUEVA', '🆕 Sin procesar', n('NUEVA')], ['REGISTRADA', '✅ Registradas', n('REGISTRADA')], ['EXCLUIDA', '🚫 Excluidas', n('EXCLUIDA')]]
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', height: '100%', background: '#080d14' }}>
