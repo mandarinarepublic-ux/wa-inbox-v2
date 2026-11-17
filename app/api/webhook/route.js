@@ -310,6 +310,7 @@ async function procesar(nuevos, origin) {
         respuesta: d?.ok ? [d.texto, ...d.imagenes].filter(Boolean).join('\n') : null,
         respuestas_rapidas: d?.ok ? d.respuestasRapidas : [],
         derivar: d?.ok ? (d.derivar || null) : null,
+        etapa: d?.ok ? (d.etapa || null) : null,
         tools: d?.tools || null, modelo: d?.modelo || null,
         tokens_in: d?.tokensIn || null, tokens_out: d?.tokensOut || null,
         ms: d?.ms || null, error: d?.ok ? null : (d?.error || 'sin respuesta'),
