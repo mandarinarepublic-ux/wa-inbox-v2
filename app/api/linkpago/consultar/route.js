@@ -20,6 +20,16 @@ export const revalidate = 0
 const DIAS = 7
 const MAX_LINKS = 10
 
+// ☠️ Payphone manda la fecha SIN zona ("2026-11-16T18:06:56") y es hora de
+// Ecuador: leída tal cual en Vercel (UTC) queda 5 horas antes.
+function fechaPayphone(f) {
+  if (!f) return new Date().toISOString()
+  const s = String(f)
+  const conZona = /[zZ]|[+-]\d{2}:?\d{2}$/.test(s)
+  const d = new Date(conZona ? s : `${s}-05:00`)
+  return Number.isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString()
+}
+
 export async function POST(req) {
   try {
     const body = await req.json().catch(() => ({}))
@@ -40,29 +50,29 @@ export async function POST(req) {
     let notas = null
     const links = []
     for (const f of filas || []) {
-      // Un link ya PAGADO no cambia: no se vuelve a preguntar.
-      if (f.estado === 'PAGADO' || !f.client_tx_id) {
-        links.push({ id: f.id, valor: Number(f.valor), estado: f.estado, transactionId: f.transaction_id, tarjeta: f.tarjeta, creado_en: f.creado_en })
-        continue
-      }
       let c
-      try {
-        c = await consultarLink(f.client_tx_id)
-      } catch (e) {
-        console.error('[/api/linkpago/consultar]', f.client_tx_id, e.message)
-        links.push({ id: f.id, valor: Number(f.valor), estado: f.estado, error: 'Payphone no respondió', creado_en: f.creado_en })
-        continue
+      if (f.estado === 'PAGADO' || !f.client_tx_id) {
+        // Ya PAGADO (quizá lo marcó el reporte del CRM): no se vuelve a preguntar,
+        // pero igual se asegura la nota verde del chat (más abajo).
+        c = { estado: f.estado, transactionId: f.transaction_id, tarjeta: f.tarjeta, monto: null }
+      } else {
+        try {
+          c = await consultarLink(f.client_tx_id)
+        } catch (e) {
+          console.error('[/api/linkpago/consultar]', f.client_tx_id, e.message)
+          links.push({ id: f.id, valor: Number(f.valor), estado: f.estado, error: 'Payphone no respondió', creado_en: f.creado_en })
+          continue
+        }
+        const cambio = { revisado_en: new Date().toISOString() }
+        if (c.estado !== f.estado) cambio.estado = c.estado
+        if (c.transactionId) cambio.transaction_id = c.transactionId
+        if (c.tarjeta) cambio.tarjeta = c.tarjeta
+        if (c.estado === 'PAGADO') cambio.pagado_en = fechaPayphone(c.fecha)
+        const { error: eUp } = await crm.from('links_pago').update(cambio).eq('id', f.id)
+        if (eUp) console.error('[/api/linkpago/consultar] update', f.id, eUp.message)
       }
 
-      const cambio = { revisado_en: new Date().toISOString() }
-      if (c.estado !== f.estado) cambio.estado = c.estado
-      if (c.transactionId) cambio.transaction_id = c.transactionId
-      if (c.tarjeta) cambio.tarjeta = c.tarjeta
-      if (c.estado === 'PAGADO') cambio.pagado_en = c.fecha ? new Date(c.fecha).toISOString() : new Date().toISOString()
-      const { error: eUp } = await crm.from('links_pago').update(cambio).eq('id', f.id)
-      if (eUp) console.error('[/api/linkpago/consultar] update', f.id, eUp.message)
-
-      const nota = notaDeConsulta(c, f.valor)
+      const nota = c.transactionId ? notaDeConsulta(c, f.valor) : null
       if (nota) {
         // Sin duplicar: si ya hay una nota con esta transacción, no se repite.
         if (!notas) notas = await listarNotas(tel).catch(() => [])
