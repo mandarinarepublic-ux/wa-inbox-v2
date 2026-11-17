@@ -36,6 +36,103 @@ const ETIQUETA_SIMPLE = {
 
 const ORANGE = '#f59e0b'
 
+// ── 🕵️ IA en SOMBRA ───────────────────────────────────────────────────────────
+// El agente (MANDI) contesta "de mentira": lo que HABRÍA dicho se guarda en
+// inbox.ia_sombra y NO le llega a nadie. El botón barre los chats en Pendientes
+// (la sombra del webhook solo ve mensajes que entran desde que se prendió).
+const fmtHora = (iso) => {
+  try {
+    return new Date(iso).toLocaleString('es-EC', { timeZone: 'America/Guayaquil', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+  } catch { return '' }
+}
+
+function TarjetaSombra({ activo, onToggle }) {
+  const [filas, setFilas] = useState([])
+  const [barriendo, setBarriendo] = useState(false)
+  const [aviso, setAviso] = useState('')
+  const [abierto, setAbierto] = useState(false)
+
+  const cargarFilas = useCallback(async () => {
+    try {
+      const r = await fetch(`/api/ia-sombra?t=${Date.now()}`, { cache: 'no-store' }).then(x => x.json())
+      if (r?.ok) setFilas(r.filas || [])
+    } catch { /* la tarjeta sigue usable sin la lista */ }
+  }, [])
+  useEffect(() => { cargarFilas() }, [cargarFilas])
+
+  const barrer = async () => {
+    setBarriendo(true); setAviso('⏳ Preguntándole a MANDI… puede tardar un par de minutos')
+    try {
+      const res = await fetch('/api/ia-sombra', { method: 'POST' })
+      const r = await res.json().catch(() => ({}))
+      if (!res.ok || !r?.ok) setAviso('❌ ' + (r?.error || `HTTP ${res.status}`))
+      else if (!r.revisados) setAviso(`Nada nuevo que revisar (${r.pendientes} en Pendientes; ya revisados: ${r.yaEstaban}; fotos, audios y "gracias" no van)`)
+      else setAviso(`✅ ${r.revisados} revisados${r.conError ? ` · ❌ ${r.conError} con error` : ''}. No se envió nada.`)
+      await cargarFilas(); setAbierto(true)
+    } catch (e) {
+      setAviso('❌ ' + e.message)
+    }
+    setBarriendo(false)
+  }
+
+  const visibles = abierto ? filas : filas.slice(0, 3)
+  return (
+    <Card>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+        <div style={{ fontSize: 26 }}>🕵️</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 15, fontWeight: 800, color: '#e2e8f0' }}>IA en sombra (MANDI de prueba)</div>
+          <div style={{ fontSize: 12, color: '#64748b', marginTop: 3 }}>
+            MANDI lee cada mensaje nuevo y anota lo que HABRÍA respondido. No le envía nada a ningún cliente.
+            Sirve para revisarla antes de prenderla de verdad.
+          </div>
+        </div>
+        <Switch on={activo} onClick={onToggle} />
+      </div>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginTop: 12 }}>
+        <button onClick={barrer} disabled={barriendo}
+          style={{ background: barriendo ? '#334155' : '#25d366', color: '#0b141a', border: 'none', borderRadius: 8,
+                   padding: '8px 12px', fontWeight: 800, fontSize: 13, cursor: barriendo ? 'wait' : 'pointer' }}>
+          {barriendo ? '⏳ Revisando…' : '🔎 Probar MANDI con los pendientes'}
+        </button>
+        {aviso && <span style={{ fontSize: 12, color: '#cbd5e1' }}>{aviso}</span>}
+      </div>
+
+      {filas.length > 0 && (
+        <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {visibles.map(f => (
+            <div key={f.id} style={{ background: '#0f172a', border: '1px solid #1e293b', borderRadius: 8, padding: 10, fontSize: 12 }}>
+              <div style={{ color: '#64748b', display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                <span>{fmtHora(f.creado_en)} · …{String(f.telefono || '').slice(-4)}</span>
+                {f.etapa && <span>🏷️ {f.etapa}</span>}
+                {f.tokens_in ? <span>🔢 {f.tokens_in}+{f.tokens_out} tok</span> : null}
+                {f.ms ? <span>⏱️ {(f.ms / 1000).toFixed(1)} s</span> : null}
+              </div>
+              <div style={{ color: '#e2e8f0', marginTop: 4 }}>👤 {f.mensaje}</div>
+              {f.error
+                ? <div style={{ color: '#f87171', marginTop: 4 }}>❌ {f.error}</div>
+                : <>
+                    {(f.respuestas_rapidas || []).length > 0 && (
+                      <div style={{ color: ORANGE, marginTop: 4 }}>⚡ Respuesta rápida: {f.respuestas_rapidas.join(', ')}</div>
+                    )}
+                    {f.respuesta && <div style={{ color: '#86efac', marginTop: 4, whiteSpace: 'pre-wrap' }}>🤖 {f.respuesta}</div>}
+                    {f.derivar && <div style={{ color: '#fbbf24', marginTop: 4 }}>📌 Pasaría a una persona: {f.derivar}</div>}
+                  </>}
+            </div>
+          ))}
+          {filas.length > 3 && (
+            <button onClick={() => setAbierto(v => !v)}
+              style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: 12, cursor: 'pointer', textAlign: 'left' }}>
+              {abierto ? '▴ Ver menos' : `▾ Ver las ${filas.length}`}
+            </button>
+          )}
+        </div>
+      )}
+    </Card>
+  )
+}
+
 function Switch({ on, onClick, disabled }) {
   return (
     <button onClick={onClick} disabled={disabled} aria-pressed={on} style={{
@@ -282,6 +379,11 @@ export default function Automatizaciones({ active }) {
               )
             })}
           </div>
+
+          {/* ── 🕵️ IA EN SOMBRA (app/api/ia-sombra) ── */}
+          <TarjetaSombra
+            activo={!!config?.ia_sombra?.activo}
+            onToggle={() => togBloque('ia_sombra', !config?.ia_sombra?.activo)} />
 
           {/* ── 💬 RESPUESTAS SIMPLES (lib/respuesta-simple.js) ── */}
           <Card>
