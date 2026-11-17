@@ -25,9 +25,10 @@ import { canalDePhoneId } from '@/lib/canales'
 import { extraer } from '@/lib/wa-mensaje'
 import { extraerEchoes } from '@/lib/echoes'
 import { extraerHistorial, extraerContactosSync } from '@/lib/coexistencia'
-import { ponerNombreSiFaltaSupabase, textoSalioRecienteSupabase, ultimosEntrantesTextoSupabase } from '@/lib/inbox-supabase'
+import { ponerNombreSiFaltaSupabase, textoSalioRecienteSupabase, ultimosEntrantesTextoSupabase, guardarSombraIASupabase } from '@/lib/inbox-supabase'
 import { observarFirmaMeta } from '@/lib/firma-meta'
-import { enviarSaliente, responderConIA } from '@/lib/responder-ia'
+import { enviarSaliente, responderConIA, consultarAgente } from '@/lib/responder-ia'
+import { piezasDeRespuestaRapida } from '@/lib/pieza-respuesta'
 import { capturarCtwaClid, revisarLeadAutomatico, revisarVentaEnProceso } from '@/lib/capi'
 
 export const dynamic = 'force-dynamic'
@@ -260,7 +261,7 @@ async function procesar(nuevos, origin) {
     const r = d.respuestaId ? (await respuestasRapidas()).find(x => String(x.id) === d.respuestaId) : null
     if (d.respuestaId && !r) console.warn('[/api/webhook] respuesta simple: la respuesta rápida asignada no existe', d.intencion, d.respuestaId)
     const piezas = r
-      ? piezasDeReceta({ receta: { pasos: [{ tipo: 'respuesta', respuestaId: r.id }] }, respuestas: [r], contacto, citaId: m.wamid })
+      ? piezasDeRespuestaRapida(r, contacto, m.wamid)
       : (d.texto ? [{ Telefono: m.telefono, Nombre: m.nombre || '', Mensaje: d.texto, Canal: m.phoneId, ContextoId: m.wamid }] : [])
     if (!piezas.length) return
 
@@ -276,6 +277,27 @@ async function procesar(nuevos, origin) {
         if (!res?.ok) console.error('[/api/webhook] respuesta simple: pieza rechazada', res?.status ?? 'red', m.telefono)
       }
     })())
+  }
+
+  // ── MODO SOMBRA del agente (lib/automatizaciones.js → ia_sombra) ───────────
+  // Solo texto ESCRITO por el cliente y solo con la IA apagada en ese chat (si
+  // está prendida, el agente ya contesta de verdad). No envía nada.
+  function sombraSiCorresponde(m) {
+    if (!auto?.ia_sombra?.activo) return
+    if (m.raw?.type !== 'text' || !String(m.contenido || '').trim()) return
+    if (modoIAde(m.telefono, m.phoneId)) return
+    waitUntil((async () => {
+      const d = await consultarAgente(m.telefono, m.nombre, m.contenido, 'sombra')
+      await guardarSombraIASupabase({
+        telefono: m.telefono, wa_message_id: m.wamid, mensaje: String(m.contenido).slice(0, 2000),
+        respuesta: d?.ok ? [d.texto, ...d.imagenes].filter(Boolean).join('\n') : null,
+        respuestas_rapidas: d?.ok ? d.respuestasRapidas : [],
+        derivar: d?.ok ? (d.derivar || null) : null,
+        tools: d?.tools || null, modelo: d?.modelo || null,
+        tokens_in: d?.tokensIn || null, tokens_out: d?.tokensOut || null,
+        ms: d?.ms || null, error: d?.ok ? null : (d?.error || 'sin respuesta'),
+      })
+    })().catch(e => console.error('[/api/webhook] sombra:', e.message)))
   }
 
   // ── Recetas de bienvenida por anuncio ──────────────────────────────────────
@@ -702,6 +724,9 @@ async function procesar(nuevos, origin) {
     // Un botón que ya contestó su flujo no se le pasa además a la IA.
     if (porBoton) continue
 
+    // Modo sombra: qué HABRÍA respondido el agente (no envía nada).
+    sombraSiCorresponde(m)
+
     // Respuesta SIMPLE (envío, tienda, factura, "??"): solo con la IA apagada, sin
     // persona en el chat y si ningún flujo/receta contestó ya este mensaje. El chat
     // se queda en PENDIENTES igual (arriba ya se reabrió): esto adelanta, no cierra.
@@ -714,7 +739,7 @@ async function procesar(nuevos, origin) {
     if (modoIAde(m.telefono, m.phoneId)) {
       if (m.tipo === 'texto' && String(m.contenido).trim()) {
         // Texto → MANDI responde normalmente.
-        await responderConIA(origin, m.telefono, m.nombre, m.contenido, m.phoneId)
+        await responderConIA(origin, m.telefono, m.nombre, m.contenido, m.phoneId, 'webhook', m.wamid)
       } else if (m.tipo === 'imagen') {
         // Foto del cliente → NO vender/identificar: mensaje de espera + handoff a
         // SOPORTE (apaga la IA para que un ejecutivo tome el chat).
