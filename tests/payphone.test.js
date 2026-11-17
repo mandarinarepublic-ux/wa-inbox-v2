@@ -118,3 +118,35 @@ test('proveedorPorDefecto: sin variable sigue siendo dLocal', () => {
   if (antes === undefined) delete process.env.LINKPAGO_PROVEEDOR
   else process.env.LINKPAGO_PROVEEDOR = antes
 })
+
+// ── 🔎 CONSULTAR (16-nov-2026) ───────────────────────────────────────────────
+import { estadoDeConsulta, notaDeConsulta } from '../lib/payphone.js'
+
+test('consulta: un intento rechazado y luego uno aprobado = PAGADO con el aprobado', () => {
+  const c = estadoDeConsulta([
+    { statusCode: 2, transactionStatus: 'Canceled', transactionId: 1 },
+    { statusCode: 3, transactionStatus: 'Approved', transactionId: 93724241, cardBrand: 'Visa Pichincha', amount: 3500, date: '2026-11-16T18:06:00' },
+  ])
+  assert.strictEqual(c.estado, 'PAGADO')
+  assert.strictEqual(c.transactionId, '93724241')
+  assert.strictEqual(c.monto, 35)
+  assert.strictEqual(notaDeConsulta(c, 35).texto, 'PAGADO $35.00 — Visa Pichincha · Payphone #93724241')
+  assert.strictEqual(notaDeConsulta(c, 35).tipo, 'pago_ok')
+})
+
+test('consulta: sin ventas (404) es PENDIENTE y no deja nota', () => {
+  const c = estadoDeConsulta(null)
+  assert.strictEqual(c.estado, 'PENDIENTE')
+  assert.strictEqual(notaDeConsulta(c, 35), null)
+})
+
+test('consulta: solo rechazado = RECHAZADO, sin nota verde', () => {
+  const c = estadoDeConsulta({ statusCode: 2, transactionId: 5 })
+  assert.strictEqual(c.estado, 'RECHAZADO')
+  assert.strictEqual(notaDeConsulta(c, 35), null)
+})
+
+test('consulta: sin amount usa el valor del link para la nota', () => {
+  const c = estadoDeConsulta({ statusCode: 3, transactionId: 9 })
+  assert.strictEqual(notaDeConsulta(c, 20).texto, 'PAGADO $20.00 — Tarjeta · Payphone #9')
+})

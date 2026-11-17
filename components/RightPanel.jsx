@@ -1,7 +1,7 @@
 'use client'
 import { useState, useRef, useEffect } from 'react'
 import { Avatar } from '@/components/Components'
-import { fetchRepliesFromSheet, writeReply, reorderReplies, addNota, setIdVenta, fetchProductos, generarLinkPago, subirAudioNota, subirDocumento } from '@/lib/api-client'
+import { fetchRepliesFromSheet, writeReply, reorderReplies, addNota, setIdVenta, fetchProductos, generarLinkPago, consultarPagosLink, subirAudioNota, subirDocumento } from '@/lib/api-client'
  import { esAudio as esAudioArchivo } from '@/lib/audio-nota-voz'
 import { esDocumento as esDocumentoArchivo } from '@/lib/adjuntos'
 import { adjuntosDeRespuesta, moverAdjunto } from '@/lib/adjuntos-respuesta'
@@ -537,6 +537,9 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
   // pego"). Sigue quedando la nota; esto solo ahorra el copiar y pegar.
   // estado: '' | 'enviando' | 'enviado' | 'error'.
   const [linkListo, setLinkListo] = useState(null)
+  // 🔎 CONSULTAR (16-nov-2026): Payphone NO avisa cuando pagan, así que se le
+  // pregunta a mano. `consulta` = { telefono, cargando, links, error }.
+  const [consulta, setConsulta] = useState(null)
   // Con quién se cobra: 'dlocal' | 'payphone'. SIEMPRE arranca en Payphone
   // (pedido de Rodrigo, 10-nov-2026: comisión ≈ 5,75 % contra ≈ 8,9 % de
   // dLocal). dLocal se puede elegir para un link puntual, pero no se recuerda:
@@ -631,8 +634,21 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
 
   // Mismo motivo que arriba: el monto es del chat anterior, no de este.
   useEffect(() => {
-    setMontoLink(''); setLinkPagoError(''); setProveedorLink('payphone'); setLinkListo(null)
+    setMontoLink(''); setLinkPagoError(''); setProveedorLink('payphone'); setLinkListo(null); setConsulta(null)
   }, [activeConv?.telefono])
+
+  async function consultarPagos() {
+    if (!activeConv || consulta?.cargando) return
+    const telefono = activeConv.telefono
+    setConsulta({ telefono, cargando: true, links: [], error: '' })
+    try {
+      const links = await consultarPagosLink(telefono)
+      setConsulta({ telefono, cargando: false, links, error: '' })
+      if (links.some(l => l.estado === 'PAGADO')) setNotasRefrescar(n => n + 1)
+    } catch (e) {
+      setConsulta({ telefono, cargando: false, links: [], error: e.message })
+    }
+  }
 
   async function generarLink() {
     if (generandoLink || !activeConv) return
@@ -1316,9 +1332,37 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                 aparece la vista previa con 📤 ENVIAR (o 📋 Copiar) y el vendedor
                 decide. Distinto del LINKPAGO<monto> del chat, que sí envía directo. */}
             <div style={{ padding:'10px 12px', borderTop:'1px solid #111c2a', marginTop:8, background:'#0a1019' }}>
-              <p style={{ fontSize:10, color:'#10b981', fontWeight:700, letterSpacing:'.08em', margin:'0 0 6px' }}>
-                💳 LINK PAGO
-              </p>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:6, margin:'0 0 6px' }}>
+                <p style={{ fontSize:10, color:'#10b981', fontWeight:700, letterSpacing:'.08em', margin:0 }}>
+                  💳 LINK PAGO
+                </p>
+                {/* 🔎 Payphone no avisa los pagos: con esto se le pregunta. */}
+                <button
+                  onClick={consultarPagos}
+                  disabled={consulta?.cargando}
+                  title="Preguntar a Payphone si se pagaron los links de este chat (últimos 7 días)"
+                  style={{ padding:'3px 10px', borderRadius:6, fontSize:10, fontWeight:800, fontFamily:'inherit', letterSpacing:'.04em',
+                    background:'transparent', border:'1px solid rgba(16,185,129,.5)', color:'#10b981',
+                    cursor: consulta?.cargando ? 'default' : 'pointer' }}>
+                  {consulta?.cargando ? '⏳ CONSULTANDO…' : '🔎 CONSULTAR'}
+                </button>
+              </div>
+              {consulta && !consulta.cargando && consulta.telefono === activeConv.telefono && (
+                <div style={{ marginBottom:8, fontSize:11, lineHeight:1.5 }}>
+                  {consulta.error
+                    ? <div style={{ color:'#f87171' }}>⚠️ {consulta.error}</div>
+                    : consulta.links.length === 0
+                      ? <div style={{ color:'#94a3b8' }}>Sin links Payphone de este chat en los últimos 7 días.</div>
+                      : consulta.links.map(l => (
+                        <div key={l.id} style={{ color: l.estado === 'PAGADO' ? '#10b981' : l.estado === 'RECHAZADO' ? '#f87171' : '#f59e0b' }}>
+                          {l.estado === 'PAGADO' ? '✅' : l.estado === 'RECHAZADO' ? '❌' : '⏳'} ${Number(l.valor).toFixed(2)} · {l.estado}
+                          {l.tarjeta ? ` · ${l.tarjeta}` : ''}{l.transactionId ? ` · #${l.transactionId}` : ''}
+                          {l.error ? ` · ${l.error}` : ''}
+                          <span style={{ color:'#64748b' }}> · {new Date(l.creado_en).toLocaleString('es-EC', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })}</span>
+                        </div>
+                      ))}
+                </div>
+              )}
               <div style={{ display:'flex', gap:6 }}>
                 {/* Con quién se cobra. dLocal ≈ 8,9 % de comisión; Payphone ≈ 5,75 %. */}
                 <select
