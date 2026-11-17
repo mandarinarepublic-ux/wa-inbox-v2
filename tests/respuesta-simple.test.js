@@ -98,9 +98,9 @@ const MAS_NO = [
   'Hola! Me interesa este producto: Chaqueta Dragon Ball Z Ecuador | Envío Gratis 🐉',
   'Me interesa Chaqueta Dragon Ball Z Roja Ecuador | Envío Gratis 🐉. (Azul, XL)',
   'Por servientrega está bien', 'Me gustaría que sea por Servientrega',
-  'Buenos días una pregunta cuánto tarda el envío?',
   'Buenas tardes, no me han enviado la factura aun',
   'Puedo pasar mañana por el local y me ayuda con la devolución',
+  'Pero si envíe nomas mañana temprano y me dice a qué hora llega para retirar',
   'Talla M,\nEstán en Quito?\nDonde?',
 ]
 for (const [intencion, casos] of Object.entries(MAS_SI)) {
@@ -191,3 +191,18 @@ test('sin respuesta asignada → texto de respaldo', () => {
 })
 
 test('"método de pago internacional" → pago (lista las formas de pago)', () => assert.equal(clasificarSimple('Es q la compra podría realizarse con un método de pago internacional'), 'pago'))
+
+// ── Preguntas frecuentes con política fija (17-nov-2026) ──
+const FAQ = {
+  tiempo_entrega: ['Buenos días una pregunta cuánto tarda el envío?', 'En cuanto tiempo llega', 'De quito a guayaquil cuantos días demora en llegar ??', 'Tiempo de entrega', 'Cuanto demora en la elaboración'],
+  horario: ['Horarios de atención?', 'Hoy atienden en la tienda?', 'hasta que hora atienden', 'Atienden domingo?'],
+  retiro_tienda: ['puedo retirar en la tienda?', 'Se puede pagar en el local?', 'quiero retirarla en tienda'],
+  cambio_talla: ['y si no me queda?', 'hacen cambios de talla?', 'se puede cambiar si me queda grande'],
+  colores: ['Qué colores tienen?', 'hay en otros colores?', 'en que colores viene'],
+}
+for (const [i, casos] of Object.entries(FAQ)) {
+  for (const c of casos) test(`(faq) "${c}" → ${i}`, () => assert.equal(clasificarSimple(c), i))
+}
+for (const c of ['Por la compra de 2 hay algún descuento ??', 'Que promociones tienen', 'amigo me podría cambiar la talla a una l', 'Y para cuando estaría xq soy de Guayaquil', 'en negro por favor']) {
+  test(`(faq) "${c}" → null (lo ve Rodrigo)`, () => assert.equal(clasificarSimple(c), null))
+}
