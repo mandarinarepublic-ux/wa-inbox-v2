@@ -25,7 +25,7 @@ import { canalDePhoneId } from '@/lib/canales'
 import { extraer } from '@/lib/wa-mensaje'
 import { extraerEchoes } from '@/lib/echoes'
 import { extraerHistorial, extraerContactosSync } from '@/lib/coexistencia'
-import { ponerNombreSiFaltaSupabase, textoSalioRecienteSupabase, ultimosEntrantesTextoSupabase, guardarSombraIASupabase, mensajesDesdeSupabase } from '@/lib/inbox-supabase'
+import { ponerNombreSiFaltaSupabase, textoSalioRecienteSupabase, ultimosEntrantesTextoSupabase, guardarSombraIASupabase, mensajesDesdeSupabase, direccionAnteriorSupabase } from '@/lib/inbox-supabase'
 import { observarFirmaMeta } from '@/lib/firma-meta'
 import { enviarSaliente, responderConIA, consultarAgente } from '@/lib/responder-ia'
 import { piezasDeRespuestaRapida } from '@/lib/pieza-respuesta'
@@ -288,7 +288,9 @@ async function procesar(nuevos, origin) {
   //   · solo texto escrito (no un botón) que sea SOLO cortesía (esAgradecimiento);
   //   · no si hay un 📌 (alguien le debe algo al cliente) ni con 🤫;
   //   · espera la ráfaga: si escribe algo más ("…y el envío?") NO se cierra, y ese
-  //     otro mensaje ya devolvió el chat a Pendientes.
+  //     otro mensaje ya devolvió el chat a Pendientes;
+  //   · lo anterior al "gracias" tiene que ser NUESTRO: si es una pregunta o una
+  //     foto del cliente, eso sigue sin contestar (Melvin, 17-nov).
   function agradecimientoSiCorresponde(m) {
     if (m.tipo !== 'texto' || m.raw?.type !== 'text') return false
     if (!esAgradecimiento(m.contenido)) return false
@@ -299,6 +301,9 @@ async function procesar(nuevos, origin) {
       const desde = await mensajesDesdeSupabase(m.telefono, m.fecha)
       if (!desde) return // sin poder mirar, lo seguro es dejarlo en Pendientes
       if (desde.entrantes.some(e => e.id !== m.wamid)) return
+      // Solo un "gracias" a una respuesta NUESTRA. Si lo anterior es del cliente
+      // (una pregunta, una foto), ese algo sigue sin contestar: no se cierra.
+      if (await direccionAnteriorSupabase(m.telefono, m.fecha) !== 'SALIENTE') return
       const res = await enviarSaliente(origin, {
         Telefono: m.telefono, Nombre: m.nombre || '', TipoMensaje: 'reaction',
         ReaccionA: m.wamid, Emoji: '❤️', Canal: m.phoneId,
