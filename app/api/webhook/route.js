@@ -20,10 +20,12 @@ import { getAutomatizaciones } from '@/lib/automatizaciones'
 import { enviarPush, avisoDeEntrante } from '@/lib/push'
 import { archivoRechazadoDeEstado } from '@/lib/archivo-rechazado'
 import { decidirIA } from '@/lib/ia-canal'
+import { decidirRespuestaSimple } from '@/lib/respuesta-simple'
+import { canalDePhoneId } from '@/lib/canales'
 import { extraer } from '@/lib/wa-mensaje'
 import { extraerEchoes } from '@/lib/echoes'
 import { extraerHistorial, extraerContactosSync } from '@/lib/coexistencia'
-import { ponerNombreSiFaltaSupabase } from '@/lib/inbox-supabase'
+import { ponerNombreSiFaltaSupabase, textoSalioRecienteSupabase } from '@/lib/inbox-supabase'
 import { observarFirmaMeta } from '@/lib/firma-meta'
 import { enviarSaliente, responderConIA } from '@/lib/responder-ia'
 import { capturarCtwaClid, revisarLeadAutomatico, revisarVentaEnProceso } from '@/lib/capi'
@@ -220,6 +222,30 @@ async function procesar(nuevos, origin) {
         await enviarSaliente(origin, { Telefono: phone, Nombre: name || '', Mensaje: s.texto.trim(), Canal: canal })
       }
     }
+  }
+
+  // ── Respuestas SIMPLES (lib/respuesta-simple.js) ──────────────────────────
+  // Una por cliente por lote (`simples`) y una por intención por cliente cada
+  // `horas_repetir` (mirando la BASE, que ve lo que salió desde otros procesos).
+  const simples = new Set()
+  async function respuestaSimpleSiCorresponde(m) {
+    const cfg = auto?.respuesta_simple
+    if (!cfg?.activo) return
+    const t = tail9(m.telefono)
+    if (simples.has(t)) return
+    const d = decidirRespuestaSimple({
+      config: cfg,
+      canal: canalDePhoneId(m.phoneId),
+      tipoCrudo: m.raw?.type,
+      texto: m.contenido,
+      iaPrendida: modoIAde(m.telefono, m.phoneId),
+      humanoAtendiendo: humanoAtendiendo(m.telefono),
+    })
+    if (!d) return
+    simples.add(t)
+    if (await textoSalioRecienteSupabase(m.telefono, d.texto, cfg.horas_repetir)) return
+    console.log('[/api/webhook] respuesta simple', d.intencion, m.telefono)
+    await enviarSaliente(origin, { Telefono: m.telefono, Nombre: m.nombre || '', Mensaje: d.texto, Canal: m.phoneId })
   }
 
   // ── Recetas de bienvenida por anuncio ──────────────────────────────────────
@@ -645,6 +671,14 @@ async function procesar(nuevos, origin) {
 
     // Un botón que ya contestó su flujo no se le pasa además a la IA.
     if (porBoton) continue
+
+    // Respuesta SIMPLE (envío, tienda, factura, "??"): solo con la IA apagada, sin
+    // persona en el chat y si ningún flujo/receta contestó ya este mensaje. El chat
+    // se queda en PENDIENTES igual (arriba ya se reabrió): esto adelanta, no cierra.
+    if (!conReceta) {
+      await respuestaSimpleSiCorresponde(m)
+        .catch(e => console.error('[/api/webhook] respuesta simple:', e.message))
+    }
 
     // Auto-respuesta IA (solo si el contacto tiene la IA prendida):
     if (modoIAde(m.telefono, m.phoneId)) {

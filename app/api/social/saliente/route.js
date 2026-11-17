@@ -40,7 +40,7 @@ export async function POST(req) {
     if (!FB_PAGE_TOKEN) {
       return NextResponse.json({ error: 'FB_PAGE_TOKEN no configurado en el servidor' }, { status: 500 })
     }
-    const { sender_id, message, canal, comment_id, tipo, modo, imagen, audio, archivo } = await req.json()
+    const { sender_id, message, canal, comment_id, tipo, modo, imagen, audio, archivo, auto } = await req.json()
     // Cualquier adjunto (foto, audio o PDF) se trata igual en las guardias de abajo.
     const adjunto = imagen || audio || archivo
     if (!sender_id || (!message && !adjunto)) {
@@ -194,7 +194,10 @@ export async function POST(req) {
         media_url: imagen || '',
         msg_id: r.data.message_id || r.data.id || '',
         comment_id: esComentario ? String(comment_id) : '',
-        estado: 'atendido', // vocabulario de WhatsApp en minúsculas (normalizarEstado lo exige)
+        // vocabulario de WhatsApp en minúsculas (normalizarEstado lo exige).
+        // Un envío AUTOMÁTICO (respuesta simple) no decide la bandeja (null): el
+        // chat sigue en Pendientes hasta que una persona lo vea.
+        estado: auto ? null : 'atendido',
       })
     } catch (e) {
       console.error('[/api/social/saliente] no se pudo registrar en Supabase:', e.message)

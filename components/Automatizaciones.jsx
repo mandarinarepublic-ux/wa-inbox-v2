@@ -4,6 +4,17 @@ import { getAutomatizaciones, saveAutomatizaciones, getAnuncios, patchAnuncio, g
 import AnuncioResumen from '@/components/flujos/AnuncioResumen'
 import { elegirFlujo } from '@/lib/flujo'
 import { CANALES } from '@/lib/canales'
+import { INTENCIONES, TEXTOS_DEFAULT } from '@/lib/respuesta-simple'
+
+const ETIQUETA_SIMPLE = {
+  espera: '⏳ "??" (el cliente está esperando)',
+  contra_entrega: '💵 ¿Hacen contra entrega?',
+  internacional: '🌎 ¿Envían a otro país?',
+  envio: '🚚 ¿Cuánto cuesta el envío? / ¿Hacen envíos?',
+  ubicacion: '📍 ¿Dónde están? / ¿Tienen local?',
+  factura: '🧾 ¿Dan factura?',
+  interes: '🛍️ Comentario "precio" / "info" / "lo quiero" (solo IG/FB)',
+}
 
 // ── Pestaña AUTOMATIZACIONES ──────────────────────────────────────────────────
 // Reglas del inbox que se prenden/apagan. Hoy: dos saludos automáticos. Pensada
@@ -112,6 +123,18 @@ export default function Automatizaciones({ active }) {
   const togBloque = (bloque, valor) => guardarInterruptor(
     { [bloque]: { activo: valor } },
     prev => ({ ...prev, [bloque]: { ...(prev?.[bloque] || {}), activo: valor } }))
+
+  // 💬 Respuestas simples. Los sub-objetos (canales, intenciones) van COMPLETOS:
+  // el merge del servidor es de un nivel y uno parcial borraría a sus hermanos.
+  const rs = config?.respuesta_simple || {}
+  const togSimpleSub = (campo, clave, valor) => {
+    const sub = { ...(rs[campo] || {}), [clave]: valor }
+    return guardarInterruptor(
+      { respuesta_simple: { [campo]: sub } },
+      prev => ({ ...prev, respuesta_simple: { ...(prev?.respuesta_simple || {}), [campo]: sub } }))
+  }
+  const setTextoSimple = (intencion, texto) =>
+    setBloque('respuesta_simple', 'textos', { ...(rs.textos || {}), [intencion]: texto })
 
   // 🔄 Reactivación (port desde IND). El interruptor manda el bloque COMPLETO: el
   // merge del servidor es de un nivel y un patch con solo {activo} borraría horas y textos.
@@ -231,6 +254,59 @@ export default function Automatizaciones({ active }) {
               )
             })}
           </div>
+
+          {/* ── 💬 RESPUESTAS SIMPLES (lib/respuesta-simple.js) ── */}
+          <Card>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: rs.activo ? 14 : 0 }}>
+              <div style={{ fontSize: 26 }}>💬</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 15, fontWeight: 800, color: '#e2e8f0' }}>Respuestas simples</div>
+                <div style={{ fontSize: 12, color: '#64748b', marginTop: 3 }}>
+                  Contesta sola las preguntas de respuesta fija (envío, tienda, factura, contra entrega, "??").
+                  Solo con la IA apagada y si nadie está escribiendo en ese chat. El chat se queda en
+                  Pendientes. Máximo una vez por tema por cliente cada {rs.horas_repetir ?? 24} h.
+                </div>
+              </div>
+              <Switch on={!!rs.activo} onClick={() => togBloque('respuesta_simple', !rs.activo)} />
+            </div>
+            {rs.activo && (<>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+                {CANALES.map(c => {
+                  const on = rs.canales?.[c.id] !== false
+                  return (
+                    <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 10, border: '1px solid #1e2d3d' }}>
+                      <span style={{ fontSize: 12, color: '#94a3b8' }}>{c.etiqueta}</span>
+                      <Switch on={on} onClick={() => togSimpleSub('canales', c.id, !on)} />
+                    </div>
+                  )
+                })}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '8px 10px', borderRadius: 10, border: '1px solid #1e2d3d', marginBottom: 12 }}>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#e2e8f0' }}>📸 También comentarios de Instagram / Facebook</div>
+                  <div style={{ fontSize: 11, color: '#64748b' }}>Responde en PRIVADO (abre el chat). Nunca publica en el post. Los reclamos no se tocan.</div>
+                </div>
+                <Switch on={!!rs.comentarios_activo} onClick={() => guardarInterruptor(
+                  { respuesta_simple: { comentarios_activo: !rs.comentarios_activo } },
+                  prev => ({ ...prev, respuesta_simple: { ...(prev?.respuesta_simple || {}), comentarios_activo: !rs.comentarios_activo } }))} />
+              </div>
+              {INTENCIONES.map(i => {
+                const on = rs.intenciones?.[i] !== false
+                const texto = rs.textos?.[i] ?? TEXTOS_DEFAULT[i]
+                return (
+                  <div key={i} style={{ marginBottom: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: on ? '#e2e8f0' : '#475569' }}>{ETIQUETA_SIMPLE[i]}</span>
+                      <Switch on={on} onClick={() => togSimpleSub('intenciones', i, !on)} />
+                    </div>
+                    {on && (
+                      <textarea value={texto} onChange={e => setTextoSimple(i, e.target.value)} rows={2} style={inputTxt} />
+                    )}
+                  </div>
+                )
+              })}
+            </>)}
+          </Card>
 
           {/* ── Saludo a contacto NUEVO ── */}
           <Card>
