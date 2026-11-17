@@ -33,7 +33,6 @@ const NO = [
   '*factura*\nJostyn Mera\n1315804334\n0983754077',
   'buenos días, ya sabe que paso con el envío?',
   'que valor tiene', 'talla l', 'hola', 'buenas tardes', '.', '🗿', '',
-  'a cuánto quedaría con tarjeta y se puede diferirlo?',
 ]
 
 for (const [intencion, casos] of Object.entries(SI)) {
@@ -53,7 +52,7 @@ test('apagado por defecto: sin config no sale nada', () => {
 })
 
 test('prendido: devuelve el texto fijo de la intención', () => {
-  assert.deepEqual(decidirRespuestaSimple(base), { intencion: 'factura', texto: TEXTOS_DEFAULT.factura })
+  assert.deepEqual(decidirRespuestaSimple(base), { intencion: 'factura', respuestaId: '', texto: TEXTOS_DEFAULT.factura })
 })
 
 test('un botón tocado (tipo texto, crudo interactive) no dispara', () => {
@@ -103,7 +102,6 @@ const MAS_NO = [
   'Buenas tardes, no me han enviado la factura aun',
   'Puedo pasar mañana por el local y me ayuda con la devolución',
   'Talla M,\nEstán en Quito?\nDonde?',
-  'Es q la compra podría realizarse con un método de pago internacional',
 ]
 for (const [intencion, casos] of Object.entries(MAS_SI)) {
   for (const c of casos) test(`(60d) "${c}" → ${intencion}`, () => assert.equal(clasificarSimple(c), intencion))
@@ -115,8 +113,8 @@ import { clasificarComentario, decidirRespuestaComentario } from '../lib/respues
 
 const COM_SI = {
   interes: ['precio', 'Precio?', 'info', 'Información', 'quiero uno', 'Quiero el mio', 'cuánto', 'me interesa',
-    'precio por favor', 'Hola precio de la chompa de eskeletor', 'valor por favor gracias', 'que tallas tienen',
-    '@mandarinarepublicec hasta q talla tienen disponible'],
+    'precio por favor', 'Hola precio de la chompa de eskeletor', 'valor por favor gracias'],
+  tallas: ['que tallas tienen', '@mandarinarepublicec hasta q talla tienen disponible'],
   internacional: ['¿hacen envíos para venezuela? por favor, digan que si', 'envío a panamá?', 'Envíos a España?', 'hacen envios a venezuela??'],
   envio: ['Hacen envíos a Guayaquil?'],
   ubicacion: ['woooow que bacán , buen día de dónde son???'],
@@ -151,3 +149,45 @@ test('una persona que escribió hace 1 h sigue en el chat; hace 4 h ya no', () =
   assert.equal(personaEnElChat('2026-11-17T16:00:00Z', ahora), true)
   assert.equal(personaEnElChat('2026-11-17T13:00:00Z', ahora), false)
 })
+
+// ── Respuestas rápidas, pago y tallas (17-nov-2026) ──
+import { prendaDe } from '../lib/respuesta-simple.js'
+
+const PAGO_SI = ['¿Aceptan tarjeta?', 'Cómo puedo pagar?', 'formas de pago', 'Me envía los datos de la cuenta',
+  'A donde realizo el deposito', 'a cuánto quedaría con tarjeta y se puede diferirlo?', 'Aceptan transferencia?']
+for (const c of PAGO_SI) test(`"${c}" → pago`, () => assert.equal(clasificarSimple(c), 'pago'))
+for (const c of ['Ya le transferí', 'ya le deposité', 'Le envío el comprobante']) {
+  test(`"${c}" → null (posventa)`, () => assert.equal(clasificarSimple(c), null))
+}
+
+const TALLAS_SI = ['Qué tallas tienen?', 'que tallas manejan', 'tienen talla XL?', 'Hay tallas para niños también??', 'me pasas la guía de tallas']
+for (const c of TALLAS_SI) test(`"${c}" → tallas`, () => assert.equal(clasificarSimple(c), 'tallas'))
+for (const c of ['talla L', 'En talla M', 'ambas en talla m', 'Envíamelo en XL']) {
+  test(`"${c}" → null (el cliente DICE su talla)`, () => assert.equal(clasificarSimple(c), null))
+}
+
+test('prenda: la más reciente gana; "chompa" no decide', () => {
+  assert.equal(prendaDe(['Qué tallas tienen?', 'me gusta la chaqueta de Goku', 'y el hoodie?']), 'chaqueta')
+  assert.equal(prendaDe(['qué tallas?', 'Hoodie Minecraft']), 'hoodie')
+  assert.equal(prendaDe(['qué tallas?', 'En la chompa de Batman']), null)
+  assert.equal(prendaDe(['la camiseta de spiderman']), 'camiseta')
+})
+
+const cfgR = { activo: true, respuestas: { pago: 'R-PAGO', tallas: 'R-TALLAS', tallas_hoodie: 'R-HOODIE' } }
+test('usa la respuesta rápida asignada al tema', () => {
+  const d = decidirRespuestaSimple({ ...base, config: cfgR, texto: '¿aceptan tarjeta?' })
+  assert.equal(d.respuestaId, 'R-PAGO')
+})
+test('tallas: guía de la prenda; sin prenda (o sin guía de esa prenda) la general', () => {
+  const t = { ...base, config: cfgR, texto: 'qué tallas tienen?' }
+  assert.equal(decidirRespuestaSimple({ ...t, prenda: 'hoodie' }).respuestaId, 'R-HOODIE')
+  assert.equal(decidirRespuestaSimple({ ...t, prenda: null }).respuestaId, 'R-TALLAS')
+  assert.equal(decidirRespuestaSimple({ ...t, prenda: 'chaqueta' }).respuestaId, 'R-TALLAS')
+})
+test('sin respuesta asignada → texto de respaldo', () => {
+  const d = decidirRespuestaSimple({ ...base, config: { activo: true }, texto: 'formas de pago' })
+  assert.equal(d.respuestaId, '')
+  assert.equal(d.texto, TEXTOS_DEFAULT.pago)
+})
+
+test('"método de pago internacional" → pago (lista las formas de pago)', () => assert.equal(clasificarSimple('Es q la compra podría realizarse con un método de pago internacional'), 'pago'))

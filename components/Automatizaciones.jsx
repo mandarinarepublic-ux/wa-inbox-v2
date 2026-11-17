@@ -1,18 +1,27 @@
 'use client'
 import React, { useState, useEffect, useCallback } from 'react'
-import { getAutomatizaciones, saveAutomatizaciones, getAnuncios, patchAnuncio, getFlujos } from '@/lib/api-client'
+import { getAutomatizaciones, saveAutomatizaciones, getAnuncios, patchAnuncio, getFlujos, fetchRepliesFromSheet } from '@/lib/api-client'
 import AnuncioResumen from '@/components/flujos/AnuncioResumen'
 import { elegirFlujo } from '@/lib/flujo'
 import { CANALES } from '@/lib/canales'
 import { INTENCIONES, TEXTOS_DEFAULT } from '@/lib/respuesta-simple'
 
+// Tallas: una guía por prenda. La prenda sale de lo que el cliente viene hablando.
+const TALLAS_PRENDA = [
+  ['tallas_hoodie', '📐 Tallas · hoodie / buzo'],
+  ['tallas_chaqueta', '📐 Tallas · chaqueta'],
+  ['tallas_camiseta', '📐 Tallas · camiseta'],
+]
+
 const ETIQUETA_SIMPLE = {
   espera: '⏳ "??" (el cliente está esperando)',
   contra_entrega: '💵 ¿Hacen contra entrega?',
   internacional: '🌎 ¿Envían a otro país?',
+  pago: '💳 ¿Cómo pago? / ¿Aceptan tarjeta?',
   envio: '🚚 ¿Cuánto cuesta el envío? / ¿Hacen envíos?',
   ubicacion: '📍 ¿Dónde están? / ¿Tienen local?',
   factura: '🧾 ¿Dan factura?',
+  tallas: '📐 ¿Qué tallas tienen? (sin prenda clara)',
   interes: '🛍️ Comentario "precio" / "info" / "lo quiero" (solo IG/FB)',
 }
 
@@ -54,9 +63,11 @@ export default function Automatizaciones({ active }) {
   const [toast,   setToast]   = useState(null)
   const [anuncios,   setAnuncios]   = useState([])
   const [flujos,     setFlujos]     = useState([])
+  const [rapidas,    setRapidas]    = useState([])
 
   const cargar = useCallback(async () => {
     setLoading(true)
+    fetchRepliesFromSheet().then(x => setRapidas(Array.isArray(x) ? x : [])).catch(() => {})
     const [r, a, f] = await Promise.all([
       getAutomatizaciones(),
       getAnuncios().catch(() => null),
@@ -133,8 +144,20 @@ export default function Automatizaciones({ active }) {
       { respuesta_simple: { [campo]: sub } },
       prev => ({ ...prev, respuesta_simple: { ...(prev?.respuesta_simple || {}), [campo]: sub } }))
   }
-  const setTextoSimple = (intencion, texto) =>
-    setBloque('respuesta_simple', 'textos', { ...(rs.textos || {}), [intencion]: texto })
+  // La respuesta RÁPIDA de cada tema se guarda al elegirla (como un interruptor):
+  // el mapa va COMPLETO porque el merge del servidor es de un nivel.
+  const setRapidaSimple = (clave, id) => togSimpleSub('respuestas', clave, id)
+  const etiquetaRapida = (r) => {
+    const t = String(r?.text || '').replace(/\s+/g, ' ').trim()
+    return (t.length > 70 ? t.slice(0, 70) + '…' : t) || `(solo adjuntos) ${r?.id}`
+  }
+  const selectRapida = (clave) => (
+    <select value={rs.respuestas?.[clave] || ''} onChange={e => setRapidaSimple(clave, e.target.value)}
+      style={{ width: '100%', background: '#080d14', border: '1px solid #1e2d3d', borderRadius: 8, color: '#e2e8f0', fontSize: 12, padding: '7px 8px', fontFamily: 'Outfit,sans-serif', outline: 'none' }}>
+      <option value="">— Sin respuesta rápida (usa el texto de respaldo) —</option>
+      {rapidas.map(r => <option key={r.id} value={String(r.id)}>{etiquetaRapida(r)}</option>)}
+    </select>
+  )
 
   // 🔄 Reactivación (port desde IND). El interruptor manda el bloque COMPLETO: el
   // merge del servidor es de un nivel y un patch con solo {activo} borraría horas y textos.
@@ -262,7 +285,7 @@ export default function Automatizaciones({ active }) {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 15, fontWeight: 800, color: '#e2e8f0' }}>Respuestas simples</div>
                 <div style={{ fontSize: 12, color: '#64748b', marginTop: 3 }}>
-                  Contesta sola las preguntas de respuesta fija (envío, tienda, factura, contra entrega, "??").
+                  Contesta sola, con TUS respuestas rápidas, las preguntas de respuesta fija (envío, pago, tallas, tienda, factura, contra entrega, "??").
                   Solo con la IA apagada y si nadie está escribiendo en ese chat. El chat se queda en
                   Pendientes. Máximo una vez por tema por cliente cada {rs.horas_repetir ?? 24} h.
                 </div>
@@ -299,9 +322,18 @@ export default function Automatizaciones({ active }) {
                       <span style={{ fontSize: 12, fontWeight: 700, color: on ? '#e2e8f0' : '#475569' }}>{ETIQUETA_SIMPLE[i]}</span>
                       <Switch on={on} onClick={() => togSimpleSub('intenciones', i, !on)} />
                     </div>
-                    {on && (
-                      <textarea value={texto} onChange={e => setTextoSimple(i, e.target.value)} rows={2} style={inputTxt} />
-                    )}
+                    {on && (<>
+                      {selectRapida(i)}
+                      {i === 'tallas' && TALLAS_PRENDA.map(([clave, etq]) => (
+                        <div key={clave} style={{ marginTop: 6 }}>
+                          <div style={{ fontSize: 11, color: '#94a3b8', margin: '4px 0' }}>{etq}</div>
+                          {selectRapida(clave)}
+                        </div>
+                      ))}
+                      {!rs.respuestas?.[i] && (
+                        <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>Respaldo: {texto}</div>
+                      )}
+                    </>)}
                   </div>
                 )
               })}

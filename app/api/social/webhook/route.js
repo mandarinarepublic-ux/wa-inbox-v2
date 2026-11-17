@@ -4,6 +4,7 @@ import { waitUntil } from '@vercel/functions'
 import { guardarSocialMensajeSupabase, getTokenPagina, getFbPageId, socialTextoRecienteSupabase } from '@/lib/social-supabase'
 import { getAutomatizaciones } from '@/lib/automatizaciones'
 import { decidirRespuestaComentario } from '@/lib/respuesta-simple'
+import { getRespuestas } from '@/lib/respuestas'
 import { enviarSocialAuto } from '@/lib/responder-ia'
 import { resolverNombreSocial } from '@/lib/social-nombre'
 import { guardarEventoCrudoSupabase } from '@/lib/inbox-supabase'
@@ -237,10 +238,18 @@ async function comentarioSimpleSiCorresponde(ev, cfg, origin, contestados) {
   })
   if (!d) return
   contestados.add(ev.sender_id)
-  if (await socialTextoRecienteSupabase(ev.sender_id, d.texto, cfg?.horas_repetir)) return
+  // El TEXTO de la respuesta rápida asignada (una respuesta privada a un comentario
+  // es un solo mensaje: sin fotos ni botones). Sin asignar → texto de respaldo.
+  let texto = d.texto
+  if (d.respuestaId) {
+    const r = (await getRespuestas().catch(() => [])).find(x => String(x.id) === d.respuestaId)
+    if (String(r?.text || '').trim()) texto = r.text.trim()
+  }
+  if (!texto) return
+  if (await socialTextoRecienteSupabase(ev.sender_id, texto, cfg?.horas_repetir)) return
   console.log('[social webhook] respuesta simple', d.intencion, ev.canal, ev.comment_id)
   await enviarSocialAuto(origin, {
-    sender_id: ev.sender_id, canal: ev.canal, tipo: 'COMENTARIO', comment_id: ev.comment_id, message: d.texto,
+    sender_id: ev.sender_id, canal: ev.canal, tipo: 'COMENTARIO', comment_id: ev.comment_id, message: texto,
   })
 }
 

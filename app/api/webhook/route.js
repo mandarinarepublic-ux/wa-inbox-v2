@@ -20,12 +20,12 @@ import { getAutomatizaciones } from '@/lib/automatizaciones'
 import { enviarPush, avisoDeEntrante } from '@/lib/push'
 import { archivoRechazadoDeEstado } from '@/lib/archivo-rechazado'
 import { decidirIA } from '@/lib/ia-canal'
-import { decidirRespuestaSimple, personaEnElChat } from '@/lib/respuesta-simple'
+import { decidirRespuestaSimple, personaEnElChat, prendaDe } from '@/lib/respuesta-simple'
 import { canalDePhoneId } from '@/lib/canales'
 import { extraer } from '@/lib/wa-mensaje'
 import { extraerEchoes } from '@/lib/echoes'
 import { extraerHistorial, extraerContactosSync } from '@/lib/coexistencia'
-import { ponerNombreSiFaltaSupabase, textoSalioRecienteSupabase } from '@/lib/inbox-supabase'
+import { ponerNombreSiFaltaSupabase, textoSalioRecienteSupabase, ultimosEntrantesTextoSupabase } from '@/lib/inbox-supabase'
 import { observarFirmaMeta } from '@/lib/firma-meta'
 import { enviarSaliente, responderConIA } from '@/lib/responder-ia'
 import { capturarCtwaClid, revisarLeadAutomatico, revisarVentaEnProceso } from '@/lib/capi'
@@ -233,7 +233,7 @@ async function procesar(nuevos, origin) {
     if (!cfg?.activo) return
     const t = tail9(m.telefono)
     if (simples.has(t)) return
-    const d = decidirRespuestaSimple({
+    const base = {
       config: cfg,
       canal: canalDePhoneId(m.phoneId),
       tipoCrudo: m.raw?.type,
@@ -243,12 +243,39 @@ async function procesar(nuevos, origin) {
       // humanoAtendiendo(): ese mira el último saliente de CUALQUIER tipo y el
       // saludo automático lo prende (ver personaEnElChat).
       humanoAtendiendo: personaEnElChat(contactos.find(c => tail9(c.telefono) === t)?.ultimoHumanoAt),
-    })
+    }
+    let d = decidirRespuestaSimple(base)
     if (!d) return
+    // Tallas: la guía de la prenda de la que se está hablando (este mensaje o los
+    // anteriores del cliente: "la chaqueta de Goku" … "¿qué tallas tienen?").
+    if (d.intencion === 'tallas') {
+      const previos = await ultimosEntrantesTextoSupabase(m.telefono).catch(() => [])
+      d = decidirRespuestaSimple({ ...base, prenda: prendaDe([m.contenido, ...previos]) }) || d
+    }
     simples.add(t)
-    if (await textoSalioRecienteSupabase(m.telefono, d.texto, cfg.horas_repetir)) return
-    console.log('[/api/webhook] respuesta simple', d.intencion, m.telefono)
-    await enviarSaliente(origin, { Telefono: m.telefono, Nombre: m.nombre || '', Mensaje: d.texto, Canal: m.phoneId })
+
+    // La RESPUESTA RÁPIDA asignada, tal cual se manda a mano: texto (con sus
+    // botones) y después sus fotos/audios. Sin asignar o borrada → texto de respaldo.
+    const contacto = { telefono: m.telefono, nombre: m.nombre, alias: contactos.find(c => tail9(c.telefono) === t)?.alias || '', phoneId: m.phoneId }
+    const r = d.respuestaId ? (await respuestasRapidas()).find(x => String(x.id) === d.respuestaId) : null
+    if (d.respuestaId && !r) console.warn('[/api/webhook] respuesta simple: la respuesta rápida asignada no existe', d.intencion, d.respuestaId)
+    const piezas = r
+      ? piezasDeReceta({ receta: { pasos: [{ tipo: 'respuesta', respuestaId: r.id }] }, respuestas: [r], contacto, citaId: m.wamid })
+      : (d.texto ? [{ Telefono: m.telefono, Nombre: m.nombre || '', Mensaje: d.texto, Canal: m.phoneId, ContextoId: m.wamid }] : [])
+    if (!piezas.length) return
+
+    // Una vez por tema por cliente: se mira si ese texto ya le salió (base, no memoria).
+    const huella = String(r?.text || d.texto || '').trim()
+    if (huella && await textoSalioRecienteSupabase(m.telefono, huella, cfg.horas_repetir)) return
+    console.log('[/api/webhook] respuesta simple', d.intencion, r ? `rápida ${r.id}` : 'texto', `${piezas.length} piezas`, m.telefono)
+    // Desenganchado del loop (como las recetas): las fotos tardan y el lote
+    // todavía tiene que guardar los demás mensajes.
+    waitUntil((async () => {
+      for (const p of piezas) {
+        const res = await enviarSaliente(origin, p)
+        if (!res?.ok) console.error('[/api/webhook] respuesta simple: pieza rechazada', res?.status ?? 'red', m.telefono)
+      }
+    })())
   }
 
   // ── Recetas de bienvenida por anuncio ──────────────────────────────────────
