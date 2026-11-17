@@ -142,8 +142,12 @@ function FilaChips({ chips }) {
     </div>
   )
 }
-export function ContactRow({ conv, isActive, onClick, search = '', estado, modoIA, chips = [], msgSnippet = null, colorCanal = '', etiquetaCanal = '' }) {
+export function ContactRow({ conv, isActive, onClick, search = '', estado, modoIA, iaPrendida = false, chips = [], msgSnippet = null, colorCanal = '', etiquetaCanal = '' }) {
   const [hovered, setHovered] = useState(false)
+  // 🤖 Pendiente con la IA PRENDIDA → toda la fila en ámbar (el color de la pastilla
+  // IA), para ver de un vistazo qué chats está contestando la IA (pedido de Rodrigo,
+  // 17-nov-2026). `iaPrendida` es estricto: sin contacto cargado no se pinta.
+  const resaltarIA = iaPrendida && estado === 'pendiente' && !isActive
   const searching = String(search || '').trim().length > 0
   const info = ESTADO_INFO[estado] || null
   // ── DE QUÉ ANUNCIO VINO ────────────────────────────────────────
@@ -174,9 +178,12 @@ export function ContactRow({ conv, isActive, onClick, search = '', estado, modoI
           padding: '13px 16px', cursor: 'pointer', transition: 'all .12s',
           background: isActive
             ? 'rgba(37,211,102,.08)'
-            : hovered ? 'rgba(255,255,255,.02)' : 'transparent',
-          borderLeft: isActive ? '3px solid #25d366' : '3px solid transparent',
+            : resaltarIA
+              ? (hovered ? 'rgba(245,158,11,.16)' : 'rgba(245,158,11,.10)')
+              : hovered ? 'rgba(255,255,255,.02)' : 'transparent',
+          borderLeft: isActive ? '3px solid #25d366' : resaltarIA ? '3px solid #f59e0b' : '3px solid transparent',
         }}
+        title={resaltarIA ? '🤖 Pendiente con la IA prendida' : undefined}
       >
         <Avatar name={conv.nombre} phone={conv.telefono} size={46} />
         <div style={{ flex: 1, minWidth: 0 }}>

@@ -2718,6 +2718,13 @@ export default function App() {
     if (local && local.expiresAt > now) return local.modoIA
     return contacts[tel]?.modoIA !== false // default true
   }
+  // Para PINTAR la fila en ámbar: solo cuando SABEMOS que la IA está prendida.
+  // getModoIA da true por defecto (contacto sin cargar) y eso pintaría chats de más.
+  const iaPrendidaDe = (tel) => {
+    const local = localIARef.current[tel]
+    if (local && local.expiresAt > Date.now()) return local.modoIA === true
+    return contacts[tel]?.modoIA === true
+  }
 
   const handleToggleIA = async () => {
     if (!activeConv || togglingIA) return
@@ -3123,6 +3130,7 @@ export default function App() {
                   search={search}
                   estado={estadoFila(conv)}
                   modoIA={getModoIA(conv.telefono)}
+                  iaPrendida={iaPrendidaDe(conv.telefono)}
                   chips={[...chipsDeChat(datosGestion(conv), ahora), ...chipsEtiquetas(conv.telefono)]}
                   msgSnippet={searchingMsgs ? matchSnippet(conv) : searchingPedido ? snippetPedido(conv) : null}
                   // El color y la etiqueta salen del canal DE LA FILA, que ahora
