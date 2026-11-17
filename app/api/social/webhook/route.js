@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { waitUntil } from '@vercel/functions'
-import { guardarSocialMensajeSupabase, getTokenPagina, getFbPageId } from '@/lib/social-supabase'
+import { guardarSocialMensajeSupabase, getTokenPagina, getFbPageId, socialTextoRecienteSupabase } from '@/lib/social-supabase'
+import { getAutomatizaciones } from '@/lib/automatizaciones'
+import { decidirRespuestaComentario } from '@/lib/respuesta-simple'
+import { enviarSocialAuto } from '@/lib/responder-ia'
 import { resolverNombreSocial } from '@/lib/social-nombre'
 import { guardarEventoCrudoSupabase } from '@/lib/inbox-supabase'
 import { usaSupabaseLectura } from '@/lib/supabase'
@@ -200,8 +203,12 @@ async function resolverNombre(id, canal, token) {
 }
 
 // ── Guardado en segundo plano ─────────────────────────────────────────────────
-async function procesar(eventos) {
+async function procesar(eventos, origin) {
   const token = await getTokenPagina().catch(() => '')
+  // Config solo si hay algún comentario entrante: los DM no la necesitan.
+  const hayComentario = eventos.some(e => e.tipo === 'COMENTARIO' && e.direccion === 'ENTRANTE')
+  const auto = hayComentario ? await getAutomatizaciones().catch(() => null) : null
+  const contestados = new Set() // uno por persona por lote
   for (const ev of eventos) {
     try {
       // Los comentarios ya traen el nombre en el payload; los DM no.
@@ -211,8 +218,30 @@ async function procesar(eventos) {
       await guardarSocialMensajeSupabase(ev)
     } catch (e) {
       console.error('[social webhook] no se pudo guardar:', e.message, ev.canal, ev.msg_id)
+      continue // sin guardar no se contesta: la persona no vería a qué se respondió
+    }
+    if (ev.tipo === 'COMENTARIO' && ev.direccion === 'ENTRANTE') {
+      await comentarioSimpleSiCorresponde(ev, auto?.respuesta_simple, origin, contestados)
+        .catch(e => console.error('[social webhook] respuesta simple:', e.message))
     }
   }
+}
+
+// Respuesta PRIVADA automática a un comentario simple ("precio", "info", "¿envían a
+// Venezuela?"). Abre el chat con la persona; nunca publica nada en el post.
+// Ver lib/respuesta-simple.js (decidirRespuestaComentario).
+async function comentarioSimpleSiCorresponde(ev, cfg, origin, contestados) {
+  if (!ev.comment_id || contestados.has(ev.sender_id)) return
+  const d = decidirRespuestaComentario({
+    config: cfg, texto: ev.texto, esNuevo: String(ev.raw?.verb || 'add') === 'add',
+  })
+  if (!d) return
+  contestados.add(ev.sender_id)
+  if (await socialTextoRecienteSupabase(ev.sender_id, d.texto, cfg?.horas_repetir)) return
+  console.log('[social webhook] respuesta simple', d.intencion, ev.canal, ev.comment_id)
+  await enviarSocialAuto(origin, {
+    sender_id: ev.sender_id, canal: ev.canal, tipo: 'COMENTARIO', comment_id: ev.comment_id, message: d.texto,
+  })
 }
 
 // ── Recepción (POST) ──────────────────────────────────────────────────────────
@@ -266,7 +295,10 @@ export async function POST(req) {
       }
     }
 
-    if (eventos.length) waitUntil(procesar(eventos))
+    // Meta llama a este webhook por el dominio PÚBLICO, así que el origen de la
+    // petición sirve para llamar a /api/social/saliente (la trampa #10 de los
+    // crons, que reciben la dirección interna protegida, no aplica acá).
+    if (eventos.length) waitUntil(procesar(eventos, new URL(req.url).origin))
     return NextResponse.json({ ok: true, eventos: eventos.length })
   } catch (err) {
     console.error('[/api/social/webhook]', err)
