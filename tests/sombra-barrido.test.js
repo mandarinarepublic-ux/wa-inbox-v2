@@ -14,9 +14,8 @@ test('toma textos que piden algo y salta gracias, fotos y audios', () => {
     fila('e', 'texto', 'Produbanco', '2026-11-17T04:48:00Z'),
     fila('f', 'texto', 'Muchas gracias', '2026-11-17T03:00:00Z'),
   ])
-  // "Gracias y buen día" SÍ va: el filtro de cortesía (lib/ia-ahorro.js) solo salta
-  // agradecimientos sueltos, y el barrido decide igual que el webhook.
-  assert.deepEqual(r.map(x => x.wamid), ['a', 'b', 'e'])
+  // "Gracias y buen día" es una despedida (esAgradecimiento): no gasta tokens.
+  assert.deepEqual(r.map(x => x.wamid), ['a', 'e'])
 })
 
 test('no repite lo ya revisado con éxito, del más nuevo al más viejo, con tope', () => {

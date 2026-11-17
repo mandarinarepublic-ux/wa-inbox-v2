@@ -29,7 +29,7 @@ import { ponerNombreSiFaltaSupabase, textoSalioRecienteSupabase, ultimosEntrante
 import { observarFirmaMeta } from '@/lib/firma-meta'
 import { enviarSaliente, responderConIA, consultarAgente } from '@/lib/responder-ia'
 import { piezasDeRespuestaRapida } from '@/lib/pieza-respuesta'
-import { ESPERA_RAFAGA_MS, esMensajeSinPedido, esElUltimo } from '@/lib/ia-ahorro'
+import { ESPERA_RAFAGA_MS, esMensajeSinPedido, esElUltimo, esAgradecimiento } from '@/lib/ia-ahorro'
 import { capturarCtwaClid, revisarLeadAutomatico, revisarVentaEnProceso } from '@/lib/capi'
 
 export const dynamic = 'force-dynamic'
@@ -278,6 +278,35 @@ async function procesar(nuevos, origin) {
         if (!res?.ok) console.error('[/api/webhook] respuesta simple: pieza rechazada', res?.status ?? 'red', m.telefono)
       }
     })())
+    return true
+  }
+
+  // ── ❤️ AGRADECIMIENTO / DESPEDIDA → reacción + ATENDIDO (17-nov-2026) ──────
+  // Regla de Rodrigo: a un "gracias y buen día" se le reacciona con ❤️ y el chat
+  // pasa a Atendido; no gasta IA ni respuesta simple. Es la ÚNICA excepción a
+  // "ningún automatismo saca un chat de Pendientes", y por eso es estrecha:
+  //   · solo texto escrito (no un botón) que sea SOLO cortesía (esAgradecimiento);
+  //   · no si hay un 📌 (alguien le debe algo al cliente) ni con 🤫;
+  //   · espera la ráfaga: si escribe algo más ("…y el envío?") NO se cierra, y ese
+  //     otro mensaje ya devolvió el chat a Pendientes.
+  function agradecimientoSiCorresponde(m) {
+    if (m.tipo !== 'texto' || m.raw?.type !== 'text') return false
+    if (!esAgradecimiento(m.contenido)) return false
+    const c = contactos.find(x => tail9(x.telefono) === tail9(m.telefono))
+    if (c?.sinAutomaticos || c?.deudaAt) return false
+    waitUntil((async () => {
+      await new Promise(r => setTimeout(r, ESPERA_RAFAGA_MS))
+      const desde = await mensajesDesdeSupabase(m.telefono, m.fecha)
+      if (!desde) return // sin poder mirar, lo seguro es dejarlo en Pendientes
+      if (desde.entrantes.some(e => e.id !== m.wamid)) return
+      const res = await enviarSaliente(origin, {
+        Telefono: m.telefono, Nombre: m.nombre || '', TipoMensaje: 'reaction',
+        ReaccionA: m.wamid, Emoji: '❤️', Canal: m.phoneId,
+      })
+      if (!res?.ok) console.error('[/api/webhook] ❤️ agradecimiento: reacción rechazada', res?.status ?? 'red', m.telefono)
+      await updateEstado(m.telefono, 'ATENDIDO', m.phoneId)
+      console.log('[/api/webhook] ❤️ agradecimiento → ATENDIDO', m.telefono)
+    })().catch(e => console.error('[/api/webhook] ❤️ agradecimiento:', e.message)))
     return true
   }
 
@@ -741,6 +770,9 @@ async function procesar(nuevos, origin) {
 
     // Un botón que ya contestó su flujo no se le pasa además a la IA.
     if (porBoton) continue
+
+    // "Gracias y buen día" → ❤️ y a Atendido. Ni respuesta simple ni IA.
+    if (!conReceta && agradecimientoSiCorresponde(m)) continue
 
     // Respuesta SIMPLE (envío, tienda, factura, "??"): solo con la IA apagada, sin
     // persona en el chat y si ningún flujo/receta contestó ya este mensaje. El chat
