@@ -20,7 +20,7 @@ import { getAutomatizaciones } from '@/lib/automatizaciones'
 import { enviarPush, avisoDeEntrante } from '@/lib/push'
 import { archivoRechazadoDeEstado } from '@/lib/archivo-rechazado'
 import { decidirIA } from '@/lib/ia-canal'
-import { decidirRespuestaSimple } from '@/lib/respuesta-simple'
+import { decidirRespuestaSimple, personaEnElChat } from '@/lib/respuesta-simple'
 import { canalDePhoneId } from '@/lib/canales'
 import { extraer } from '@/lib/wa-mensaje'
 import { extraerEchoes } from '@/lib/echoes'
@@ -239,7 +239,10 @@ async function procesar(nuevos, origin) {
       tipoCrudo: m.raw?.type,
       texto: m.contenido,
       iaPrendida: modoIAde(m.telefono, m.phoneId),
-      humanoAtendiendo: humanoAtendiendo(m.telefono),
+      // Persona = alguien escribió desde el inbox (ultimo_humano_at). NO
+      // humanoAtendiendo(): ese mira el último saliente de CUALQUIER tipo y el
+      // saludo automático lo prende (ver personaEnElChat).
+      humanoAtendiendo: personaEnElChat(contactos.find(c => tail9(c.telefono) === t)?.ultimoHumanoAt),
     })
     if (!d) return
     simples.add(t)

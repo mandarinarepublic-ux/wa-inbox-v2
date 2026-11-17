@@ -140,3 +140,14 @@ test('comentarios: apagados aunque WhatsApp esté prendido', () => {
 test('comentario editado no se contesta otra vez', () => {
   assert.equal(decidirRespuestaComentario({ config: { activo: true, comentarios_activo: true }, texto: 'precio', esNuevo: false }), null)
 })
+
+import { personaEnElChat } from '../lib/respuesta-simple.js'
+test('el saludo automático NO cuenta como persona: sin ultimo_humano_at no hay nadie', () => {
+  assert.equal(personaEnElChat(null), false)
+  assert.equal(personaEnElChat(undefined), false)
+})
+test('una persona que escribió hace 1 h sigue en el chat; hace 4 h ya no', () => {
+  const ahora = Date.parse('2026-11-17T17:00:00Z')
+  assert.equal(personaEnElChat('2026-11-17T16:00:00Z', ahora), true)
+  assert.equal(personaEnElChat('2026-11-17T13:00:00Z', ahora), false)
+})
