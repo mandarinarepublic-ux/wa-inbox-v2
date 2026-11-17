@@ -25,10 +25,11 @@ import { canalDePhoneId } from '@/lib/canales'
 import { extraer } from '@/lib/wa-mensaje'
 import { extraerEchoes } from '@/lib/echoes'
 import { extraerHistorial, extraerContactosSync } from '@/lib/coexistencia'
-import { ponerNombreSiFaltaSupabase, textoSalioRecienteSupabase, ultimosEntrantesTextoSupabase, guardarSombraIASupabase } from '@/lib/inbox-supabase'
+import { ponerNombreSiFaltaSupabase, textoSalioRecienteSupabase, ultimosEntrantesTextoSupabase, guardarSombraIASupabase, mensajesDesdeSupabase } from '@/lib/inbox-supabase'
 import { observarFirmaMeta } from '@/lib/firma-meta'
 import { enviarSaliente, responderConIA, consultarAgente } from '@/lib/responder-ia'
 import { piezasDeRespuestaRapida } from '@/lib/pieza-respuesta'
+import { ESPERA_RAFAGA_MS, esMensajeSinPedido, esElUltimo } from '@/lib/ia-ahorro'
 import { capturarCtwaClid, revisarLeadAutomatico, revisarVentaEnProceso } from '@/lib/capi'
 
 export const dynamic = 'force-dynamic'
@@ -231,9 +232,9 @@ async function procesar(nuevos, origin) {
   const simples = new Set()
   async function respuestaSimpleSiCorresponde(m) {
     const cfg = auto?.respuesta_simple
-    if (!cfg?.activo) return
+    if (!cfg?.activo) return false
     const t = tail9(m.telefono)
-    if (simples.has(t)) return
+    if (simples.has(t)) return false
     const base = {
       config: cfg,
       canal: canalDePhoneId(m.phoneId),
@@ -246,7 +247,7 @@ async function procesar(nuevos, origin) {
       humanoAtendiendo: personaEnElChat(contactos.find(c => tail9(c.telefono) === t)?.ultimoHumanoAt),
     }
     let d = decidirRespuestaSimple(base)
-    if (!d) return
+    if (!d) return false
     // Tallas: la guía de la prenda de la que se está hablando (este mensaje o los
     // anteriores del cliente: "la chaqueta de Goku" … "¿qué tallas tienen?").
     if (d.intencion === 'tallas') {
@@ -263,11 +264,11 @@ async function procesar(nuevos, origin) {
     const piezas = r
       ? piezasDeRespuestaRapida(r, contacto, m.wamid)
       : (d.texto ? [{ Telefono: m.telefono, Nombre: m.nombre || '', Mensaje: d.texto, Canal: m.phoneId, ContextoId: m.wamid }] : [])
-    if (!piezas.length) return
+    if (!piezas.length) return false
 
     // Una vez por tema por cliente: se mira si ese texto ya le salió (base, no memoria).
     const huella = String(r?.text || d.texto || '').trim()
-    if (huella && await textoSalioRecienteSupabase(m.telefono, huella, cfg.horas_repetir)) return
+    if (huella && await textoSalioRecienteSupabase(m.telefono, huella, cfg.horas_repetir)) return false
     console.log('[/api/webhook] respuesta simple', d.intencion, r ? `rápida ${r.id}` : 'texto', `${piezas.length} piezas`, m.telefono)
     // Desenganchado del loop (como las recetas): las fotos tardan y el lote
     // todavía tiene que guardar los demás mensajes.
@@ -277,16 +278,32 @@ async function procesar(nuevos, origin) {
         if (!res?.ok) console.error('[/api/webhook] respuesta simple: pieza rechazada', res?.status ?? 'red', m.telefono)
       }
     })())
+    return true
   }
 
-  // ── MODO SOMBRA del agente (lib/automatizaciones.js → ia_sombra) ───────────
-  // Solo texto ESCRITO por el cliente y solo con la IA apagada en ese chat (si
-  // está prendida, el agente ya contesta de verdad). No envía nada.
-  function sombraSiCorresponde(m) {
-    if (!auto?.ia_sombra?.activo) return
-    if (m.raw?.type !== 'text' || !String(m.contenido || '').trim()) return
-    if (modoIAde(m.telefono, m.phoneId)) return
+  // ── AGENTE DE IA: real (IA prendida en el chat) o SOMBRA (ia_sombra) ───────
+  // Ahorro de tokens (lib/ia-ahorro.js): no se llama si una respuesta simple ya
+  // contestó ni por un "gracias"; y en una RÁFAGA contesta solo el último mensaje.
+  // El agente SIEMPRE lee la conversación entera desde la base, así que ve todos
+  // los mensajes de la ráfaga aunque acá solo dispare el último.
+  function agenteSiCorresponde(m, { simpleContesto = false } = {}) {
+    if (m.tipo !== 'texto' || !String(m.contenido || '').trim()) return
+    const real = modoIAde(m.telefono, m.phoneId)
+    const sombra = !real && Boolean(auto?.ia_sombra?.activo)
+    if (!real && !sombra) return
+    if (simpleContesto) return
+    if (esMensajeSinPedido(m.contenido)) return
     waitUntil((async () => {
+      await new Promise(r => setTimeout(r, ESPERA_RAFAGA_MS))
+      const desde = await mensajesDesdeSupabase(m.telefono, m.fecha)
+      if (!desde) return
+      if (!esElUltimo({ id: m.wamid, fecha: m.fecha }, desde.entrantes)) return
+      // Alguien (una persona u otro automático) ya contestó mientras esperábamos.
+      if (real && desde.salientes > 0) return
+      if (real) {
+        await responderConIA(origin, m.telefono, m.nombre, m.contenido, m.phoneId, 'webhook', m.wamid)
+        return
+      }
       const d = await consultarAgente(m.telefono, m.nombre, m.contenido, 'sombra')
       await guardarSombraIASupabase({
         telefono: m.telefono, wa_message_id: m.wamid, mensaje: String(m.contenido).slice(0, 2000),
@@ -297,7 +314,7 @@ async function procesar(nuevos, origin) {
         tokens_in: d?.tokensIn || null, tokens_out: d?.tokensOut || null,
         ms: d?.ms || null, error: d?.ok ? null : (d?.error || 'sin respuesta'),
       })
-    })().catch(e => console.error('[/api/webhook] sombra:', e.message)))
+    })().catch(e => console.error('[/api/webhook] agente:', e.message)))
   }
 
   // ── Recetas de bienvenida por anuncio ──────────────────────────────────────
@@ -724,27 +741,21 @@ async function procesar(nuevos, origin) {
     // Un botón que ya contestó su flujo no se le pasa además a la IA.
     if (porBoton) continue
 
-    // Modo sombra: qué HABRÍA respondido el agente (no envía nada).
-    sombraSiCorresponde(m)
-
     // Respuesta SIMPLE (envío, tienda, factura, "??"): solo con la IA apagada, sin
     // persona en el chat y si ningún flujo/receta contestó ya este mensaje. El chat
     // se queda en PENDIENTES igual (arriba ya se reabrió): esto adelanta, no cierra.
+    let simpleContesto = false
     if (!conReceta) {
-      await respuestaSimpleSiCorresponde(m)
-        .catch(e => console.error('[/api/webhook] respuesta simple:', e.message))
+      simpleContesto = await respuestaSimpleSiCorresponde(m)
+        .catch(e => { console.error('[/api/webhook] respuesta simple:', e.message); return false })
     }
 
-    // Auto-respuesta IA (solo si el contacto tiene la IA prendida):
-    if (modoIAde(m.telefono, m.phoneId)) {
-      if (m.tipo === 'texto' && String(m.contenido).trim()) {
-        // Texto → MANDI responde normalmente.
-        await responderConIA(origin, m.telefono, m.nombre, m.contenido, m.phoneId, 'webhook', m.wamid)
-      } else if (m.tipo === 'imagen') {
-        // Foto del cliente → NO vender/identificar: mensaje de espera + handoff a
-        // SOPORTE (apaga la IA para que un ejecutivo tome el chat).
-        await escalarASoporte(origin, m.telefono, m.nombre, m.phoneId)
-      }
+    // Agente de IA: de verdad si el chat tiene la IA prendida; en SOMBRA si no.
+    agenteSiCorresponde(m, { simpleContesto })
+    // Foto del cliente con la IA prendida → NO vender/identificar: mensaje de
+    // espera + handoff a SOPORTE (apaga la IA para que un ejecutivo tome el chat).
+    if (m.tipo === 'imagen' && modoIAde(m.telefono, m.phoneId)) {
+      await escalarASoporte(origin, m.telefono, m.nombre, m.phoneId)
     }
   }
 
