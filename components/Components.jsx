@@ -61,6 +61,22 @@ export function StatusPill({ estado }) {
 
 // Read receipts estilo WhatsApp para mensajes SALIENTES.
 // sent → ✓ gris · delivered → ✓✓ gris · read → ✓✓ azul · failed → ⚠ rojo.
+// ── QUIÉN ENVIÓ un mensaje nuestro (17-nov-2026) ─────────────────────────────
+// Sale de `respuesta_ia` (la llena /api/saliente): 'IA' = MANDI, 'AUTO' = respuesta
+// simple / flujo / saludo, 'PERSONA' = alguien del equipo (inbox o celular). Los
+// mensajes de antes no tienen dato y no muestran nada (mejor nada que adivinar).
+// Solo lo ve el equipo: el cliente nunca ve esta etiqueta.
+const AUTORES = {
+  IA:      { texto: '🤖 MANDI',      color: '#f59e0b' },
+  AUTO:    { texto: '⚡ Automático', color: '#94a3b8' },
+  PERSONA: { texto: '🧑 Tú',         color: '#25d366' },
+}
+export function AutorMensaje({ autor }) {
+  const a = AUTORES[String(autor || '').toUpperCase()]
+  if (!a) return null
+  return <span style={{ fontSize: 10, fontWeight: 700, color: a.color, marginRight: 4 }}>{a.texto}</span>
+}
+
 export function Ticks({ estado }) {
   if (estado === 'failed') {
     return <span title="No se pudo entregar" style={{ fontSize: 11, color: '#f87171', fontWeight: 700 }}>⚠</span>
@@ -1177,6 +1193,7 @@ export function MessageBubble({ msg, allMsgs, onResponder, onAbrirChat, onReenvi
               return `${d.getDate()}${['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][d.getMonth()]} ${timeStr}`
             })()}
           </span>
+          {isMe && <AutorMensaje autor={msg.respuestaIA} />}
           {isMe && <Ticks estado={msg.estadoEntrega} />}
         </div>
 

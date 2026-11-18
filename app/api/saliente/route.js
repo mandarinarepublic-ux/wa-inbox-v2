@@ -5,7 +5,7 @@ import { guardarMensajeSupabase, getVentanaSupabase } from '@/lib/inbox-supabase
 import { validarCarrusel, ventanaAbiertaCarrusel, plantillaCarrusel, payloadInteractivo, payloadPlantilla, guardadoCarrusel, CATALOGO_POR_DEFECTO } from '@/lib/carrusel'
 import { ponerEtiquetaAuto } from '@/lib/etiquetas'
 import { waitUntil } from '@vercel/functions'
-import { limpiarPush, revisarPromesa, marcarRespuestaHumana } from '@/lib/contactos'
+import { limpiarPush, revisarPromesa, marcarRespuestaHumana, updateModoIA } from '@/lib/contactos'
 import { borrarEstadoFlujo } from '@/lib/flujos'
 import { parseLinkpago, mensajeLinkPago } from '@/lib/dlocal'
 import { crearLink, proveedorPorDefecto } from '@/lib/linkpago'
@@ -515,6 +515,10 @@ export async function POST(req) {
         // guardarla pintaría en el hilo una cita que el cliente nunca vio.
         // Una reacción guarda SU destino en el mismo campo (así se pinta pegada).
         contextoId: construido.contextoReaccion || (citaAplicada ? contextoId : ''),
+        // QUIÉN lo mandó (17-nov-2026), en la columna `respuesta_ia` que nunca se
+        // usaba: 'IA' = MANDI · 'AUTO' = respuesta simple, flujo, saludo… ·
+        // 'PERSONA' = alguien desde el inbox. El chat lo pinta bajo la burbuja.
+        respuestaIA: body.Autor === 'ia' ? 'IA' : body.auto ? 'AUTO' : 'PERSONA',
       })
     } catch (e) {
       // El mensaje YA se envió por WhatsApp; si falla el log no revertimos.
@@ -544,6 +548,13 @@ export async function POST(req) {
       // Escribió una PERSONA: base de la reactivación (los automáticos no cuentan).
       waitUntil(marcarRespuestaHumana(telSal)
         .catch(e => console.error('[/api/saliente] marcar respuesta humana:', e.message)))
+      // Y la IA de ese chat se APAGA (regla de Rodrigo, 17-nov-2026): cuando contesta
+      // una persona, la IA no vuelve a meterse hasta que una persona la prenda otra
+      // vez. Una reacción no es contestar.
+      if (tipo !== 'reaction') {
+        waitUntil(updateModoIA(telSal, 'HUMANO')
+          .catch(e => console.error('[/api/saliente] apagar IA:', e.message)))
+      }
     }
 
     // 🔖 "Le mostré productos" (lib/etiquetas.js). Nunca lanza: el envío ya salió.

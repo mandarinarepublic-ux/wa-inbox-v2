@@ -378,6 +378,22 @@ export default function Automatizaciones({ active }) {
                 </div>
               )
             })}
+            {/* Chats NUEVOS con la IA prendida (lib/automatizaciones.js → ia_nuevos). */}
+            <div style={{
+              display:'flex', alignItems:'center', justifyContent:'space-between',
+              gap:12, padding:'10px 12px', borderRadius:10, marginTop:12,
+              background:'rgba(245,158,11,.06)', border:'1px solid rgba(245,158,11,.25)',
+            }}>
+              <div>
+                <div style={{ fontWeight:700, fontSize:13 }}>🆕 Chats nuevos con la IA prendida</div>
+                <div style={{ fontSize:11, color:'#94a3b8', marginTop:2 }}>
+                  Quien escribe por primera vez queda con la IA prendida: la bienvenida contesta su
+                  primer mensaje y MANDI sigue. Cuando tú contestas (inbox o celular), la IA de ese
+                  chat se apaga sola. Los chats que ya existen no cambian.
+                </div>
+              </div>
+              <Switch on={!!config?.ia_nuevos?.activo} onClick={() => togBloque('ia_nuevos', !config?.ia_nuevos?.activo)} />
+            </div>
           </div>
 
           {/* ── 🕵️ IA EN SOMBRA (app/api/ia-sombra) ── */}

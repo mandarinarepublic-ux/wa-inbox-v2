@@ -90,7 +90,7 @@ async function escalarASoporte(origin, phone, name, canal) {
   // Queda anotada hasta que una persona cumpla; no pisa un 📌 del vendedor.
   await updateDeuda(phone, 'IA: mandó foto', 'ia', { noPisar: true })
     .catch(e => console.error('[webhook IA] 📌 derivación:', e.message))
-  await enviarSaliente(origin, { Telefono: phone, Nombre: name || '', Mensaje: MSG_ESPERA, Canal: canal })
+  await enviarSaliente(origin, { Telefono: phone, Nombre: name || '', Mensaje: MSG_ESPERA, Canal: canal, Autor: 'ia' })
 }
 
 // ── Verificación del webhook (GET) ────────────────────────────────────────────
@@ -673,6 +673,16 @@ async function procesar(nuevos, origin) {
     try { await registrarContactoEntrante(m.telefono, m.nombre, m.telefono, m.username) }
     catch (e) { console.error('[/api/webhook] contacto:', e.message) }
 
+    // 🤖 Chat NUEVO con la IA prendida (AUTOS → ia_nuevos). Explícito y DESPUÉS de
+    // registrar: la fila nace con el default de la tabla ('HUMANO', compartido con
+    // IND) y ningún paso posterior la toca (trampa #7 de la skill). Este primer
+    // mensaje igual no lo contesta la IA (el contacto no está en el snapshot del
+    // ciclo → decidirIA da false): lo contesta la bienvenida/flujo, gratis.
+    if (auto?.ia_nuevos?.activo === true && esNuevoDe(m.telefono)) {
+      await updateModoIA(m.telefono, 'IA')
+        .catch(e => console.error('[/api/webhook] chat nuevo → IA:', e.message))
+    }
+
     // Aviso de CAMBIO DE NÚMERO: lo manda Meta, no el cliente. Ya quedó ARCHIVADO
     // al guardarse (lib/bandeja.js). Acá se corta TODO lo demás: ni push, ni
     // reabrir a PENDIENTE, ni flujo, ni saludo, ni IA. El 12-nov-2026 el saludo
@@ -789,7 +799,10 @@ async function procesar(nuevos, origin) {
     }
 
     // Agente de IA: de verdad si el chat tiene la IA prendida; en SOMBRA si no.
-    agenteSiCorresponde(m, { simpleContesto })
+    // Si un flujo, receta o bienvenida ya contestó este mensaje, la IA no contesta
+    // ENCIMA (antes solo se frenaba con un botón: con la pauta habrían salido dos
+    // respuestas a la vez).
+    agenteSiCorresponde(m, { simpleContesto: simpleContesto || Boolean(conReceta) })
     // Foto del cliente con la IA prendida → NO vender/identificar: mensaje de
     // espera + handoff a SOPORTE (apaga la IA para que un ejecutivo tome el chat).
     if (m.tipo === 'imagen' && modoIAde(m.telefono, m.phoneId)) {
@@ -828,10 +841,17 @@ async function procesarEchoes(echoes) {
         mensaje: e.contenido, mediaUrl: '', timestamp: e.fecha,
         direccion: 'SALIENTE', mediaId: e.mediaId, contextoId: e.contextoId,
         raw: e.raw, phoneId: e.phoneId,
+        respuestaIA: 'PERSONA', // escrito desde el celular → "🧑 Tú" en el chat
       })
       // Escrito desde el CELULAR (coexistencia) = una persona contestó → el flujo
       // automático de ese cliente se retira, igual que al contestar desde el inbox.
       await borrarEstadoFlujo(e.telefono).catch(() => {})
+      // Y la IA de ese chat se APAGA: contestó una persona (regla de Rodrigo,
+      // 17-nov-2026). Solo una persona la vuelve a prender. Una reacción no cuenta.
+      if (e.tipo !== 'reaction') {
+        await updateModoIA(e.telefono, 'HUMANO')
+          .catch(err => console.error('[/api/webhook echo] apagar IA:', err.message))
+      }
       if (e.mediaId) await archivarMedia({ mediaId: e.mediaId, wamid: e.wamid }).catch(() => {})
     } catch (err) {
       console.error('[/api/webhook echo]', e.wamid, err.message)
