@@ -6,6 +6,7 @@ import { fetchRepliesFromSheet, writeReply, reorderReplies, addNota, setIdVenta,
 import { esDocumento as esDocumentoArchivo } from '@/lib/adjuntos'
 import { adjuntosDeRespuesta, moverAdjunto } from '@/lib/adjuntos-respuesta'
 import Notas from './Notas'
+import ConsumoIA from './ConsumoIA'
 import CarruselModal from './CarruselModal'
 import PedidoManual from './PedidoManual'
 import VerPedido from './VerPedido'
@@ -1327,6 +1328,9 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                 número, no con el nombre— y saber de quién es el chat que tienes
                 abierto mientras lees su pedido vale más que esos 90 px. */}
             <div style={{ display: (manualAbierto || verPedidoId != null) ? 'none' : 'contents' }}>
+
+            {/* 🤖 GASTO DE IA: tokens y costo estimado de MANDI en este chat y en el mes. */}
+            <ConsumoIA telefono={activeConv.telefono} />
 
             {/* LINK PAGO — arma el link y el texto. Generar NO manda nada al chat:
                 aparece la vista previa con 📤 ENVIAR (o 📋 Copiar) y el vendedor
