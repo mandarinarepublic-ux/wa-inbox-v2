@@ -42,7 +42,9 @@ test('🎧 solo lo que derivó la IA', () => {
 })
 
 test('alternar', () => {
-  assert.equal(alternar(FILTRO_INICIAL, 'bandeja', 'pendiente').bandeja, 'todas')
+  // Re-clic en la bandeja activa NO la apaga (20-nov: se desmarcaba Pendientes sola).
+  assert.equal(alternar(FILTRO_INICIAL, 'bandeja', 'pendiente').bandeja, 'pendiente')
+  assert.equal(alternar(FILTRO_INICIAL, 'bandeja', 'todas').bandeja, 'todas')
   assert.equal(alternar(FILTRO_INICIAL, 'bandeja', 'atendido').bandeja, 'atendido')
   const f = alternar(FILTRO_INICIAL, 'etapa', 'cotizando')
   assert.equal(f.etapa, 'cotizando')

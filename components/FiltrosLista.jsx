@@ -41,6 +41,7 @@ export default function FiltrosLista({ filtro, conteos, onCambiar, etiquetas = [
         <Chip activo={filtro.bandeja === 'pendiente'} color="#f87171" n={n.bandeja.pendiente} onClick={() => onCambiar('bandeja', 'pendiente')} title="El cliente escribió y le toca responder a alguien">🔴 Pendientes</Chip>
         <Chip activo={filtro.bandeja === 'atendido'} color="#4ade80" n={n.bandeja.atendido} onClick={() => onCambiar('bandeja', 'atendido')} title="Ya contestamos">🟢 Atendidos</Chip>
         <Chip activo={filtro.bandeja === 'archivado'} color={P.creamDim} n={n.bandeja.archivado} onClick={() => onCambiar('bandeja', 'archivado')} title="Archivados">⚫ Archivo</Chip>
+        <Chip activo={filtro.bandeja === 'todas'} color="#38bdf8" n={n.bandeja.todas} onClick={() => onCambiar('bandeja', 'todas')} title="Pendientes y atendidos juntos (sin archivados)">📋 Todos</Chip>
       </Fila>
       <button className="filtros-toggle" onClick={() => setAbiertos(v => !v)} style={{
         width: '100%', marginTop: 6, padding: '8px', fontSize: 11, fontWeight: 700,
