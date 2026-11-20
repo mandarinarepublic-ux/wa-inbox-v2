@@ -670,6 +670,16 @@ async function procesar(nuevos, origin) {
       archivos.push(archivarMedia({ mediaId: m.mediaId, wamid: m.wamid }))
     }
 
+    // Aviso de CAMBIO DE NÚMERO: lo manda Meta, no el cliente. Ya quedó guardado
+    // (y archivado, sin sacarlo de PENDIENTE: lib/bandeja.js). Acá se corta TODO
+    // lo demás: ni push, ni flujo, ni saludo, ni IA. El 12-nov-2026 el saludo
+    // automático le mandó "Bienvenid@" al número VIEJO, que la persona ya no usa.
+    // ☠️ Va ANTES de registrarContactoEntrante (20-nov-2026): ese registro pone
+    // `conversaciones.estado='PENDIENTE'`, y el aviso dejaba la bandeja en
+    // ARCHIVADO y la conversación en PENDIENTE: dos estados que no coincidían.
+    // La conversación ya existe (la crea el guardado), no hace falta registrarla.
+    if (esAvisoCambioNumero(m.raw)) continue
+
     try { await registrarContactoEntrante(m.telefono, m.nombre, m.telefono, m.username) }
     catch (e) { console.error('[/api/webhook] contacto:', e.message) }
 
@@ -682,12 +692,6 @@ async function procesar(nuevos, origin) {
       await updateModoIA(m.telefono, 'IA')
         .catch(e => console.error('[/api/webhook] chat nuevo → IA:', e.message))
     }
-
-    // Aviso de CAMBIO DE NÚMERO: lo manda Meta, no el cliente. Ya quedó ARCHIVADO
-    // al guardarse (lib/bandeja.js). Acá se corta TODO lo demás: ni push, ni
-    // reabrir a PENDIENTE, ni flujo, ni saludo, ni IA. El 12-nov-2026 el saludo
-    // automático le mandó "Bienvenid@" al número VIEJO, que la persona ya no usa.
-    if (esAvisoCambioNumero(m.raw)) continue
 
     // ── Señales a Meta (Conversions API) ─────────────────────────────────────
     // 1) Guardar de qué anuncio vino, si vino de uno. Va DESPUÉS de

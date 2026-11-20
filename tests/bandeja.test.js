@@ -301,3 +301,40 @@ test('otro mensaje system cualquiera sigue yendo a PENDIENTE', () => {
   const { bandeja } = patchesDeMensaje({ direccion: 'ENTRANTE', phone_id: REPUBLIC, fecha: '2026-11-12T16:00:00Z', raw: { type: 'system', system: { type: 'customer_identity_changed' } } })
   assert.equal(bandeja.estado, 'PENDIENTE')
 })
+
+// ── Cambio de número: sin ventana falsa y sin sacar de Pendientes (20-nov-2026) ──
+test('el aviso de cambio de número NO abre la ventana de 24 h ni cambia el canal', () => {
+  for (const type of ['user_changed_number', 'numero_anterior']) {
+    const r = patchesDeMensaje({ direccion: 'ENTRANTE', phone_id: REPUBLIC, fecha: '2026-11-20T10:04:00Z', raw: { type: 'system', system: { type } } })
+    assert.equal(r.conv.ultimo_entrante_at, undefined, type)
+    assert.equal(r.conv.phone_id, undefined, type)
+    assert.equal(r.bandeja.ultimo_entrante_at, undefined, type)
+    assert.equal(r.conv.ultimo_mensaje_at, '2026-11-20T10:04:00Z', type)
+  }
+})
+
+test('el aviso archiva PERO nunca saca de PENDIENTE; un entrante normal sí reabre', () => {
+  const aviso = patchesDeMensaje({ direccion: 'ENTRANTE', phone_id: REPUBLIC, fecha: '2026-11-20T10:04:00Z', raw: { type: 'system', system: { type: 'user_changed_number' } } })
+  assert.equal(aviso.bandeja.estado, 'ARCHIVADO')
+  assert.equal(aviso.noSacarDePendiente, true)
+  const normal = patchesDeMensaje({ direccion: 'ENTRANTE', phone_id: REPUBLIC, fecha: '2026-11-20T10:05:00Z' })
+  assert.equal(normal.bandeja.estado, 'PENDIENTE')
+  assert.equal(normal.noSacarDePendiente, false)
+})
+
+test('guardado: la bandeja se aplica con inbox.aplicar_mensaje (horas que no retroceden, aviso que no saca de PENDIENTE)', async () => {
+  const { readFileSync } = await import('node:fs')
+  const src = readFileSync(new URL('../lib/inbox-supabase.js', import.meta.url), 'utf8')
+  assert.match(src, /rpc\('aplicar_mensaje'/)
+  assert.match(src, /p_no_sacar_de_pendiente: !!noSacarDePendiente/)
+  assert.doesNotMatch(src, /update\(patchConv\)/, 'volvió el update suelto: las horas pueden retroceder')
+})
+
+test('webhook: el aviso de cambio de número se corta ANTES de registrar el contacto', async () => {
+  const { readFileSync } = await import('node:fs')
+  const src = readFileSync(new URL('../app/api/webhook/route.js', import.meta.url), 'utf8')
+  const corte = src.indexOf('if (esAvisoCambioNumero(m.raw)) continue')
+  const registro = src.indexOf('await registrarContactoEntrante(m.telefono')
+  assert.ok(corte > 0 && registro > 0)
+  assert.ok(corte < registro, 'registrarContactoEntrante pone conversaciones.estado=PENDIENTE: el aviso tiene que cortarse antes')
+})
