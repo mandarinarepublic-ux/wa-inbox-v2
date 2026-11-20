@@ -113,3 +113,48 @@ test('el archivo NO tiene ninguna rama que rechace', async () => {
     assert.ok(!codigo.includes(prohibido), `firma-meta.js no puede contener "${prohibido}" en el código`)
   }
 })
+
+// ── Control intermedio (20-nov-2026) ─────────────────────────────────────────
+import { descartarSinFirma } from '../lib/firma-meta.js'
+
+test('control intermedio: descarta SOLO lo que llega sin firma o con firma deforme', () => {
+  assert.equal(descartarSinFirma('sin-cabecera'), true)
+  assert.equal(descartarSinFirma('formato-raro'), true)
+})
+
+test('control intermedio: una firma válida, una que NO coincide o la falta de secreto SIGUEN PASANDO', () => {
+  // Si el secreto en Vercel estuviera mal, Meta tiene que seguir entrando.
+  for (const v of ['coincide', 'NO-coincide', 'sin-secreto', 'sin-cuerpo', 'error-al-observar', '', null, undefined, 'veredicto-nuevo']) {
+    assert.equal(descartarSinFirma(v), false, `no debe descartar "${v}"`)
+  }
+})
+
+test('control intermedio: un POST real de Meta (firmado) nunca se descarta', () => {
+  const v = evaluarFirmaMeta({ secreto: SECRETO, crudo: CUERPO, cabecera: firmaDe(CUERPO) })
+  assert.equal(descartarSinFirma(v), false)
+  // …y aunque el secreto cargado fuera OTRO, tampoco.
+  const v2 = evaluarFirmaMeta({ secreto: 'secreto-equivocado', crudo: CUERPO, cabecera: firmaDe(CUERPO) })
+  assert.equal(v2, 'NO-coincide')
+  assert.equal(descartarSinFirma(v2), false)
+})
+
+test('control intermedio: sin cabecera se descarta aunque NO haya secreto cargado', () => {
+  const v = evaluarFirmaMeta({ secreto: '', crudo: CUERPO, cabecera: null })
+  // En MANDI el orden viejo daba 'sin-secreto' primero; con secreto cargado (prod) da 'sin-cabecera'.
+  const conSecreto = evaluarFirmaMeta({ secreto: SECRETO, crudo: CUERPO, cabecera: null })
+  assert.equal(conSecreto, 'sin-cabecera')
+  assert.equal(descartarSinFirma(conSecreto), true)
+  assert.ok(['sin-secreto', 'sin-cabecera'].includes(v))
+})
+
+test('observarFirmaMeta devuelve el veredicto (para que la ruta decida)', () => {
+  const previo = process.env.META_APP_SECRET
+  process.env.META_APP_SECRET = SECRETO
+  try {
+    assert.equal(observarFirmaMeta(firmaDe(CUERPO), CUERPO), 'coincide')
+    assert.equal(observarFirmaMeta(null, CUERPO), 'sin-cabecera')
+  } finally {
+    if (previo === undefined) delete process.env.META_APP_SECRET
+    else process.env.META_APP_SECRET = previo
+  }
+})

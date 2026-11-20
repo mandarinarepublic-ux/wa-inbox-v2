@@ -26,7 +26,7 @@ import { extraer } from '@/lib/wa-mensaje'
 import { extraerEchoes } from '@/lib/echoes'
 import { extraerHistorial, extraerContactosSync } from '@/lib/coexistencia'
 import { ponerNombreSiFaltaSupabase, textoSalioRecienteSupabase, ultimosEntrantesTextoSupabase, guardarSombraIASupabase, mensajesDesdeSupabase, direccionAnteriorSupabase } from '@/lib/inbox-supabase'
-import { observarFirmaMeta } from '@/lib/firma-meta'
+import { observarFirmaMeta, descartarSinFirma } from '@/lib/firma-meta'
 import { enviarSaliente, responderConIA, consultarAgente } from '@/lib/responder-ia'
 import { piezasDeRespuestaRapida } from '@/lib/pieza-respuesta'
 import { ESPERA_RAFAGA_MS, esMensajeSinPedido, esElUltimo, esAgradecimiento } from '@/lib/ia-ahorro'
@@ -930,7 +930,17 @@ export async function POST(req) {
     // ver el encabezado de lib/firma-meta.js. Envuelto por si acaso, aunque la
     // función ya se traga sus propios errores: nada acá puede tumbar la
     // recepción de un mensaje de un cliente.
-    try { observarFirmaMeta(req.headers.get('x-hub-signature-256'), crudo) } catch {}
+    let veredictoFirma = ''
+    try { veredictoFirma = observarFirmaMeta(req.headers.get('x-hub-signature-256'), crudo) } catch {}
+
+    // CONTROL INTERMEDIO: se descarta SOLO lo que llega sin firma o con firma
+    // deforme (Meta firma siempre). Una firma que no coincide SIGUE PASANDO:
+    // ver descartarSinFirma en lib/firma-meta.js. Para deshacer: Instant
+    // Rollback en Vercel al despliegue anterior.
+    if (descartarSinFirma(veredictoFirma)) {
+      console.log(`[firma] DESCARTADO ${veredictoFirma}`)
+      return new Response('firma requerida', { status: 403 })
+    }
 
     const entries = body?.entry || []
     const origin = new URL(req.url).origin
