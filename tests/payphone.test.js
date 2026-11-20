@@ -107,14 +107,14 @@ test('normalizarProveedor: solo dlocal o payphone', () => {
   assert.strictEqual(normalizarProveedor(undefined), null)
 })
 
-test('proveedorPorDefecto: sin variable sigue siendo dLocal', () => {
+test('proveedorPorDefecto: sin variable es Payphone (19-nov-2026)', () => {
   const antes = process.env.LINKPAGO_PROVEEDOR
   delete process.env.LINKPAGO_PROVEEDOR
-  assert.strictEqual(proveedorPorDefecto(), 'dlocal')
-  process.env.LINKPAGO_PROVEEDOR = 'payphone'
   assert.strictEqual(proveedorPorDefecto(), 'payphone')
-  process.env.LINKPAGO_PROVEEDOR = 'cualquiercosa'
+  process.env.LINKPAGO_PROVEEDOR = 'dlocal'
   assert.strictEqual(proveedorPorDefecto(), 'dlocal')
+  process.env.LINKPAGO_PROVEEDOR = 'cualquiercosa'
+  assert.strictEqual(proveedorPorDefecto(), 'payphone')
   if (antes === undefined) delete process.env.LINKPAGO_PROVEEDOR
   else process.env.LINKPAGO_PROVEEDOR = antes
 })
