@@ -1,6 +1,7 @@
 'use client'
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { listarGuiasServientrega, procesarGuiasServientrega, buscarPedidosParaGuia, asignarGuiaAPedido, buscarGuiaPorNumero } from '@/lib/api-client'
+import { pareceNumeroDeGuia } from '@/lib/guias-servientrega'
 
 // ── Pestaña 🚚 GUÍAS ──────────────────────────────────────────────────────────
 // Las guías de Servientrega que Rodri VIP reenvía a MANDI: cuáles quedaron en el
@@ -201,6 +202,8 @@ export default function Guias({ active }) {
   const [busca, setBusca] = useState('')
   const [enCrm, setEnCrm] = useState(null)     // la guía buscada en TODO el CRM (cualquier fecha)
   const [buscandoCrm, setBuscandoCrm] = useState(false)
+  const [errorCrm, setErrorCrm] = useState('')  // aparte del `error` del panel: se limpia al cambiar la búsqueda
+  const digitosRef = useRef('')                 // el número que está en la caja AHORA
 
   const cargar = useCallback(async () => {
     setCargando(true); setError('')
@@ -228,10 +231,18 @@ export default function Guias({ active }) {
     [g.destinatario, g.pedido_id, g.pedido_sugerido, g.cliente, g.destino].some(v => String(v || '').toLowerCase().includes(texto))
   // Mientras se busca se mira en TODAS las bandejas: quien busca una guía no sabe en cuál quedó.
   const visibles = guias.filter(g => (texto || filtro === 'TODAS' || g.estado === filtro) && coincide(g))
+  const esGuia = pareceNumeroDeGuia(busca)
+  digitosRef.current = esGuia ? digitos : ''
+  // La respuesta solo se pinta si la caja sigue teniendo el MISMO número: si
+  // cambiaron el texto mientras tanto, mostraría guías de otro número.
   const buscarEnCrm = async () => {
-    setBuscandoCrm(true); setEnCrm(null)
-    try { setEnCrm(await buscarGuiaPorNumero(digitos)) } catch (e) { setError(e.message) } finally { setBuscandoCrm(false) }
+    const d = digitos
+    setBuscandoCrm(true); setEnCrm(null); setErrorCrm('')
+    try { const r = await buscarGuiaPorNumero(d); if (digitosRef.current === d) setEnCrm(r) }
+    catch (e) { if (digitosRef.current === d) setErrorCrm(e.message) }
+    finally { setBuscandoCrm(false) }
   }
+  const limpiarCrm = () => { setEnCrm(null); setErrorCrm('') }
   const chips = [['TODAS', 'Todas', guias.length], ['PENDIENTE', '⚠️ Sin asignar', n('PENDIENTE')], ['NUEVA', '🆕 Sin procesar', n('NUEVA')], ['REGISTRADA', '✅ Registradas', n('REGISTRADA')], ['EXCLUIDA', '🚫 Excluidas', n('EXCLUIDA')]]
 
   return (
@@ -260,17 +271,19 @@ export default function Guias({ active }) {
         {error && <div style={{ marginTop: 10, color: '#ef4444', fontSize: 12 }}>⚠️ {error}</div>}
 
         <div style={{ display: 'flex', gap: 6, marginTop: 16 }}>
-          <input value={busca} onChange={e => { setBusca(e.target.value); setEnCrm(null) }}
-            onKeyDown={e => e.key === 'Enter' && digitos.length >= 4 && buscarEnCrm()}
+          <input value={busca} onChange={e => { setBusca(e.target.value); limpiarCrm() }}
+            onKeyDown={e => e.key === 'Enter' && esGuia && !buscandoCrm && buscarEnCrm()}
             placeholder="🔍 Número de guía, cliente, celular, pedido o ciudad"
             style={{ flex: 1, minWidth: 0, background: '#0d1828', border: '1px solid #1e2d3d', borderRadius: 10, color: '#e2e8f0', fontSize: 16, padding: '9px 12px', outline: 'none', fontFamily: 'inherit' }} />
           {busca && (
-            <button onClick={() => { setBusca(''); setEnCrm(null) }} style={{ padding: '0 12px', borderRadius: 10, border: '1px solid #1e2d3d', background: 'transparent', color: '#94a3b8', cursor: 'pointer', fontFamily: 'inherit' }}>✕</button>
+            <button onClick={() => { setBusca(''); limpiarCrm() }} style={{ padding: '0 12px', borderRadius: 10, border: '1px solid #1e2d3d', background: 'transparent', color: '#94a3b8', cursor: 'pointer', fontFamily: 'inherit' }}>✕</button>
           )}
         </div>
-        {digitos.length >= 4 && (
+        {esGuia && (
           <div style={{ marginTop: 8, fontSize: 12, color: '#64748b' }}>
-            {enCrm === null ? (
+            {errorCrm ? (
+              <span style={{ color: '#ef4444' }}>⚠️ No se pudo buscar en el CRM: {errorCrm} · <button onClick={buscarEnCrm} style={{ background: 'none', border: 'none', color: '#38bdf8', cursor: 'pointer', padding: 0, fontSize: 12, fontFamily: 'inherit' }}>reintentar</button></span>
+            ) : enCrm === null ? (
               <button onClick={buscarEnCrm} disabled={buscandoCrm} style={{ background: 'none', border: 'none', color: '#38bdf8', cursor: 'pointer', padding: 0, fontSize: 12, fontFamily: 'inherit', textAlign: 'left' }}>
                 {buscandoCrm ? 'Buscando en el CRM…' : `Buscar la guía ${digitos} en todo el CRM (cualquier fecha) →`}
               </button>

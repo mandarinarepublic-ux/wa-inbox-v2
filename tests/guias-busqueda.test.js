@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert'
 import {
-  patronSinTildes, puntuarCliente, puedeRecibirGuia, ordenarResultados, tipoDeBusqueda, palabrasDireccionParaBuscar,
+  patronSinTildes, puntuarCliente, puedeRecibirGuia, ordenarResultados, tipoDeBusqueda, palabrasDireccionParaBuscar, pareceNumeroDeGuia,
 } from '../lib/guias-servientrega.js'
 
 // El caso real que la búsqueda vieja no encontraba (guía 9036835780, 26-oct-2026).
@@ -77,4 +77,11 @@ test('primero los que pueden recibir guía, a igual puntaje', () => {
     { ...yaTiene, puntos: 50, puede: false }, { ...fab, puntos: 50, puede: true }, { ...viejo, puntos: 80, puede: false },
   ]).map(x => x.pedido_id)
   assert.deepEqual(orden, ['P2', 'P1', 'P3'])
+})
+
+test('solo un número de guía ofrece buscar la guía en todo el CRM', () => {
+  for (const q of ['9036835780', '90368', '9036 8357 80']) assert.equal(pareceNumeroDeGuia(q), true, q)
+  for (const q of ['MAN-AND-6314', '0986979499', '986979499', '593986979499', 'Ana 9036', '903']) {
+    assert.equal(pareceNumeroDeGuia(q), false, q)
+  }
 })
