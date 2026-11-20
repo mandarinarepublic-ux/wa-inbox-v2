@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { procesarGuias, listarGuias, buscarPedidos, asignarGuia } from '@/lib/guias-registro'
+import { procesarGuias, listarGuias, buscarPedidos, buscarGuia, asignarGuia } from '@/lib/guias-registro'
 import { usuarioDeCookie } from '@/lib/acceso'
 import { secretoSesion } from '@/lib/sesion'
 
@@ -8,6 +8,8 @@ import { secretoSesion } from '@/lib/sesion'
 //
 //   GET                       → la lista (REGISTRADA / PENDIENTE / NUEVA)
 //   GET ?buscar=texto         → pedidos del CRM para asignar a mano
+//   GET ?cel=&nombre=&dir=    → candidatos con lo leído de la guía (al abrir ✋ Asignar)
+//   GET ?guia=numero          → en qué pedido está esa guía (todo el CRM, cualquier fecha)
 //   POST {}                   → procesar (OCR de las nuevas + reintentar pendientes)
 //   POST { simular: true }    → lo mismo sin escribir
 //   POST { accion:'asignar', numero, pedidoId } → asignar a mano
@@ -21,8 +23,13 @@ const fallo = (e) => {
 
 export async function GET(req) {
   try {
-    const buscar = new URL(req.url).searchParams.get('buscar')
-    if (buscar != null) return NextResponse.json({ ok: true, pedidos: await buscarPedidos(buscar) })
+    const sp = new URL(req.url).searchParams
+    if (sp.get('guia') != null) return NextResponse.json({ ok: true, guias: await buscarGuia(sp.get('guia')) })
+    if (['buscar', 'cel', 'nombre', 'dir'].some(k => sp.get(k) != null)) {
+      return NextResponse.json({ ok: true, pedidos: await buscarPedidos({
+        q: sp.get('buscar') || '', celular: sp.get('cel') || '', nombre: sp.get('nombre') || '', direccion: sp.get('dir') || '',
+      }) })
+    }
     return NextResponse.json({ ok: true, ...(await listarGuias()) })
   } catch (e) { return fallo(e) }
 }

@@ -1,6 +1,6 @@
 'use client'
-import React, { useState, useEffect, useCallback } from 'react'
-import { listarGuiasServientrega, procesarGuiasServientrega, buscarPedidosParaGuia, asignarGuiaAPedido } from '@/lib/api-client'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { listarGuiasServientrega, procesarGuiasServientrega, buscarPedidosParaGuia, asignarGuiaAPedido, buscarGuiaPorNumero } from '@/lib/api-client'
 
 // ── Pestaña 🚚 GUÍAS ──────────────────────────────────────────────────────────
 // Las guías de Servientrega que Rodri VIP reenvía a MANDI: cuáles quedaron en el
@@ -27,19 +27,37 @@ const ESTADOS = {
 const METODO = { cedula: 'por cédula', celular: 'por celular', nombre: 'por nombre', manual: 'a mano', crm: 'desde el CRM' }
 
 function Asignar({ guia, onListo }) {
-  const [q, setQ] = useState(guia.celular || guia.destinatario || '')
+  const [q, setQ] = useState('')
   const [res, setRes] = useState(null)
+  const [deLaGuia, setDeLaGuia] = useState(true)   // los resultados salen de lo leído en la guía
   const [buscando, setBuscando] = useState(false)
   const [elegido, setElegido] = useState(null)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
+  const [buscado, setBuscado] = useState('')       // el texto de la búsqueda que se está MOSTRANDO
+  const ultimaRef = useRef(0)
 
-  const buscar = async () => {
-    if (q.trim().length < 3) return
-    setBuscando(true); setError(''); setElegido(null)
-    try { setRes(await buscarPedidosParaGuia(q.trim())) } catch (e) { setError(e.message) } finally { setBuscando(false) }
+  const sugeridos = { cel: guia.celular || '', nombre: guia.destinatario || '', dir: guia.direccion || '' }
+  // ☠️ Solo la ÚLTIMA búsqueda pinta. La automática del arranque es lenta: si
+  // llegaba después de una escrita, pisaba la lista bajo el título de la escrita
+  // y se podía asignar la guía al pedido equivocado (que además pasa a COMPLETADO).
+  const correr = async (consulta, deGuia) => {
+    const id = ++ultimaRef.current
+    setBuscando(true); setError(''); setElegido(null); setRes(null)
+    try {
+      const r = await buscarPedidosParaGuia(consulta)
+      if (id !== ultimaRef.current) return
+      setRes(r); setDeLaGuia(deGuia); setBuscado(deGuia ? '' : consulta)
+    } catch (e) { if (id === ultimaRef.current) setError(e.message) }
+    finally { if (id === ultimaRef.current) setBuscando(false) }
   }
-  useEffect(() => { if (q.trim().length >= 3) buscar() }, [])   // eslint-disable-line react-hooks/exhaustive-deps
+  const buscar = () => {
+    if (q.trim().length >= 3) correr(q.trim(), false)
+    else if (!q.trim()) correr(sugeridos, true)
+  }
+  // Al abrir: celular, nombre y dirección de la guía A LA VEZ, cada uno por su lado.
+  // Antes se buscaba solo con el celular y, si tenía un dígito mal leído, no salía nada.
+  useEffect(() => { buscar() }, [])   // eslint-disable-line react-hooks/exhaustive-deps
 
   const asignar = async () => {
     if (!elegido) return
@@ -52,15 +70,25 @@ function Asignar({ guia, onListo }) {
     <div style={{ marginTop: 10, background: '#080d14', border: '1px solid #1e2d3d', borderRadius: 10, padding: 10 }}>
       <div style={{ display: 'flex', gap: 6 }}>
         <input value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => e.key === 'Enter' && buscar()}
-          placeholder="Nombre, celular o número de pedido (MAN-…, IND-…)"
+          placeholder="Nombre, celular, cédula, dirección o pedido (MAN-…)"
           style={{ flex: 1, minWidth: 0, background: '#0d1828', border: '1px solid #1e2d3d', borderRadius: 8, color: '#e2e8f0', fontSize: 13, padding: '8px 10px', outline: 'none', fontFamily: 'inherit' }} />
         <button onClick={buscar} disabled={buscando} style={{ padding: '8px 12px', borderRadius: 8, border: 'none', background: '#1e2d3d', color: '#e2e8f0', fontWeight: 800, cursor: 'pointer', fontFamily: 'inherit' }}>
           {buscando ? '…' : '🔍'}
         </button>
       </div>
-      {res && !res.length && <div style={{ fontSize: 12, color: '#64748b', marginTop: 8 }}>No encontré pedidos con eso.</div>}
+      {res && (
+        <div style={{ fontSize: 11, color: '#64748b', marginTop: 8 }}>
+          {deLaGuia ? 'Sugeridos con el celular, el nombre y la dirección de la guía' : `Resultados para "${buscado}"`}
+          {!deLaGuia && (
+            <button onClick={() => { setQ(''); correr(sugeridos, true) }} style={{ marginLeft: 8, background: 'none', border: 'none', color: '#38bdf8', cursor: 'pointer', fontSize: 11, fontFamily: 'inherit', padding: 0 }}>
+              volver a los sugeridos
+            </button>
+          )}
+        </div>
+      )}
+      {res && !res.length && <div style={{ fontSize: 12, color: '#64748b', marginTop: 6 }}>No encontré pedidos con eso. Prueba con otro dato: un apellido, el celular o una palabra de la dirección.</div>}
       {res && res.length > 0 && (
-        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 260, overflowY: 'auto' }}>
+        <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 340, overflowY: 'auto' }}>
           {res.map(p => {
             const on = elegido?.pedido_id === p.pedido_id
             return (
@@ -69,16 +97,26 @@ function Asignar({ guia, onListo }) {
                 background: on ? 'rgba(16,185,129,.12)' : 'transparent',
                 border: `1px solid ${on ? 'rgba(16,185,129,.5)' : '#1e2d3d'}`, color: '#cbd5e1', fontSize: 12,
               }}>
-                <b style={{ color: '#e2e8f0' }}>{p.pedido_id}</b> · {p.cliente || '—'} · {p.estado_pedido} · {fecha(p.fecha_pedido)}
+                <b style={{ color: '#e2e8f0' }}>{p.pedido_id}</b> · {p.cliente || '—'} · <span style={{ color: p.puede ? VERDE : '#94a3b8' }}>{p.estado_pedido}</span> · {fecha(p.fecha_pedido)}
                 {p.monto_total != null && ` · $${Number(p.monto_total).toFixed(2)}`}
                 {p.tiene_guia && <span style={{ color: '#f59e0b' }}> · ya tiene guía</span>}
+                {(p.celular || p.direccion) && (
+                  <div style={{ color: '#64748b', marginTop: 2 }}>
+                    {p.celular && <>📱 {p.celular}</>}{p.celular && p.direccion && ' · '}{p.direccion && <>📍 {p.direccion}</>}
+                  </div>
+                )}
+                {p.razones?.length > 0 && (
+                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
+                    {p.razones.map(r => <span key={r} style={{ fontSize: 10.5, padding: '1px 6px', borderRadius: 6, background: 'rgba(56,189,248,.1)', color: '#7dd3fc' }}>{r}</span>)}
+                  </div>
+                )}
               </button>
             )
           })}
         </div>
       )}
       {elegido && (
-        <button onClick={asignar} disabled={guardando} style={{
+        <button onClick={asignar} disabled={guardando || buscando} style={{
           marginTop: 10, width: '100%', padding: '9px', borderRadius: 9, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
           background: `linear-gradient(135deg,${VERDE},#059669)`, color: '#fff', fontWeight: 900, fontSize: 13, opacity: guardando ? .6 : 1,
         }}>
@@ -160,6 +198,9 @@ export default function Guias({ active }) {
   const [aviso, setAviso] = useState('')
   const [error, setError] = useState('')
   const [filtro, setFiltro] = useState('TODAS')
+  const [busca, setBusca] = useState('')
+  const [enCrm, setEnCrm] = useState(null)     // la guía buscada en TODO el CRM (cualquier fecha)
+  const [buscandoCrm, setBuscandoCrm] = useState(false)
 
   const cargar = useCallback(async () => {
     setCargando(true); setError('')
@@ -180,7 +221,17 @@ export default function Guias({ active }) {
   if (!active) return null
   const guias = datos?.guias || []
   const n = (est) => guias.filter(g => g.estado === est).length
-  const visibles = filtro === 'TODAS' ? guias : guias.filter(g => g.estado === filtro)
+  const texto = busca.trim().toLowerCase()
+  const digitos = texto.replace(/\D/g, '')
+  const coincide = (g) => !texto ||
+    (digitos.length >= 3 && [g.numero_guia, g.celular].some(v => String(v || '').replace(/\D/g, '').includes(digitos))) ||
+    [g.destinatario, g.pedido_id, g.pedido_sugerido, g.cliente, g.destino].some(v => String(v || '').toLowerCase().includes(texto))
+  // Mientras se busca se mira en TODAS las bandejas: quien busca una guía no sabe en cuál quedó.
+  const visibles = guias.filter(g => (texto || filtro === 'TODAS' || g.estado === filtro) && coincide(g))
+  const buscarEnCrm = async () => {
+    setBuscandoCrm(true); setEnCrm(null)
+    try { setEnCrm(await buscarGuiaPorNumero(digitos)) } catch (e) { setError(e.message) } finally { setBuscandoCrm(false) }
+  }
   const chips = [['TODAS', 'Todas', guias.length], ['PENDIENTE', '⚠️ Sin asignar', n('PENDIENTE')], ['NUEVA', '🆕 Sin procesar', n('NUEVA')], ['REGISTRADA', '✅ Registradas', n('REGISTRADA')], ['EXCLUIDA', '🚫 Excluidas', n('EXCLUIDA')]]
 
   return (
@@ -208,7 +259,42 @@ export default function Guias({ active }) {
         </div>
         {error && <div style={{ marginTop: 10, color: '#ef4444', fontSize: 12 }}>⚠️ {error}</div>}
 
-        <div style={{ display: 'flex', gap: 6, marginTop: 16, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 6, marginTop: 16 }}>
+          <input value={busca} onChange={e => { setBusca(e.target.value); setEnCrm(null) }}
+            onKeyDown={e => e.key === 'Enter' && digitos.length >= 4 && buscarEnCrm()}
+            placeholder="🔍 Número de guía, cliente, celular, pedido o ciudad"
+            style={{ flex: 1, minWidth: 0, background: '#0d1828', border: '1px solid #1e2d3d', borderRadius: 10, color: '#e2e8f0', fontSize: 16, padding: '9px 12px', outline: 'none', fontFamily: 'inherit' }} />
+          {busca && (
+            <button onClick={() => { setBusca(''); setEnCrm(null) }} style={{ padding: '0 12px', borderRadius: 10, border: '1px solid #1e2d3d', background: 'transparent', color: '#94a3b8', cursor: 'pointer', fontFamily: 'inherit' }}>✕</button>
+          )}
+        </div>
+        {digitos.length >= 4 && (
+          <div style={{ marginTop: 8, fontSize: 12, color: '#64748b' }}>
+            {enCrm === null ? (
+              <button onClick={buscarEnCrm} disabled={buscandoCrm} style={{ background: 'none', border: 'none', color: '#38bdf8', cursor: 'pointer', padding: 0, fontSize: 12, fontFamily: 'inherit', textAlign: 'left' }}>
+                {buscandoCrm ? 'Buscando en el CRM…' : `Buscar la guía ${digitos} en todo el CRM (cualquier fecha) →`}
+              </button>
+            ) : !enCrm.length ? (
+              <span>Ninguna guía con "{digitos}" en el CRM.</span>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <span>En el CRM ({enCrm.length}):</span>
+                {enCrm.map(x => (
+                  <div key={x.numero_guia + x.pedido_id} style={{ background: '#0d1828', border: '1px solid #1e2d3d', borderLeft: `3px solid ${VERDE}`, borderRadius: 10, padding: '8px 10px', color: '#94a3b8' }}>
+                    <b style={{ color: '#e2e8f0' }}>{x.numero_guia}</b> → <a href={CRM_PEDIDO(x.pedido_id)} target="_blank" rel="noreferrer" style={{ color: VERDE, fontWeight: 800 }}>{x.pedido_id}</a>
+                    {x.cliente && ` · ${x.cliente}`}{x.celular && ` · 📱 ${x.celular}`}{x.estado_pedido && ` · ${x.estado_pedido}`}
+                    <div style={{ color: '#64748b' }}>
+                      🗓 {fecha(x.fecha_despacho)}{x.transportista && ` · ${x.transportista}`}{x.registrado_por && ` · por ${x.registrado_por}`}
+                      {x.foto && <> · <a href={x.foto} target="_blank" rel="noreferrer" style={{ color: '#94a3b8' }}>ver foto</a></>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 6, marginTop: 12, flexWrap: 'wrap', opacity: texto ? .45 : 1 }}>
           {chips.map(([id, txt, cuantos]) => (
             <button key={id} onClick={() => setFiltro(id)} style={{
               padding: '5px 11px', borderRadius: 14, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
@@ -220,7 +306,11 @@ export default function Guias({ active }) {
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
           {cargando && !datos && <div style={{ color: '#475569', fontSize: 13 }}>Cargando…</div>}
-          {datos && !visibles.length && <div style={{ color: '#64748b', fontSize: 13, padding: 12 }}>No hay guías en este filtro.</div>}
+          {datos && !visibles.length && (
+            <div style={{ color: '#64748b', fontSize: 13, padding: 12 }}>
+              {texto ? `Ninguna guía de los últimos ${datos?.dias || 30} días coincide con "${busca.trim()}".` : 'No hay guías en este filtro.'}
+            </div>
+          )}
           {visibles.map(g => <Fila key={g.numero_guia} g={g} onRecargar={cargar} />)}
         </div>
       </div>
