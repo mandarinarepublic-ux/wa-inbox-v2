@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getTransaccion, notaPagoPayphone, telefonoDeId } from '@/lib/payphone'
 import { crearNota, listarNotas } from '@/lib/notas'
+import { marcarLinkPagado } from '@/lib/registro-link-pago'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -22,7 +23,7 @@ export const revalidate = 0
 //      NUESTRO token (GET /Sale/{TransactionId}). Solo si Payphone dice que está
 //      aprobada se marca el pago. Un aviso inventado no pinta nada.
 //
-// Lo que hace hoy: deja la nota VERDE "PAGADO $…" en el panel Ventas del chat
+// Lo que hace hoy: marca el link PAGADO en crm.links_pago (19-nov-2026) y deja la nota VERDE "PAGADO $…" en el panel Ventas del chat
 // del cliente. NO manda plantillas de WhatsApp (la de dLocal tiene sus propios
 // parámetros; si se quiere aviso al cliente, se hace una plantilla nueva).
 //
@@ -70,6 +71,10 @@ export async function POST(req) {
       console.error(`[/api/pago-payphone] #${transactionId} no figura aprobada en Payphone (statusCode ${t?.statusCode})`)
       return responder(true, '000') // nada que marcar; que no reintente
     }
+
+    // El link queda PAGADO en crm.links_pago (reporte de pagos del CRM), tenga o
+    // no teléfono. Nunca lanza: si falla, la nota verde igual sale.
+    await marcarLinkPagado(t)
 
     // El teléfono sale SOLO de lo que Payphone confirma (el clientTransactionId
     // de la transacción consultada, ver lib/payphone.js idTransaccion). NUNCA
