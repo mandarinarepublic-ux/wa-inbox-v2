@@ -321,6 +321,28 @@ cuando entra un pedido web SIN PAGAR. Pone la bandeja en PENDIENTE a mano.
 
 ---
 
+### 16. La bandeja se escribe con `inbox.aplicar_mensaje`, no con update/upsert sueltos (nov-2026)
+
+Desde el 20-nov-2026 `guardarMensajeSupabase` (los dos repos) aplica conversación +
+bandeja con **una** RPC, `inbox.aplicar_mensaje`. `patchesDeMensaje` sigue decidiendo
+QUÉ cambia (con pruebas); la base solo lo aplica. Lo que da la RPC y un upsert no:
+
+- **Las horas no retroceden** (`greatest`): un mensaje tardío o una reentrega de Meta
+  ya no baja el chat en la lista ni corre la ventana de 24 h.
+- `conversaciones.phone_id` solo lo cambia un entrante **igual o más nuevo**.
+- **El aviso de cambio de número archiva pero NUNCA saca de PENDIENTE**
+  (`p_no_sacar_de_pendiente`, en el mismo UPDATE). Antes archivaba a ciegas y
+  escondía a un cliente que ya había escrito.
+- El aviso **no cuenta como entrante**: no abre la ventana (antes un vendedor podía
+  mandar texto libre a un número abandonado → 131047 o a un desconocido).
+- En el webhook el aviso se corta **antes** de `registrarContactoEntrante`, que pone
+  `conversaciones.estado='PENDIENTE'`.
+
+☠️ Si vuelves a escribir la bandeja de un mensaje con `upsert`, vuelven los cuatro.
+Hay pruebas guardia en `tests/bandeja.test.js`.
+
+---
+
 ## Reglas que ya se pagaron
 
 - **Ningún automatismo saca un chat de Pendientes.** *"Si esa bandeja está vacía,
