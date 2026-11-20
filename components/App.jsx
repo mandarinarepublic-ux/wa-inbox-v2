@@ -2716,7 +2716,9 @@ export default function App() {
     const now = Date.now()
     const local = localIARef.current[tel]
     if (local && local.expiresAt > now) return local.modoIA
-    return contacts[tel]?.modoIA !== false // default true
+    // Sin ficha cargada = APAGADA, igual que decide el webhook (`decidirIA`: contacto
+    // nuevo → la IA no responde). Antes decía "activa" por defecto y mentía.
+    return contacts[tel]?.modoIA === true
   }
   // Para PINTAR la fila en ámbar: solo cuando SABEMOS que la IA está prendida.
   // getModoIA da true por defecto (contacto sin cargar) y eso pintaría chats de más.
@@ -2873,6 +2875,7 @@ export default function App() {
           .chat-actions::-webkit-scrollbar{ display:none; }
           .msg-bubble{ max-width:86% !important; }
           .order-btn-mob{ display:flex !important; }
+          .ia-toggle{ padding:5px 9px !important; font-size:10px !important; }
           /* En celular las 5 pestañas se reparten el ancho en partes iguales → entran
              todas completas sin scroll ni cortes, sea cual sea el ancho del equipo. */
           .tab-selector{ overflow-x:hidden !important; }
@@ -3216,9 +3219,44 @@ export default function App() {
                     </div>
                   )}
                 </div>
+                {/* ── 🤖 INTERRUPTOR IA DE ESTE CHAT ──
+                    20-nov-2026: vivía al FINAL de la tira de acciones. En el celular
+                    había que deslizar hasta el fondo para encontrarlo y, apagado, era
+                    gris oscuro sobre fondo oscuro: "no veo el botón de IA". Ahora va
+                    pegado al nombre, en compu y celular, con texto que se lee siempre. */}
+                {(() => {
+                  const iaOn = getModoIA(activeConv.telefono)
+                  return (
+                    <button
+                      className="ia-toggle"
+                      onClick={handleToggleIA}
+                      disabled={togglingIA}
+                      aria-pressed={iaOn}
+                      title={iaOn ? 'La IA está respondiendo este chat — toca para APAGARLA' : 'La IA no responde este chat — toca para PRENDERLA'}
+                      style={{
+                        display:'flex', alignItems:'center', gap:6, flexShrink:0,
+                        padding:'6px 11px', borderRadius:20, cursor: togglingIA ? 'default' : 'pointer',
+                        fontFamily:'inherit', fontWeight:800, fontSize:11, whiteSpace:'nowrap',
+                        border: `2px solid ${iaOn ? '#f59e0b' : '#475569'}`,
+                        background: iaOn ? 'rgba(245,158,11,.16)' : 'rgba(148,163,184,.08)',
+                        color: iaOn ? '#fbbf24' : '#cbd5e1',
+                        boxShadow: iaOn ? '0 0 10px rgba(245,158,11,.3)' : 'none',
+                        transition:'all .2s', opacity: togglingIA ? .6 : 1,
+                        marginLeft:'auto',
+                      }}
+                    >
+                      <span style={{
+                        width:9, height:9, borderRadius:'50%', flexShrink:0,
+                        background: iaOn ? '#f59e0b' : '#64748b',
+                        animation: iaOn ? 'pulse 2s infinite' : 'none',
+                      }}/>
+                      <span>🤖 {togglingIA ? '…' : iaOn ? <>IA <b>PRENDIDA</b></> : <>IA <b>APAGADA</b></>}</span>
+                    </button>
+                  )
+                })()}
                 {/* Acceso directo a Crear pedido / herramientas (solo móvil) */}
                 <button onClick={() => setShowRight(true)} className="order-btn-mob" title="Crear pedido y herramientas"
-                  style={{ alignItems:'center', gap:5, padding:'6px 12px', borderRadius:20, border:'1px solid rgba(16,185,129,.5)', background:'linear-gradient(135deg,#10b981,#059669)', color:'#fff', fontSize:11, fontWeight:800, cursor:'pointer', whiteSpace:'nowrap', flexShrink:0, boxShadow:'0 2px 10px rgba(16,185,129,.3)', marginLeft:'auto' }}>
+                  style={{ alignItems:'center', gap:5, padding:'6px 12px', borderRadius:20, border:'1px solid rgba(16,185,129,.5)', background:'linear-gradient(135deg,#10b981,#059669)', color:'#fff', fontSize:11, fontWeight:800, cursor:'pointer', whiteSpace:'nowrap', flexShrink:0, boxShadow:'0 2px 10px rgba(16,185,129,.3)' }}>
                   🧾 Pedido
                 </button>
               </div>
@@ -3286,35 +3324,6 @@ export default function App() {
                   )
                 })()}
 
-                {/* ── TOGGLE AGENTE IA ── */}
-                {(() => {
-                  const iaOn = getModoIA(activeConv.telefono)
-                  return (
-                    <button
-                      onClick={handleToggleIA}
-                      disabled={togglingIA}
-                      title={iaOn ? 'Agente IA activo — clic para pausar' : 'Agente IA pausado — clic para activar'}
-                      style={{
-                        display:'flex', alignItems:'center', gap:5,
-                        padding:'4px 10px', borderRadius:20, cursor:'pointer',
-                        fontFamily:'inherit', fontWeight:800, fontSize:10,
-                        border: `2px solid ${iaOn ? '#f59e0b' : '#1e2d3d'}`,
-                        background: iaOn ? 'rgba(245,158,11,.12)' : 'rgba(255,255,255,.03)',
-                        color: iaOn ? '#f59e0b' : '#334155',
-                        boxShadow: iaOn ? '0 0 10px rgba(245,158,11,.25)' : 'none',
-                        transition:'all .2s',
-                        minWidth: 80, flexShrink:0,
-                      }}
-                    >
-                      <span style={{
-                        width:8, height:8, borderRadius:'50%', flexShrink:0,
-                        background: iaOn ? '#f59e0b' : '#334155',
-                        animation: iaOn ? 'pulse 2s infinite' : 'none',
-                      }}/>
-                      {togglingIA ? '...' : iaOn ? 'IA activa' : 'IA pausada'}
-                    </button>
-                  )
-                })()}
               </div>
             </div>
 
