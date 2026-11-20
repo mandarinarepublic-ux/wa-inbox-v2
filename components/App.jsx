@@ -3212,7 +3212,7 @@ export default function App() {
                 <Avatar name={displayName(activeConv.telefono)} phone={activeConv.telefono} size={34} />
                 <div style={{ minWidth:0, flex:1 }}>
                   <div style={{ fontWeight:800, color:'#f1f5f9', fontSize:13, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:160 }}>{displayName(activeConv.telefono)}</div>
-                  <div style={{ fontSize:12, fontWeight:600, color:'#94a3b8', whiteSpace:'nowrap', userSelect:'text' }}>{etiquetaTelefono(activeConv.telefono, contacts[activeConv.telefono]?.username)}</div>
+                  <div style={{ fontSize:12, fontWeight:600, color:'#94a3b8', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', userSelect:'text' }}>{etiquetaTelefono(activeConv.telefono, contacts[activeConv.telefono]?.username)}</div>
                   {etiquetasDe(activeConv.telefono).length > 0 && (
                     <div onClick={() => setMenuEtiquetas(true)} title="Cambiar etiquetas" style={{ display:'flex', flexWrap:'wrap', gap:4, marginTop:3, cursor:'pointer' }}>
                       {etiquetasDe(activeConv.telefono).map(e => <ChipEtiqueta key={e.id} e={e} chico />)}
