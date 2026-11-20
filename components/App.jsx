@@ -4,7 +4,7 @@ import { imagenParaWhatsapp } from '@/lib/imagen-whatsapp'
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
 import dynamic from 'next/dynamic'
 import { prefillPedido as prefillDeFormulario } from '@/lib/formularios'
-import { sendReaction, fetchInboxSync, fetchHilo, buscarEnMensajes, sendReply, updateContact, updateEtapa, updateDeuda, updateSinAutomaticos, updateTipoContacto, fetchPedidosChat, isDemo, sendInteractiveButtons, sendFormulario, toggleIAMode, sendVideo, sendDocumento, sendAudio, enviarAudioUrl, enviarDocumentoUrl, sendImageFile, precacheMedia, setCanalActivo, getCanalActivo, reenviarPieza, hayVersionNueva, fetchEtiquetas, crearEtiquetaApi, editarEtiquetaApi, ponerEtiquetaApi, quitarEtiquetaApi, sendCarrusel } from '@/lib/api-client'
+import { sendReaction, fetchInboxSync, fetchHilo, buscarEnMensajes, sendReply, updateContact, updateEtapa, updateDeuda, updateSinAutomaticos, updateTipoContacto, fetchPedidosChat, isDemo, sendInteractiveButtons, sendFormulario, toggleIAMode, sendVideo, sendDocumento, sendAudio, enviarAudioUrl, enviarDocumentoUrl, sendImageFile, precacheMedia, setCanalActivo, getCanalActivo, reenviarPieza, hayVersionNueva, fetchEtiquetas, crearEtiquetaApi, editarEtiquetaApi, ponerEtiquetaApi, quitarEtiquetaApi, sendCarrusel, getAutomatizaciones } from '@/lib/api-client'
 import { buildConvs, fmtDate, parseDate } from '@/lib/utils'
 import { Spinner, Avatar, ContactRow, MessageBubble, Toast } from '@/components/Components'
 import RightPanel from '@/components/RightPanel'
@@ -18,6 +18,7 @@ import { agregarOptimista, claveOptimista, reconciliarPendientes } from '@/lib/o
 import { etiquetaTelefono } from '@/lib/cliente-sin-telefono'
 import { etiquetaPedido, etapaVigente, tail9 } from '@/lib/etiqueta-crm'
 import FiltrosLista from '@/components/FiltrosLista'
+import { motivoIASinResponder } from '@/lib/ia-motivo'
 import { MenuEtiquetas, AdminEtiquetas, ChipEtiqueta } from '@/components/Etiquetas'
 import { expandirEtiquetas } from '@/lib/etiquetas-mapa'
 import CarruselModal from '@/components/CarruselModal'
@@ -1647,6 +1648,10 @@ export default function App() {
   }, [])
   // Etiqueta CRM (🏭 📦 🚚 💳): al cargar y cada 5 min, fuera de la ruta caliente.
   const [pedidosChat, setPedidosChat] = useState({})
+  // 🤖 Config de AUTOS (cortafuegos de IA por número) para el aviso "por qué no
+  // responde la IA" (lib/ia-motivo.js). Al cargar, al cambiar de pestaña (volver de
+  // AUTOS después de prender/apagar) y cada 5 min. Fuera de la ruta caliente.
+  const [cfgAuto, setCfgAuto] = useState(null)
   useEffect(() => {
     let vivo = true
     const traer = () => fetchPedidosChat().then(p => { if (vivo && p) setPedidosChat(p) })
@@ -1655,6 +1660,13 @@ export default function App() {
     const id = setInterval(traer, 5 * 60 * 1000)
     return () => { vivo = false; clearInterval(id) }
   }, [])
+  useEffect(() => {
+    let vivo = true
+    const traer = () => getAutomatizaciones().then(r => { if (vivo && r?.ok && r.config) setCfgAuto(r.config) })
+    traer()
+    const id = setInterval(traer, 5 * 60 * 1000)
+    return () => { vivo = false; clearInterval(id) }
+  }, [linea])
   const datosGestion = (conv) => {
     const tel = conv.telefono
     const ct = contacts[tel] || {}
@@ -2804,6 +2816,10 @@ export default function App() {
   const currentStatus  = currentContact?.estado || 'pendiente'
   // El estado de la FILA abierta (bandeja de ESE número), igual que en la lista.
   const currentStatusView = activeConv ? estadoFila(activeConv) : 'pendiente'
+  const motivoIA = activeConv ? motivoIASinResponder({
+    iaChat: getModoIA(activeConv.telefono), config: cfgAuto,
+    phoneId: activeCanal, etiquetaCanal: etiquetaDePhoneId(activeCanal),
+  }) : null
   const displayName    = (tel) => contacts[tel]?.alias || convs.find(c=>c.telefono===tel)?.nombre || tel
 
   return (
@@ -3232,12 +3248,12 @@ export default function App() {
                       onClick={handleToggleIA}
                       disabled={togglingIA}
                       aria-pressed={iaOn}
-                      title={iaOn ? 'La IA está respondiendo este chat — toca para APAGARLA' : 'La IA no responde este chat — toca para PRENDERLA'}
+                      title={motivoIA ? `${motivoIA.largo} (toca para apagarla en este chat)` : iaOn ? 'La IA está respondiendo este chat — toca para APAGARLA' : 'La IA no responde este chat — toca para PRENDERLA'}
                       style={{
                         display:'flex', alignItems:'center', gap:6, flexShrink:0,
                         padding:'6px 11px', borderRadius:20, cursor: togglingIA ? 'default' : 'pointer',
                         fontFamily:'inherit', fontWeight:800, fontSize:11, whiteSpace:'nowrap',
-                        border: `2px solid ${iaOn ? '#f59e0b' : '#475569'}`,
+                        border: `2px ${motivoIA ? 'dashed' : 'solid'} ${iaOn ? '#f59e0b' : '#475569'}`,
                         background: iaOn ? 'rgba(245,158,11,.16)' : 'rgba(148,163,184,.08)',
                         color: iaOn ? '#fbbf24' : '#cbd5e1',
                         boxShadow: iaOn ? '0 0 10px rgba(245,158,11,.3)' : 'none',
@@ -3250,7 +3266,7 @@ export default function App() {
                         background: iaOn ? '#f59e0b' : '#64748b',
                         animation: iaOn ? 'pulse 2s infinite' : 'none',
                       }}/>
-                      <span>🤖 {togglingIA ? '…' : iaOn ? <>IA <b>PRENDIDA</b></> : <>IA <b>APAGADA</b></>}</span>
+                      <span>🤖 {togglingIA ? '…' : iaOn ? <>IA <b>PRENDIDA</b>{motivoIA ? ' ⚠️' : ''}</> : <>IA <b>APAGADA</b></>}</span>
                     </button>
                   )
                 })()}
@@ -3327,6 +3343,12 @@ export default function App() {
               </div>
             </div>
 
+            {/* 🤖⚠️ El chat dice IA PRENDIDA pero otra reja la bloquea (lib/ia-motivo.js) */}
+            {motivoIA && (
+              <div role="status" style={{ padding:'7px 14px', background:'rgba(245,158,11,.1)', borderBottom:'1px solid rgba(245,158,11,.35)', color:'#fbbf24', fontSize:12, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', gap:8, flexWrap:'wrap', textAlign:'center' }}>
+                <span>🤖⚠️ {motivoIA.largo}</span>
+              </div>
+            )}
             {/* ⏰ Se cierra la ventana de 24 h de ESTA fila con algo en juego (💬 💳 📌) */}
             {alertaVentana(activeConv) && (
               <div style={{ padding:'7px 14px', background:'rgba(249,115,22,.12)', borderBottom:'1px solid rgba(249,115,22,.3)', color:'#fb923c', fontSize:12, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', gap:8, flexWrap:'wrap' }}>
