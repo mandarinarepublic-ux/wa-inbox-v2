@@ -3609,7 +3609,7 @@ export default function App() {
                       360px y hacía ver la caja vacía del doble de alto. */}
                   <textarea ref={setTaRef} value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKey}
                     onPaste={handlePaste}
-                    placeholder={getModoIA(activeConv?.telefono) ? '🤖 IA respondiendo automáticamente...' : esCelular ? 'Mensaje...' : 'Mensaje... (Ctrl+Enter envía)'}
+                    placeholder={getModoIA(activeConv?.telefono) && !motivoIA ? '🤖 IA respondiendo automáticamente...' : esCelular ? 'Mensaje...' : 'Mensaje... (Ctrl+Enter envía)'}
                     rows={1}
                     style={{
                       width:'100%', background:'transparent', border:'none', outline:'none',
