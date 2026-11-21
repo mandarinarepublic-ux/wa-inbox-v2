@@ -106,6 +106,38 @@ function BotonEje({ on, color, onClick, title, icon, label }) {
     </button>
   )
 }
+// Etapa de la venta en UN selector (20-nov-2026): eran 4 botones sueltos en el
+// encabezado, que ya tenía 12 controles del mismo peso. El <select> nativo va
+// invisible encima, así abre la lista propia del teléfono. Hace lo MISMO que los
+// botones: elegir otra etapa la pone, "Sin etapa" quita la actual.
+function SelectorEtapa({ etapas, actual, onElegir }) {
+  const e = actual ? etapas[actual] : null
+  const on = Boolean(e)
+  const color = e?.color || '#7c8ba1'
+  return (
+    <label className="sel-etapa" title={on ? `Etapa: ${e.label} — cambiar o quitar` : 'Marcar la etapa de la venta'} style={{
+      position:'relative', display:'inline-flex', alignItems:'center', flexShrink:0,
+      padding:'4px 6px', fontWeight: on ? 800 : 600,
+      background: on ? `${color}22` : 'transparent',
+      border: `${on ? 2 : 1}px solid ${on ? color : '#7c8ba1'}`,
+      color: on ? color : '#7c8ba1',
+      borderRadius:7, cursor:'pointer', fontFamily:'inherit', transition:'all .15s',
+      boxShadow: on ? `0 0 8px ${color}44` : 'none',
+    }}>
+      <span className="hide-mobile" style={{ fontSize:11 }}>{on ? `${e.icon} ${e.label}` : '🗂️ Etapa'} ▾</span>
+      <span className="show-mobile eje-mob">
+        <span style={{ fontSize:15, lineHeight:1 }}>{on ? e.icon : '🗂️'}</span>
+        <span className="eje-mob-lbl">{on ? e.label : 'Etapa'} ▾</span>
+      </span>
+      <select aria-label="Etapa de la venta" value={actual || ''} onChange={(ev) => onElegir(ev.target.value)}
+        style={{ position:'absolute', inset:0, width:'100%', height:'100%', opacity:0, cursor:'pointer', fontSize:16 }}>
+        <option value="">— Sin etapa —</option>
+        {Object.entries(etapas).map(([k, x]) => <option key={k} value={k}>{x.icon} {x.label}</option>)}
+      </select>
+    </label>
+  )
+}
+
 const Separador = () => <span style={{ width:1, alignSelf:'stretch', background:'#1e2d3d', margin:'2px 2px', flexShrink:0 }} />
 
 // La caja de texto arranca en UNA línea y se estira sola. Los números salen de
@@ -2875,7 +2907,7 @@ export default function App() {
         .overlay    { display:none; }
         /* Foco visible SOLO con teclado (20-nov-2026): antes no se veía en qué botón
            estabas. :focus-visible no se dispara con el clic ni con el dedo. */
-        button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, [role="button"]:focus-visible, [tabindex]:focus-visible{ outline:2px solid #f97316 !important; outline-offset:2px; }
+        button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, [role="button"]:focus-visible, [tabindex]:focus-visible, .sel-etapa:focus-within{ outline:2px solid #f97316 !important; outline-offset:2px; }
         /* Filtros plegados también en la compu (20-nov-2026): con letra legible ocupaban
            8 líneas antes del primer chat. El botón dice cuántos hay activos. */
         .filtros-toggle{ display:flex !important; }
@@ -3320,15 +3352,9 @@ export default function App() {
                 ))}
                 <Separador />
 
-                {/* ── Etapa de la venta (clic de nuevo = quitar) ── */}
-                {Object.entries(ETAPAS).map(([key, e]) => {
-                  const on = datosGestion(activeConv).etapa === key
-                  return (
-                    <BotonEje key={key} on={on} color={e.color} icon={e.icon} label={e.label}
-                      title={on ? `${e.label} — clic para quitar` : `Marcar ${e.label}`}
-                      onClick={() => cambiarEtapa(activeConv, key)} />
-                  )
-                })}
+                {/* ── Etapa de la venta: un selector (antes 4 botones) ── */}
+                <SelectorEtapa etapas={ETAPAS} actual={datosGestion(activeConv).etapa || ''}
+                  onElegir={(k) => { const ya = datosGestion(activeConv).etapa || ''; if (k === ya) return; cambiarEtapa(activeConv, k || ya) }} />
                 <Separador />
 
                 {/* ── 📌 le debemos · 🤫 sin automáticos · 🏷️ interno ── */}
