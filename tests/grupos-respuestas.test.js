@@ -38,3 +38,34 @@ test('las flechas saltan a la vecina VISIBLE', () => {
   assert.equal(vecinaVisible(v, 1, -1), -1)       // ya es la primera
   assert.equal(vecinaVisible(v, 3, +1), -1)       // ya es la última
 })
+
+// 🔎 Buscador (20-nov-2026)
+import { coincideBusqueda } from '../lib/grupos-respuestas.js'
+
+const conTexto = [
+  { id: 'x', grupo: 'tallas', text: 'Tabla de tallas de NIÑO' },
+  { id: 'y', grupo: 'datos', text: 'Cuentas bancarias', botones: ['Ya transferí'] },
+  { id: 'z', grupo: 'productos', text: 'Mira estos', carrusel: [{ nombre: 'Hoodie Dragón Ball' }] },
+  { id: 'w', grupo: null, text: 'Hola, ¿en qué te ayudo?' },
+]
+
+test('buscar: sin tildes ni mayúsculas, y TODAS las palabras', () => {
+  assert.ok(coincideBusqueda(conTexto[0], 'tallas nino'))
+  assert.ok(coincideBusqueda(conTexto[0], '  NIÑO  '))
+  assert.ok(!coincideBusqueda(conTexto[0], 'tallas adulto'))
+  assert.ok(coincideBusqueda(conTexto[3], ''))
+})
+
+test('buscar también en los botones y en los productos del carrusel', () => {
+  assert.ok(coincideBusqueda(conTexto[1], 'transferi'))
+  assert.ok(coincideBusqueda(conTexto[2], 'dragon'))
+})
+
+test('la búsqueda se suma al botón, y los conteos dicen dónde hay', () => {
+  assert.deepEqual(indicesVisibles(conTexto, TODAS, 'tallas'), [0])
+  assert.deepEqual(indicesVisibles(conTexto, 'datos', 'tallas'), [])
+  const n = conteoPorGrupo(conTexto, 'tallas')
+  assert.equal(n[TODAS], 1); assert.equal(n.tallas, 1); assert.equal(n.datos, 0)
+  // Sin búsqueda, igual que antes.
+  assert.equal(conteoPorGrupo(conTexto)[TODAS], 4)
+})
