@@ -117,25 +117,30 @@ test('el archivo NO tiene ninguna rama que rechace', async () => {
 // ── Control intermedio (20-nov-2026) ─────────────────────────────────────────
 import { descartarSinFirma } from '../lib/firma-meta.js'
 
-test('control intermedio: descarta SOLO lo que llega sin firma o con firma deforme', () => {
-  assert.equal(descartarSinFirma('sin-cabecera'), true)
-  assert.equal(descartarSinFirma('formato-raro'), true)
+test('firma cerrada: descarta sin firma, firma deforme, firma que NO coincide y falta de secreto', () => {
+  for (const v of ['sin-cabecera', 'formato-raro', 'NO-coincide', 'sin-secreto']) {
+    assert.equal(descartarSinFirma(v), true, `debe descartar "${v}"`)
+  }
 })
 
-test('control intermedio: una firma válida, una que NO coincide o la falta de secreto SIGUEN PASANDO', () => {
-  // Si el secreto en Vercel estuviera mal, Meta tiene que seguir entrando.
-  for (const v of ['coincide', 'NO-coincide', 'sin-secreto', 'sin-cuerpo', 'error-al-observar', '', null, undefined, 'veredicto-nuevo']) {
+test('firma cerrada: una firma válida, un error NUESTRO o un veredicto desconocido SIGUEN PASANDO', () => {
+  // Un fallo de este código no puede dejar sin mensajes al inbox.
+  for (const v of ['coincide', 'sin-cuerpo', 'error-al-observar', '', null, undefined, 'veredicto-nuevo']) {
     assert.equal(descartarSinFirma(v), false, `no debe descartar "${v}"`)
   }
 })
 
-test('control intermedio: un POST real de Meta (firmado) nunca se descarta', () => {
+test('firma cerrada: un POST real de Meta (firmado) nunca se descarta; uno con firma inventada, sí', () => {
   const v = evaluarFirmaMeta({ secreto: SECRETO, crudo: CUERPO, cabecera: firmaDe(CUERPO) })
+  assert.equal(v, 'coincide')
   assert.equal(descartarSinFirma(v), false)
-  // …y aunque el secreto cargado fuera OTRO, tampoco.
+  // Firma hecha con OTRO secreto (alguien que no es Meta): se descarta.
   const v2 = evaluarFirmaMeta({ secreto: 'secreto-equivocado', crudo: CUERPO, cabecera: firmaDe(CUERPO) })
   assert.equal(v2, 'NO-coincide')
-  assert.equal(descartarSinFirma(v2), false)
+  assert.equal(descartarSinFirma(v2), true)
+  // Cuerpo alterado por el camino con la firma original: tampoco pasa.
+  const v3 = evaluarFirmaMeta({ secreto: SECRETO, crudo: CUERPO + ' ', cabecera: firmaDe(CUERPO) })
+  assert.equal(descartarSinFirma(v3), true)
 })
 
 test('control intermedio: sin cabecera se descarta aunque NO haya secreto cargado', () => {

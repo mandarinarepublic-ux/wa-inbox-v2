@@ -937,10 +937,11 @@ export async function POST(req) {
     let veredictoFirma = ''
     try { veredictoFirma = observarFirmaMeta(req.headers.get('x-hub-signature-256'), crudo) } catch {}
 
-    // CONTROL INTERMEDIO: se descarta SOLO lo que llega sin firma o con firma
-    // deforme (Meta firma siempre). Una firma que no coincide SIGUE PASANDO:
-    // ver descartarSinFirma en lib/firma-meta.js. Para deshacer: Instant
-    // Rollback en Vercel al despliegue anterior.
+    // FIRMA CERRADA (20-nov-2026): se descarta lo que llega sin firma, con firma
+    // deforme, con firma que NO coincide o sin secreto para comprobarla (ver
+    // descartarSinFirma en lib/firma-meta.js). Meta firma siempre y todo lo suyo
+    // coincidía. Si el inbox se queda sin mensajes nuevos y los registros dicen
+    // "[firma] DESCARTADO", deshacer: Instant Rollback en Vercel.
     if (descartarSinFirma(veredictoFirma)) {
       console.log(`[firma] DESCARTADO ${veredictoFirma}`)
       return new Response('firma requerida', { status: 403 })
