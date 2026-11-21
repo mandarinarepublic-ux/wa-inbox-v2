@@ -2941,8 +2941,12 @@ export default function App() {
         /* (21-nov-2026, web-design-guidelines) Deslizar una lista hasta el tope ya no
            arrastra la página (en Android disparaba "tirar para recargar" y se perdían
            borradores). Toques sin la demora del doble toque, y un destello suave en vez
-           del azul de Android. */
-        body * { overscroll-behavior: contain; }
+           del azul de Android.
+           ☠️ (21-nov-2026) Va SOLO en html/body, NUNCA en `body *`: todo elemento con
+           overflow:hidden (tarjetas de respuestas rápidas, textos con «…») cuenta como
+           contenedor de scroll, y con `contain` se comía la rueda del mouse — la lista
+           de respuestas rápidas dejó de subir y bajar. Misma trampa que el CRM el 9-oct. */
+        html, body { overscroll-behavior: contain; }
         button, a, [role="button"], label { touch-action: manipulation; -webkit-tap-highlight-color: rgba(255,255,255,.08); }
         body { background:#080d14; font-family:'Outfit',sans-serif; overflow:hidden; }
         ::-webkit-scrollbar { width:4px; }
