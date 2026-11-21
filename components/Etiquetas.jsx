@@ -116,7 +116,7 @@ export function AdminEtiquetas({ etiquetas, onCrear, onEditar, onCerrar }) {
             <ChipEtiqueta e={e} />
             {e.clave && <span style={{ fontSize: 11, color: P.muy }}>auto</span>}
             <span style={{ flex: 1 }} />
-            <button onClick={() => setEditando({ id: e.id, nombre: e.nombre, color: e.color })} title="Editar" style={{ background: 'transparent', border: 'none', color: P.tenue, cursor: 'pointer', fontSize: 13 }}>✏️</button>
+            <button aria-label="Editar" onClick={() => setEditando({ id: e.id, nombre: e.nombre, color: e.color })} title="Editar" style={{ background: 'transparent', border: 'none', color: P.tenue, cursor: 'pointer', fontSize: 13 }}>✏️</button>
             <button disabled={ocupado} onClick={() => correr(() => onEditar(e.id, { activa: !e.activa }))}
               title={e.activa ? 'Desactivar: se esconde de todos los chats (no se borra)' : 'Volver a activar'}
               style={{ background: 'transparent', border: `1px solid ${P.borde}`, borderRadius: 6, color: P.tenue, cursor: 'pointer', fontSize: 11, padding: '2px 6px', fontFamily: 'inherit' }}>

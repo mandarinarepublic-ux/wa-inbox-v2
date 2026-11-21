@@ -174,9 +174,9 @@ export default function Notas({ telefono, refrescar = 0, onVerPedido }) {
       {error && <div style={{ fontSize: 11, color: '#f87171', marginTop: 5 }}>⚠️ {error}</div>}
 
       {cargando ? (
-        <div style={{ fontSize: 11, color: '#64748b', marginTop: 8 }}>Cargando notas...</div>
+        <div style={{ fontSize: 11, color: '#7c8ba1', marginTop: 8 }}>Cargando notas...</div>
       ) : notas.length === 0 ? (
-        <div style={{ fontSize: 11, color: '#475569', marginTop: 8 }}>Sin notas todavía.</div>
+        <div style={{ fontSize: 11, color: '#7c8ba1', marginTop: 8 }}>Sin notas todavía.</div>
       ) : (
         <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
           {(() => {
@@ -216,8 +216,8 @@ export default function Notas({ telefono, refrescar = 0, onVerPedido }) {
                 <div
                   onClick={() => alternar(nota.id)}
                   style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', cursor: 'pointer' }}>
-                  <span style={{ fontSize: 11, color: '#64748b', flexShrink: 0 }}>{abierta ? '▼' : '▶'}</span>
-                  <span style={{ fontSize: 11, color: '#64748b', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
+                  <span style={{ fontSize: 11, color: '#7c8ba1', flexShrink: 0 }}>{abierta ? '▼' : '▶'}</span>
+                  <span style={{ fontSize: 11, color: '#7c8ba1', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
                     {fmtFecha(nota.creado_at)}
                   </span>
                   {est && <span style={{ fontSize: 11, flexShrink: 0 }}>{est.marca}</span>}
@@ -270,11 +270,11 @@ export default function Notas({ telefono, refrescar = 0, onVerPedido }) {
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
                           <button onClick={() => copiarNota(nota.id, nota.texto)}
-                            style={{ background: 'none', border: 'none', padding: 0, color: copiadoId === nota.id ? VERDE : '#64748b', fontSize: 11, fontWeight: copiadoId === nota.id ? 700 : 400, cursor: 'pointer', fontFamily: 'inherit' }}>
+                            style={{ background: 'none', border: 'none', padding: 0, color: copiadoId === nota.id ? VERDE : '#7c8ba1', fontSize: 11, fontWeight: copiadoId === nota.id ? 700 : 400, cursor: 'pointer', fontFamily: 'inherit' }}>
                             {copiadoId === nota.id ? '✅ Copiado' : '📋 Copiar'}
                           </button>
                           <button onClick={() => { setEditandoId(nota.id); setEditTexto(nota.texto) }}
-                            style={{ background: 'none', border: 'none', padding: 0, color: '#64748b', fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>✏️ Editar</button>
+                            style={{ background: 'none', border: 'none', padding: 0, color: '#7c8ba1', fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>✏️ Editar</button>
                           {confirmarBorrar === nota.id ? (
                             <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                               <span style={{ fontSize: 11, color: '#f87171' }}>¿Borrar?</span>
@@ -285,7 +285,7 @@ export default function Notas({ telefono, refrescar = 0, onVerPedido }) {
                             </span>
                           ) : (
                             <button onClick={() => setConfirmarBorrar(nota.id)}
-                              style={{ background: 'none', border: 'none', padding: 0, color: '#475569', fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>✕ Borrar</button>
+                              style={{ background: 'none', border: 'none', padding: 0, color: '#7c8ba1', fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>✕ Borrar</button>
                           )}
                         </div>
                       </>

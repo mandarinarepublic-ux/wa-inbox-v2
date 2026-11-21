@@ -89,7 +89,7 @@ export default function MarcoCRM({ titulo, src, tituloIframe, onCerrar, iframeRe
       {aviso && (
         <div style={{
           flexShrink:0, padding:'5px 10px', background:'#0a0f1a',
-          borderBottom:'1px solid #111c2a', fontSize:11, color:'#64748b', lineHeight:1.35,
+          borderBottom:'1px solid #111c2a', fontSize:11, color:'#7c8ba1', lineHeight:1.35,
         }}>
           {aviso}
         </div>

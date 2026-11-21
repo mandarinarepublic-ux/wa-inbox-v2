@@ -19,7 +19,7 @@ export default function SetupModal({ onClose }) {
     outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit',
   }
   const labelStyle = {
-    fontSize: 12, color: '#64748b', fontWeight: 700, letterSpacing: '.06em',
+    fontSize: 12, color: '#7c8ba1', fontWeight: 700, letterSpacing: '.06em',
   }
 
   return (
@@ -42,7 +42,7 @@ export default function SetupModal({ onClose }) {
           }}>⚙️</div>
           <div>
             <h2 style={{ margin: 0, color: '#f1f5f9', fontSize: 19, fontWeight: 800 }}>Configuración</h2>
-            <p style={{ margin: '3px 0 0', color: '#475569', fontSize: 13 }}>
+            <p style={{ margin: '3px 0 0', color: '#7c8ba1', fontSize: 13 }}>
               Cada cuánto se actualiza la bandeja
             </p>
           </div>
@@ -59,7 +59,7 @@ export default function SetupModal({ onClose }) {
         <div style={{ display: 'flex', gap: 10 }}>
           <button onClick={onClose} style={{
             flex: 1, padding: '12px', background: 'transparent',
-            border: '1px solid #1e2d3d', borderRadius: 12, color: '#64748b',
+            border: '1px solid #1e2d3d', borderRadius: 12, color: '#7c8ba1',
             fontSize: 14, cursor: 'pointer', fontFamily: 'inherit',
           }}>Cancelar</button>
           <button onClick={save} style={{

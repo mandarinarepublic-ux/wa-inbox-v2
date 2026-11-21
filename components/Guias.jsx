@@ -22,7 +22,7 @@ const ESTADOS = {
   REGISTRADA: { icono: '✅', texto: 'Registrada', color: VERDE },
   PENDIENTE:  { icono: '⚠️', texto: 'Sin asignar', color: '#f59e0b' },
   NUEVA:      { icono: '🆕', texto: 'Sin procesar', color: '#38bdf8' },
-  EXCLUIDA:   { icono: '🚫', texto: 'Excluida', color: '#64748b' },
+  EXCLUIDA:   { icono: '🚫', texto: 'Excluida', color: '#7c8ba1' },
 }
 
 const METODO = { cedula: 'por cédula', celular: 'por celular', nombre: 'por nombre', manual: 'a mano', crm: 'desde el CRM' }
@@ -78,7 +78,7 @@ function Asignar({ guia, onListo }) {
         </button>
       </div>
       {res && (
-        <div style={{ fontSize: 12, color: '#64748b', marginTop: 8 }}>
+        <div style={{ fontSize: 12, color: '#7c8ba1', marginTop: 8 }}>
           {deLaGuia ? 'Sugeridos con el celular, el nombre y la dirección de la guía' : `Resultados para "${buscado}"`}
           {!deLaGuia && (
             <button onClick={() => { setQ(''); correr(sugeridos, true) }} style={{ marginLeft: 8, background: 'none', border: 'none', color: '#38bdf8', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit', padding: 0 }}>
@@ -87,7 +87,7 @@ function Asignar({ guia, onListo }) {
           )}
         </div>
       )}
-      {res && !res.length && <div style={{ fontSize: 12, color: '#64748b', marginTop: 6 }}>No encontré pedidos con eso. Prueba con otro dato: un apellido, el celular o una palabra de la dirección.</div>}
+      {res && !res.length && <div style={{ fontSize: 12, color: '#7c8ba1', marginTop: 6 }}>No encontré pedidos con eso. Prueba con otro dato: un apellido, el celular o una palabra de la dirección.</div>}
       {res && res.length > 0 && (
         <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 340, overflowY: 'auto' }}>
           {res.map(p => {
@@ -102,7 +102,7 @@ function Asignar({ guia, onListo }) {
                 {p.monto_total != null && ` · $${Number(p.monto_total).toFixed(2)}`}
                 {p.tiene_guia && <span style={{ color: '#f59e0b' }}> · ya tiene guía</span>}
                 {(p.celular || p.direccion) && (
-                  <div style={{ color: '#64748b', marginTop: 2 }}>
+                  <div style={{ color: '#7c8ba1', marginTop: 2 }}>
                     {p.celular && <>📱 {p.celular}</>}{p.celular && p.direccion && ' · '}{p.direccion && <>📍 {p.direccion}</>}
                   </div>
                 )}
@@ -154,7 +154,7 @@ function Fila({ g, onRecargar }) {
   const [asignando, setAsignando] = useState(false)
   const e = ESTADOS[g.estado] || ESTADOS.NUEVA
   return (
-    <div style={{ background: '#0d1828', border: '1px solid #1e2d3d', borderLeft: `3px solid ${e.color}`, borderRadius: 12, padding: 12 }}>
+    <div style={{ background: '#0d1828', border: `1px solid ${e.color}66`, borderRadius: 12, padding: 12 }}>
       <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
         {g.media_url
           ? <a href={g.media_url} target="_blank" rel="noreferrer" title="Ver la guía"><img src={g.media_url} alt="" style={{ width: 54, height: 72, objectFit: 'cover', borderRadius: 7, border: '1px solid #1e2d3d' }} /></a>
@@ -163,7 +163,7 @@ function Fila({ g, onRecargar }) {
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <b style={{ color: '#e2e8f0', fontSize: 14 }}>{g.numero_guia}</b>
             <span style={{ color: e.color, fontWeight: 800 }}>{e.icono} {e.texto}</span>
-            <span style={{ color: '#475569' }}>{fecha(g.fecha_mensaje)}</span>
+            <span style={{ color: '#7c8ba1' }}>{fecha(g.fecha_mensaje)}</span>
           </div>
           <div>📍 {g.destino || '—'}{g.destinatario && <> · 👤 {g.destinatario}</>}{g.celular && <> · 📱 {g.celular}</>}</div>
           {g.fecha_guia && <div>🗓 Despachada {fecha(g.fecha_guia)}</div>}
@@ -171,14 +171,14 @@ function Fila({ g, onRecargar }) {
             <div>
               → <a href={CRM_PEDIDO(g.pedido_id)} target="_blank" rel="noreferrer" style={{ color: VERDE, fontWeight: 800 }}>{g.pedido_id}</a>
               {g.cliente && ` · ${g.cliente}`}{g.estado_pedido && ` · ${g.estado_pedido}`}
-              {g.metodo && METODO[g.metodo] && <span style={{ color: '#64748b' }}> · {METODO[g.metodo]}</span>}
+              {g.metodo && METODO[g.metodo] && <span style={{ color: '#7c8ba1' }}> · {METODO[g.metodo]}</span>}
             </div>
           )}
-          {g.estado === 'REGISTRADA' && g.nota && <div style={{ color: '#64748b' }}>{g.nota}</div>}
+          {g.estado === 'REGISTRADA' && g.nota && <div style={{ color: '#7c8ba1' }}>{g.nota}</div>}
           {g.estado === 'PENDIENTE' && <div style={{ color: '#f59e0b' }}>{g.motivo}</div>}
-          {g.estado === 'EXCLUIDA' && <div style={{ color: '#64748b' }}>{g.motivo}</div>}
+          {g.estado === 'EXCLUIDA' && <div style={{ color: '#7c8ba1' }}>{g.motivo}</div>}
           {g.pedido_sugerido && <Confirmar g={g} onListo={onRecargar} />}
-          {g.estado === 'NUEVA' && <div style={{ color: '#64748b' }}>Aprieta "Procesar guías" para leerla.</div>}
+          {g.estado === 'NUEVA' && <div style={{ color: '#7c8ba1' }}>Aprieta "Procesar guías" para leerla.</div>}
         </div>
         {g.estado !== 'REGISTRADA' && g.estado !== 'EXCLUIDA' && (
           <button onClick={() => setAsignando(a => !a)} style={{
@@ -249,7 +249,7 @@ export default function Guias({ active }) {
     <div style={{ flex: 1, overflowY: 'auto', height: '100%', background: '#080d14' }}>
       <div style={{ maxWidth: 760, margin: '0 auto', padding: '22px 16px 60px' }}>
         <div style={{ fontSize: 20, fontWeight: 900, color: '#e2e8f0' }}>🚚 Guías de Servientrega</div>
-        <div style={{ fontSize: 12, color: '#64748b', marginTop: 4, lineHeight: 1.5 }}>
+        <div style={{ fontSize: 12, color: '#7c8ba1', marginTop: 4, lineHeight: 1.5 }}>
           Las guías que <b style={{ color: '#94a3b8' }}>Rodri VIP</b> reenvía a este número (últimos {datos?.dias || 30} días).
           "Procesar" lee la foto, encuentra al cliente por celular o nombre y anota la guía en su último pedido
           (EN_FABRICA, DESPACHO o COMPLETADO reciente) y lo pasa a <b style={{ color: '#94a3b8' }}>COMPLETADO</b>.
@@ -280,7 +280,7 @@ export default function Guias({ active }) {
           )}
         </div>
         {esGuia && (
-          <div style={{ marginTop: 8, fontSize: 12, color: '#64748b' }}>
+          <div style={{ marginTop: 8, fontSize: 12, color: '#7c8ba1' }}>
             {errorCrm ? (
               <span style={{ color: '#ef4444' }}>⚠️ No se pudo buscar en el CRM: {errorCrm} · <button onClick={buscarEnCrm} style={{ background: 'none', border: 'none', color: '#38bdf8', cursor: 'pointer', padding: 0, fontSize: 12, fontFamily: 'inherit' }}>reintentar</button></span>
             ) : enCrm === null ? (
@@ -293,10 +293,10 @@ export default function Guias({ active }) {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <span>En el CRM ({enCrm.length}):</span>
                 {enCrm.map(x => (
-                  <div key={x.numero_guia + x.pedido_id} style={{ background: '#0d1828', border: '1px solid #1e2d3d', borderLeft: `3px solid ${VERDE}`, borderRadius: 10, padding: '8px 10px', color: '#94a3b8' }}>
+                  <div key={x.numero_guia + x.pedido_id} style={{ background: '#0d1828', border: `1px solid ${VERDE}55`, borderRadius: 10, padding: '8px 10px', color: '#94a3b8' }}>
                     <b style={{ color: '#e2e8f0' }}>{x.numero_guia}</b> → <a href={CRM_PEDIDO(x.pedido_id)} target="_blank" rel="noreferrer" style={{ color: VERDE, fontWeight: 800 }}>{x.pedido_id}</a>
                     {x.cliente && ` · ${x.cliente}`}{x.celular && ` · 📱 ${x.celular}`}{x.estado_pedido && ` · ${x.estado_pedido}`}
-                    <div style={{ color: '#64748b' }}>
+                    <div style={{ color: '#7c8ba1' }}>
                       🗓 {fecha(x.fecha_despacho)}{x.transportista && ` · ${x.transportista}`}{x.registrado_por && ` · por ${x.registrado_por}`}
                       {x.foto && <> · <a href={x.foto} target="_blank" rel="noreferrer" style={{ color: '#94a3b8' }}>ver foto</a></>}
                     </div>
@@ -318,9 +318,9 @@ export default function Guias({ active }) {
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
-          {cargando && !datos && <div style={{ color: '#475569', fontSize: 13 }}>Cargando…</div>}
+          {cargando && !datos && <div style={{ color: '#7c8ba1', fontSize: 13 }}>Cargando…</div>}
           {datos && !visibles.length && (
-            <div style={{ color: '#64748b', fontSize: 13, padding: 12 }}>
+            <div style={{ color: '#7c8ba1', fontSize: 13, padding: 12 }}>
               {texto ? `Ninguna guía de los últimos ${datos?.dias || 30} días coincide con "${busca.trim()}".` : 'No hay guías en este filtro.'}
             </div>
           )}

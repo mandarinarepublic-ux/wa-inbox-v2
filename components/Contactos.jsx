@@ -83,22 +83,22 @@ export default function Contactos({ active, onOpenChat }) {
       <div style={{ padding: '16px 16px 10px', borderBottom: '1px solid #162030', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
           <div style={{ fontSize: 19, fontWeight: 900, color: '#e2e8f0' }}>👥 Contactos</div>
-          <div style={{ fontSize: 12, color: '#64748b' }}>
+          <div style={{ fontSize: 12, color: '#7c8ba1' }}>
             {contactos.length} en total · <b style={{ color: '#25d366' }}>{dentro24h}</b> dentro de 24h
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, background: '#0d1828', border: '1px solid #1e2d3d', borderRadius: 10, padding: '8px 12px' }}>
-          <span style={{ fontSize: 14, color: '#475569' }}>🔍</span>
+          <span style={{ fontSize: 14, color: '#7c8ba1' }}>🔍</span>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar por nombre o número…"
             style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: '#e2e8f0', fontSize: 13, fontFamily: 'Outfit,sans-serif' }} />
-          {search && <button onClick={() => setSearch('')} style={{ background: 'none', border: 'none', color: '#475569', cursor: 'pointer', fontSize: 15 }}>✕</button>}
+          {search && <button onClick={() => setSearch('')} style={{ background: 'none', border: 'none', color: '#7c8ba1', cursor: 'pointer', fontSize: 15 }}>✕</button>}
         </div>
       </div>
 
       {/* Lista */}
       <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
-        {loading && <div style={{ color: '#475569', fontSize: 13, padding: 20 }}>Cargando contactos…</div>}
-        {!loading && filtrados.length === 0 && <div style={{ color: '#475569', fontSize: 13, padding: 20 }}>Sin resultados.</div>}
+        {loading && <div style={{ color: '#7c8ba1', fontSize: 13, padding: 20 }}>Cargando contactos…</div>}
+        {!loading && filtrados.length === 0 && <div style={{ color: '#7c8ba1', fontSize: 13, padding: 20 }}>Sin resultados.</div>}
         {filtrados.map((c) => (
           <button key={c.telefono} onClick={() => setSel(c)} style={{
             width: '100%', display: 'flex', alignItems: 'center', gap: 11, padding: '11px 16px',
@@ -112,7 +112,7 @@ export default function Contactos({ active, onOpenChat }) {
               <div style={{ fontSize: 13, fontWeight: 700, color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {c.nombre || c.alias || c.telefono}
               </div>
-              <div style={{ fontSize: 12, color: '#64748b', marginTop: 1 }}>
+              <div style={{ fontSize: 12, color: '#7c8ba1', marginTop: 1 }}>
                 {soloDig(c.telefono)} · {hace(c.ultimoEntranteAt)}
               </div>
             </div>
@@ -120,7 +120,7 @@ export default function Contactos({ active, onOpenChat }) {
           </button>
         ))}
         {!loading && contactos.length > 400 && !search && (
-          <div style={{ color: '#334155', fontSize: 12, padding: '12px 16px', textAlign: 'center' }}>
+          <div style={{ color: '#7c8ba1', fontSize: 12, padding: '12px 16px', textAlign: 'center' }}>
             Mostrando los 400 más recientes · usa el buscador para el resto
           </div>
         )}
@@ -201,15 +201,15 @@ function PanelContacto({ contacto: c, onClose, onOpenChat, flash }) {
             <div style={{ fontSize: 15, fontWeight: 800, color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {c.nombre || c.alias || soloDig(c.telefono)}
             </div>
-            <div style={{ fontSize: 12, color: '#64748b' }}>{soloDig(c.telefono)}</div>
+            <div style={{ fontSize: 12, color: '#7c8ba1' }}>{soloDig(c.telefono)}</div>
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#475569', cursor: 'pointer', fontSize: 20 }}>✕</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#7c8ba1', cursor: 'pointer', fontSize: 20 }}>✕</button>
         </div>
 
         <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 12, fontWeight: 800, color: '#64748b', marginBottom: 8 }}>¿Por cuál número le escribes?</div>
+          <div style={{ fontSize: 12, fontWeight: 800, color: '#7c8ba1', marginBottom: 8 }}>¿Por cuál número le escribes?</div>
           {opciones.length === 0 && (
-            <div style={{ fontSize: 13, color: '#475569', padding: '10px 12px', borderRadius: 10, border: '1px dashed #1e2d3d' }}>
+            <div style={{ fontSize: 13, color: '#7c8ba1', padding: '10px 12px', borderRadius: 10, border: '1px dashed #1e2d3d' }}>
               No hay números configurados.
             </div>
           )}
@@ -260,7 +260,7 @@ function PanelContacto({ contacto: c, onClose, onOpenChat, flash }) {
               style={{
                 width: '100%', padding: '11px', borderRadius: 11, border: 'none',
                 background: texto.trim() ? `linear-gradient(135deg,${ORANGE},#f97316)` : '#1e2d3d',
-                color: texto.trim() ? '#0b1220' : '#475569', fontWeight: 900, fontSize: 14,
+                color: texto.trim() ? '#0b1220' : '#7c8ba1', fontWeight: 900, fontSize: 14,
                 cursor: texto.trim() && !sending ? 'pointer' : 'default', fontFamily: 'Outfit,sans-serif',
               }}>{sending ? 'Enviando…' : 'Enviar'}</button>
           </div>
@@ -287,7 +287,7 @@ export function PlantillaModal({ telefono, nombre, onClose, flash, onCarrusel })
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
           <div style={{ fontSize: 15, fontWeight: 800, color: '#e2e8f0' }}>📋 Enviar plantilla</div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#475569', cursor: 'pointer', fontSize: 20 }}>✕</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#7c8ba1', cursor: 'pointer', fontSize: 20 }}>✕</button>
         </div>
         <SelectorPlantilla contacto={{ telefono, nombre }} flash={flash} onClose={onClose} onCarrusel={onCarrusel} />
       </div>
@@ -355,7 +355,7 @@ function SelectorPlantilla({ contacto: c, flash, onClose, onCarrusel }) {
         ⚠️ Pasaron más de 24h desde su último mensaje. WhatsApp solo permite enviar una <b>plantilla aprobada</b>.
       </div>
 
-      {estado === 'loading' && <div style={{ color: '#475569', fontSize: 13 }}>Cargando plantillas…</div>}
+      {estado === 'loading' && <div style={{ color: '#7c8ba1', fontSize: 13 }}>Cargando plantillas…</div>}
 
       {estado === 'needsEnv' && (
         <div style={{ color: '#94a3b8', fontSize: 13, lineHeight: 1.5 }}>
@@ -384,8 +384,8 @@ function SelectorPlantilla({ contacto: c, flash, onClose, onCarrusel }) {
               width: '100%', textAlign: 'left', background: '#0d1828', border: '1px solid #1e2d3d', borderRadius: 10,
               padding: '10px 12px', marginBottom: 8, cursor: 'pointer',
             }}>
-              <div style={{ fontSize: 13, fontWeight: 800, color: '#e2e8f0' }}>{t.carrusel ? '🛍️ ' : ''}{t.name} <span style={{ fontSize: 11, color: '#475569' }}>· {t.language}{t.carrusel ? ' · carrusel: eliges los productos' : ''}</span></div>
-              <div style={{ fontSize: 12, color: '#64748b', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{t.bodyText}</div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: '#e2e8f0' }}>{t.carrusel ? '🛍️ ' : ''}{t.name} <span style={{ fontSize: 11, color: '#7c8ba1' }}>· {t.language}{t.carrusel ? ' · carrusel: eliges los productos' : ''}</span></div>
+              <div style={{ fontSize: 12, color: '#7c8ba1', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{t.bodyText}</div>
             </button>
           ))}
         </div>
@@ -393,7 +393,7 @@ function SelectorPlantilla({ contacto: c, flash, onClose, onCarrusel }) {
 
       {chosen && (
         <div>
-          <button onClick={() => setChosen(null)} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 12, padding: 0, marginBottom: 10 }}>← otras plantillas</button>
+          <button onClick={() => setChosen(null)} style={{ background: 'none', border: 'none', color: '#7c8ba1', cursor: 'pointer', fontSize: 12, padding: 0, marginBottom: 10 }}>← otras plantillas</button>
           <div style={{ fontSize: 13, fontWeight: 800, color: '#e2e8f0', marginBottom: 8 }}>{chosen.name}</div>
 
           {chosen.header?.format === 'IMAGE' && (
@@ -415,7 +415,7 @@ function SelectorPlantilla({ contacto: c, flash, onClose, onCarrusel }) {
 
           {chosen.bodyText && (
             <div style={{ background: '#080d14', border: '1px solid #1e2d3d', borderRadius: 10, padding: '10px 12px', margin: '4px 0 12px' }}>
-              <div style={{ fontSize: 11, color: '#475569', fontWeight: 800, marginBottom: 4 }}>VISTA PREVIA</div>
+              <div style={{ fontSize: 11, color: '#7c8ba1', fontWeight: 800, marginBottom: 4 }}>VISTA PREVIA</div>
               <div style={{ fontSize: 13, color: '#cbd5e1', whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>{preview}</div>
             </div>
           )}
@@ -424,7 +424,7 @@ function SelectorPlantilla({ contacto: c, flash, onClose, onCarrusel }) {
             style={{
               width: '100%', padding: '11px', borderRadius: 11, border: 'none',
               background: listo ? `linear-gradient(135deg,${ORANGE},#f97316)` : '#1e2d3d',
-              color: listo ? '#0b1220' : '#475569', fontWeight: 900, fontSize: 14,
+              color: listo ? '#0b1220' : '#7c8ba1', fontWeight: 900, fontSize: 14,
               cursor: listo && !sending ? 'pointer' : 'default', fontFamily: 'Outfit,sans-serif',
             }}>{sending ? 'Enviando…' : 'Enviar plantilla'}</button>
         </div>

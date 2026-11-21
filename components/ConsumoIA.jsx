@@ -47,7 +47,7 @@ export default function ConsumoIA({ telefono }) {
       {abierto && mes && (
         <div style={{ marginTop: 6, fontSize: 12, color: '#94a3b8' }}>
           Este mes (todos los chats): {mes.chats} chat{mes.chats === 1 ? '' : 's'} · {mes.respuestas} resp. · {tokensLegibles(mes.tokens)} tokens · <b style={{ color: '#f59e0b' }}>{dolaresLegibles(mes.costo)}</b>
-          <div style={{ fontSize: 11, color: '#475569', marginTop: 4 }}>Estimado. La factura real está en la consola de Anthropic.</div>
+          <div style={{ fontSize: 11, color: '#7c8ba1', marginTop: 4 }}>Estimado. La factura real está en la consola de Anthropic.</div>
         </div>
       )}
     </div>

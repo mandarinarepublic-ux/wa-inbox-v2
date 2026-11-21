@@ -37,7 +37,7 @@ const STATUS_META = {
   atendido:  { icon:'🟢', label:'Atendido',  filterLabel:'🟢 Atendidos',  color:'#4ade80' },
   venta:     { icon:'💰', label:'Venta',     filterLabel:'💰 Ventas',     color:'#10b981' },
   soporte:   { icon:'🎧', label:'Soporte',   filterLabel:'🎧 Soporte',    color:'#a78bfa' },
-  archivado: { icon:'⚫', label:'Archivado', filterLabel:'⚫ Archivados', color:'#64748b' },
+  archivado: { icon:'⚫', label:'Archivado', filterLabel:'⚫ Archivados', color:'#7c8ba1' },
 }
 // Las MISMAS tres bandejas que WhatsApp (App.jsx BANDEJAS). Venta y Soporte ya no
 // son bandejas allá: lo que quedó guardado así se lee como 🔴 (ver derivar()).
@@ -53,7 +53,7 @@ const TEMPERATURAS = [
   { key:'caliente', icon:'🔥', label:'Caliente', color:'#f97316' },
   { key:'tibio',    icon:'🌤️', label:'Tibio',    color:'#fbbf24' },
   { key:'frio',     icon:'❄️', label:'Frío',     color:'#38bdf8' },
-  { key:'dormido',  icon:'💤', label:'Dormido',  color:'#64748b' },
+  { key:'dormido',  icon:'💤', label:'Dormido',  color:'#7c8ba1' },
 ]
 // Botón de la cabecera del chat: el MISMO que App.jsx (BotonEje), con icono + nombre
 // (en el celular solo el icono). Antes eran iconos sueltos casi del color del fondo
@@ -63,8 +63,8 @@ function BotonEje({ on, color, onClick, title, icon, label }) {
     <button onClick={onClick} title={title} style={{
       padding:'4px 6px', fontWeight: on ? 800 : 600, flexShrink:0,
       background: on ? `${color}22` : 'transparent',
-      border: `${on ? 2 : 1}px solid ${on ? color : '#1e2d3d'}`,
-      color: on ? color : '#475569',
+      border: `${on ? 2 : 1}px solid ${on ? color : '#7c8ba1'}`,
+      color: on ? color : '#7c8ba1',
       borderRadius:7, cursor:'pointer', fontFamily:'inherit', transition:'all .15s',
       boxShadow: on ? `0 0 8px ${color}44` : 'none',
     }}>
@@ -119,7 +119,7 @@ function PautaBadge({ conv }) {
       <span style={{ fontSize:12, flexShrink:0 }}>📢</span>
       <div style={{ minWidth:0 }}>
         <div style={{ fontSize:11, fontWeight:800, color:'#f59e0b', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{info.titulo}</div>
-        {info.detalle && <div style={{ fontSize:11, color:'#64748b', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>ID: {info.detalle}</div>}
+        {info.detalle && <div style={{ fontSize:11, color:'#7c8ba1', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>ID: {info.detalle}</div>}
       </div>
     </div>
   )
@@ -147,11 +147,11 @@ function EmojiPicker({ onSelect, onClose }) {
     <div style={{ position:'absolute', bottom:'100%', left:0, right:0, marginBottom:8, background:'#0d1828', border:'1px solid rgba(245,158,11,.25)', borderRadius:14, zIndex:60, overflow:'hidden', boxShadow:'0 8px 32px rgba(0,0,0,.6)' }}>
       {/* Búsqueda */}
       <div style={{ padding:'8px 10px 6px', borderBottom:'1px solid #111c2a', display:'flex', gap:6, alignItems:'center' }}>
-        <span style={{ fontSize:13, color:'#475569' }}>🔍</span>
+        <span style={{ fontSize:13, color:'#7c8ba1' }}>🔍</span>
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar emoji..."
           autoFocus
           style={{ flex:1, background:'transparent', border:'none', outline:'none', color:'#e2e8f0', fontSize:12, fontFamily:'Outfit,sans-serif' }} />
-        <button onClick={onClose} style={{ background:'transparent', border:'none', color:'#475569', cursor:'pointer', fontSize:15, padding:0, lineHeight:1 }}>✕</button>
+        <button onClick={onClose} style={{ background:'transparent', border:'none', color:'#7c8ba1', cursor:'pointer', fontSize:15, padding:0, lineHeight:1 }}>✕</button>
       </div>
       {/* Tabs */}
       {!search.trim() && (
@@ -174,7 +174,7 @@ function EmojiPicker({ onSelect, onClose }) {
           >{emoji}</button>
         ))}
         {displayed.length === 0 && (
-          <div style={{ gridColumn:'1/-1', textAlign:'center', padding:'20px 0', color:'#334155', fontSize:12 }}>Sin resultados</div>
+          <div style={{ gridColumn:'1/-1', textAlign:'center', padding:'20px 0', color:'#7c8ba1', fontSize:12 }}>Sin resultados</div>
         )}
       </div>
     </div>
@@ -267,7 +267,7 @@ function ConvRow({ conv, isActive, onClick, filtroActivo }) {
       <div style={{ flex:1, minWidth:0 }}>
         <div style={{ display:'flex', justifyContent:'space-between', marginBottom:2 }}>
           <span style={{ fontSize:13, fontWeight:700, color:'#e2e8f0', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:130 }}>{conv.nombre}</span>
-          <span style={{ fontSize:11, color:'#334155', flexShrink:0 }}>{fmtTime(conv.last_time)}</span>
+          <span style={{ fontSize:11, color:'#7c8ba1', flexShrink:0 }}>{fmtTime(conv.last_time)}</span>
         </div>
         <div style={{ display:'flex', gap:4, marginBottom:3, alignItems:'center', flexWrap:'wrap' }}>
           <ChannelBadge channel={conv.canal} />
@@ -284,7 +284,7 @@ function ConvRow({ conv, isActive, onClick, filtroActivo }) {
             <span title="Vino de un anuncio/publicación" style={{ fontSize:11, color:'#f59e0b' }}>📢</span>
           )}
         </div>
-        <div style={{ fontSize:12, color:'#334155', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+        <div style={{ fontSize:12, color:'#7c8ba1', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
           {conv.messages[conv.messages.length - 1]?.text || '—'}
         </div>
       </div>
@@ -1006,7 +1006,7 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
             <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="🔍 Buscar nombre o mensaje…"
               style={{ width:'100%', boxSizing:'border-box', background:'#111c2a', border:'1px solid #1e2d3d', borderRadius:8, color:'#e2e8f0', fontSize:12, padding:'7px 28px 7px 10px', outline:'none', fontFamily:'Outfit,sans-serif' }} />
             {busqueda && (
-              <button onClick={() => setBusqueda('')} title="Borrar búsqueda" style={{ position:'absolute', right:6, top:'50%', transform:'translateY(-50%)', background:'transparent', border:'none', color:'#64748b', cursor:'pointer', fontSize:13 }}>✕</button>
+              <button aria-label="Borrar búsqueda" onClick={() => setBusqueda('')} title="Borrar búsqueda" style={{ position:'absolute', right:6, top:'50%', transform:'translateY(-50%)', background:'transparent', border:'none', color:'#7c8ba1', cursor:'pointer', fontSize:13 }}>✕</button>
             )}
           </div>
 
@@ -1024,7 +1024,7 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
                   fontFamily:'Outfit,sans-serif', transition:'all .15s',
                 }}>
                   {meta.filterLabel}
-                  {counts[key] > 0 && <span style={{ marginLeft:3, background: active ? meta.color : '#1a2d40', color: active ? '#080d14' : '#475569', borderRadius:10, padding:'0 4px', fontSize:11, fontWeight:800 }}>{counts[key]}</span>}
+                  {counts[key] > 0 && <span style={{ marginLeft:3, background: active ? meta.color : '#1a2d40', color: active ? '#080d14' : '#7c8ba1', borderRadius:10, padding:'0 4px', fontSize:11, fontWeight:800 }}>{counts[key]}</span>}
                 </button>
               )
             })}
@@ -1045,7 +1045,7 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
                     fontFamily:'Outfit,sans-serif', transition:'all .15s',
                   }}>
                     {icon} {label}
-                    {counts[key] > 0 && <span style={{ marginLeft:3, background: active ? color : '#1a2d40', color: active ? '#080d14' : '#475569', borderRadius:10, padding:'0 4px', fontSize:11, fontWeight:800 }}>{counts[key]}</span>}
+                    {counts[key] > 0 && <span style={{ marginLeft:3, background: active ? color : '#1a2d40', color: active ? '#080d14' : '#7c8ba1', borderRadius:10, padding:'0 4px', fontSize:11, fontWeight:800 }}>{counts[key]}</span>}
                   </button>
                 )
               })}
@@ -1063,7 +1063,7 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
                   fontFamily:'Outfit,sans-serif', transition:'all .15s',
                 }}>
                   {icon} {label}
-                  {counts[key] > 0 && <span style={{ marginLeft:3, background: active ? color : '#1a2d40', color: active ? '#080d14' : '#475569', borderRadius:10, padding:'0 4px', fontSize:11, fontWeight:800 }}>{counts[key]}</span>}
+                  {counts[key] > 0 && <span style={{ marginLeft:3, background: active ? color : '#1a2d40', color: active ? '#080d14' : '#7c8ba1', borderRadius:10, padding:'0 4px', fontSize:11, fontWeight:800 }}>{counts[key]}</span>}
                 </button>
               )
             })}
@@ -1105,7 +1105,7 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
               descuadrado (mismo tipo de bug que ya pasó una vez en este inbox). */}
           <div style={{ padding:'8px 14px', background:'#0a0f1a', borderBottom:'1px solid #111c2a', display:'flex', alignItems:'center', gap:10, rowGap:6, flexWrap:'wrap', flexShrink:0 }}>
             {isMobile && (
-              <button onClick={goBack} title="Volver" style={{ flexShrink:0, width:34, height:34, borderRadius:9, background:'#111c2a', border:'1px solid #1e2d3d', color:'#94a3b8', fontSize:18, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>‹</button>
+              <button aria-label="Volver" onClick={goBack} title="Volver" style={{ flexShrink:0, width:34, height:34, borderRadius:9, background:'#111c2a', border:'1px solid #1e2d3d', color:'#94a3b8', fontSize:18, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>‹</button>
             )}
             <SocialAvatar name={selectedConv.nombre} channel={selectedConv.canal} />
             <div style={{ flex:1, minWidth:0 }}>
@@ -1125,7 +1125,7 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
                   </span>
                 )}
               </div>
-              <div style={{ fontSize:11, color:'#475569', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+              <div style={{ fontSize:11, color:'#7c8ba1', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                 {CHANNEL_META[selectedConv.canal]?.label} · {selectedConv.sender_id}
                 {/* Mientras Meta no apruebe pages_messaging, a un cliente real solo se le
                     puede contestar desde Business Suite: el link va siempre a mano. */}
@@ -1197,7 +1197,7 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
                   <div style={{ fontSize:12, color:'#cbd5e1', lineHeight:1.35, display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden' }}>
                     {mediaInfo.caption || 'Ver publicación en Instagram'}
                   </div>
-                  {mediaInfo.permalink && <div style={{ fontSize:11, color:'#475569', marginTop:2 }}>Toca para abrir en Instagram ↗</div>}
+                  {mediaInfo.permalink && <div style={{ fontSize:11, color:'#7c8ba1', marginTop:2 }}>Toca para abrir en Instagram ↗</div>}
                 </div>
               </a>
             )}
@@ -1218,15 +1218,15 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
                             padding:'10px 12px', background:'#1a1116', border:'1px solid #3a1f28', borderRadius:12 }}>
                 <div style={{ flex:'1 1 220px', color:'#f87171', fontSize:12, lineHeight:1.45 }}>
                   ❌ <b>Meta no dejó enviar desde el inbox.</b> Respóndele directo en Meta.
-                  <div style={{ color:'#64748b', fontSize:11, marginTop:2 }}>{bloqueo.texto}</div>
+                  <div style={{ color:'#7c8ba1', fontSize:11, marginTop:2 }}>{bloqueo.texto}</div>
                 </div>
                 <a href={bloqueo.enlace} target="_blank" rel="noreferrer" style={{
                   padding:'7px 12px', borderRadius:8, background:'#25d366', color:'#06110b',
                   fontSize:12, fontWeight:800, textDecoration:'none', whiteSpace:'nowrap' }}>
                   Abrir en Meta ↗
                 </a>
-                <button onClick={() => setBloqueo(null)} title="Cerrar" style={{
-                  background:'transparent', border:'none', color:'#64748b', cursor:'pointer', fontSize:14 }}>✕</button>
+                <button aria-label="Cerrar" onClick={() => setBloqueo(null)} title="Cerrar" style={{
+                  background:'transparent', border:'none', color:'#7c8ba1', cursor:'pointer', fontSize:14 }}>✕</button>
               </div>
             )}
             {/* Ventana cerrada y no es un comentario (que tiene su propio camino público
@@ -1251,7 +1251,7 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
               // (el aviso de "Comentario público" de la cabecera ya da ese contexto) y
               // se usan etiquetas cortas para que quepan sin desbordar.
               <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:6, marginBottom:8 }}>
-                {!isMobile && <span style={{ fontSize:11, color:'#475569' }}>Responder al comentario:</span>}
+                {!isMobile && <span style={{ fontSize:11, color:'#7c8ba1' }}>Responder al comentario:</span>}
                 {[
                   { id:'privado', label: isMobile ? '🔒 Privado' : '🔒 En privado (DM)' },
                   { id:'publico', label: isMobile ? '🌎 Público' : '🌎 En público' },
@@ -1315,7 +1315,7 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
                   <input ref={fileRef} type="file" accept="image/*" onChange={onElegirFoto} style={{ display:'none' }} />
                   <button onClick={() => fileRef.current?.click()} disabled={subiendo} title="Mandar una foto" style={{
                     width:42, height:42, flexShrink:0, borderRadius:11, background:'#111c2a',
-                    border:'1px solid #1e2d3d', color:'#64748b', fontSize:17, cursor:'pointer',
+                    border:'1px solid #1e2d3d', color:'#7c8ba1', fontSize:17, cursor:'pointer',
                     display:'flex', alignItems:'center', justifyContent:'center',
                   }}>{subiendo ? '⏳' : '📎'}</button>
                 </>
@@ -1323,7 +1323,7 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
               {/* Emoji: disponible en las DOS bandejas (Mensajes y Comentarios) y en
                   cualquier modo de respuesta — a diferencia de la foto, un emoji es
                   texto plano y un comentario público admite texto sin problema. */}
-              <button onClick={() => setShowEmoji(p => !p)} title="Emojis" style={{
+              <button aria-label="Emojis" onClick={() => setShowEmoji(p => !p)} title="Emojis" style={{
                 width:42, height:42, flexShrink:0, borderRadius:11, fontSize:20, cursor:'pointer',
                 background: showEmoji ? 'rgba(245,158,11,.15)' : '#111c2a',
                 border: `1px solid ${showEmoji ? 'rgba(245,158,11,.4)' : '#1e2d3d'}`,
@@ -1345,7 +1345,7 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
         </div>
       ) : (
         <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', background:'#080d14' }}>
-          <div style={{ textAlign:'center', color:'#1e2d3d' }}>
+          <div style={{ textAlign:'center', color:'#7c8ba1' }}>
             <div style={{ fontSize:48, marginBottom:12 }}>🌐</div>
             <div style={{ fontSize:13, fontWeight:700, marginBottom:4 }}>Social Inbox</div>
             <div style={{ fontSize:12 }}>Selecciona una conversación de FB o IG</div>

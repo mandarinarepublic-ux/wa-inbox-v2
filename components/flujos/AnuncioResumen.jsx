@@ -33,7 +33,7 @@ export default function AnuncioResumen({ a, tam = 44 }) {
         {extracto && (
           <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{extracto}</div>
         )}
-        <div style={{ fontSize: 10, color: '#64748b', marginTop: 1 }}>
+        <div style={{ fontSize: 10, color: '#7c8ba1', marginTop: 1 }}>
           {a.chats_30d != null ? `${a.chats_30d} chats en 30 días` : ''}
           {a.ultimo_chat ? ` · último ${new Date(a.ultimo_chat).toLocaleString('es-EC', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : ''}
         </div>

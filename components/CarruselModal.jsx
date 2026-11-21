@@ -63,7 +63,7 @@ export default function CarruselModal({ nombreCliente, onEnviar, onCerrar, venta
         <div style={{ display: 'flex', gap: 6 }}>
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar producto…" autoFocus
             style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: `1px solid ${P.borde}`, background: '#080d14', color: P.texto, fontFamily: 'inherit', fontSize: 13 }} />
-          <button onClick={() => cargar(true)} title="Volver a leer el catálogo de Meta" style={{ padding: '0 10px', borderRadius: 8, border: `1px solid ${P.borde}`, background: 'transparent', color: P.tenue, cursor: 'pointer' }}>↻</button>
+          <button aria-label="Volver a leer el catálogo de Meta" onClick={() => cargar(true)} title="Volver a leer el catálogo de Meta" style={{ padding: '0 10px', borderRadius: 8, border: `1px solid ${P.borde}`, background: 'transparent', color: P.tenue, cursor: 'pointer' }}>↻</button>
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>

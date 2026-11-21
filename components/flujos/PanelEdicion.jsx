@@ -32,7 +32,7 @@ const estiloBotonChico = {
 function Bloque({ titulo, children }) {
   return (
     <div style={{ marginBottom: 14 }}>
-      <div style={{ fontSize: 9, fontWeight: 900, letterSpacing: '1.2px', color: '#475569', marginBottom: 6 }}>
+      <div style={{ fontSize: 9, fontWeight: 900, letterSpacing: '1.2px', color: '#7c8ba1', marginBottom: 6 }}>
         {titulo}
       </div>
       {children}
@@ -100,7 +100,7 @@ function EditorDisparador({ datos, anuncios, onCambiar }) {
         <Bloque titulo="TÍTULO DEL BOTÓN">
           <input value={String(datos?.boton || '')} onChange={(e) => onCambiar({ boton: e.target.value })}
             placeholder="ej. Banco Pichincha" maxLength={MAX_TITULO} style={estiloCampo} />
-          <div style={{ fontSize: 10, color: '#64748b', marginTop: 5 }}>
+          <div style={{ fontSize: 10, color: '#7c8ba1', marginTop: 5 }}>
             Arranca cuando el cliente TOCA un botón con este título, aunque lo haya mandado
             una persona desde una respuesta rápida. Tiene que ser el título exacto (sin
             importar mayúsculas ni tildes); si lo escribe a mano, no arranca.
@@ -111,7 +111,7 @@ function EditorDisparador({ datos, anuncios, onCambiar }) {
       {tipo === 'anuncio' && (
         <Bloque titulo={`ANUNCIOS (${sourceIds.length})`}>
           {(anuncios || []).length === 0 && (
-            <div style={{ fontSize: 11, color: '#64748b' }}>Todavía no hay anuncios vistos.</div>
+            <div style={{ fontSize: 11, color: '#7c8ba1' }}>Todavía no hay anuncios vistos.</div>
           )}
           <div style={{ maxHeight: 420, overflowY: 'auto' }}>
             {(anuncios || []).map((a) => (
@@ -138,8 +138,8 @@ function EditorDisparador({ datos, anuncios, onCambiar }) {
                 border: `1px solid ${BORDE}`, borderRadius: 999, padding: '2px 5px 2px 9px', fontSize: 11, color: '#cbd5e1',
               }}>
                 {p}
-                <button onClick={() => onCambiar({ palabras: palabras.filter((_, j) => j !== i) })}
-                  title="Quitar" style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 12, padding: 0, lineHeight: 1 }}>✕</button>
+                <button aria-label="Quitar" onClick={() => onCambiar({ palabras: palabras.filter((_, j) => j !== i) })}
+                  title="Quitar" style={{ background: 'transparent', border: 'none', color: '#7c8ba1', cursor: 'pointer', fontSize: 12, padding: 0, lineHeight: 1 }}>✕</button>
               </span>
             ))}
           </div>
@@ -149,7 +149,7 @@ function EditorDisparador({ datos, anuncios, onCambiar }) {
               placeholder="ej. precio" maxLength={60} style={estiloCampo} />
             <button onClick={agregarPalabra} style={estiloBotonChico}>+</button>
           </div>
-          <div style={{ fontSize: 10, color: '#64748b', marginTop: 5 }}>
+          <div style={{ fontSize: 10, color: '#7c8ba1', marginTop: 5 }}>
             Se compara sin mayúsculas ni tildes, y basta con que el mensaje la contenga.
           </div>
         </Bloque>
@@ -224,7 +224,7 @@ function EditorMensaje({ datos, respuestas, onCambiar }) {
             <div style={{ marginTop: 8, padding: 9, background: FONDO_CAMPO, border: `1px solid ${BORDE}`, borderRadius: 8 }}>
               <div style={{ fontSize: 11, color: '#cbd5e1', whiteSpace: 'pre-wrap' }}>{elegida.text || '(sin texto)'}</div>
               {adjuntosDeRespuesta(elegida).length > 0 && (
-                <div style={{ fontSize: 10, color: '#64748b', marginTop: 5 }}>📎 {adjuntosDeRespuesta(elegida).length} adjunto(s)</div>
+                <div style={{ fontSize: 10, color: '#7c8ba1', marginTop: 5 }}>📎 {adjuntosDeRespuesta(elegida).length} adjunto(s)</div>
               )}
             </div>
           )}
@@ -249,7 +249,7 @@ function EditorMensaje({ datos, respuestas, onCambiar }) {
                   <option value="audio">audio</option>
                   <option value="documento">documento</option>
                 </select>
-                <button onClick={() => onCambiar({ adjuntos: adjuntos.filter((_, j) => j !== i) })}
+                <button aria-label="Quitar" onClick={() => onCambiar({ adjuntos: adjuntos.filter((_, j) => j !== i) })}
                   title="Quitar" style={{ ...estiloBotonChico, flexShrink: 0 }}>✕</button>
               </div>
             ))}
@@ -264,7 +264,7 @@ function EditorMensaje({ datos, respuestas, onCambiar }) {
               <input ref={archivoRef} type="file" style={{ display: 'none' }} onChange={alElegirArchivo} />
             </div>
             {errorSubida && <div style={{ fontSize: 11, color: '#f87171', marginTop: 5 }}>⚠️ {errorSubida}</div>}
-            <div style={{ fontSize: 10, color: '#64748b', marginTop: 5 }}>
+            <div style={{ fontSize: 10, color: '#7c8ba1', marginTop: 5 }}>
               Salen en este orden, uno por mensaje: es el orden en que los ve el cliente.
             </div>
           </Bloque>
@@ -277,7 +277,7 @@ function EditorMensaje({ datos, respuestas, onCambiar }) {
             onChange={(e) => cambiarBoton(i, e.target.value)}
             placeholder={`Botón ${i + 1}`} style={{ ...estiloCampo, marginBottom: 5 }} />
         ))}
-        <div style={{ fontSize: 10, color: '#64748b' }}>
+        <div style={{ fontSize: 10, color: '#7c8ba1' }}>
           Con botones, cada uno abre su propia salida en la tarjeta (más «Otra respuesta»).
         </div>
       </Bloque>
@@ -379,7 +379,7 @@ function EditorLinea({ esperaMin, esperaSeg, onCambiar }) {
           <option value="h">horas</option>
         </select>
       </div>
-      <div style={{ fontSize: 10, color: '#64748b', marginTop: 6, lineHeight: 1.5 }}>
+      <div style={{ fontSize: 10, color: '#7c8ba1', marginTop: 6, lineHeight: 1.5 }}>
         En blanco = sale de inmediato.<br />
         <b>Segundos</b>: pausa corta entre mensajes; el flujo sigue de corrido (tope {MAX_ESPERA_SEG} s por línea y {MAX_PAUSA_TANDA_SEG} s por envío).<br />
         <b>Minutos u horas</b>: el flujo se detiene y sigue después (tope {MAX_ESPERA_MIN / 60} h: después de 24 h Meta cierra la ventana).
@@ -399,7 +399,7 @@ const TITULOS = { disparador: '📣 Disparador', mensaje: '💬 Mensaje', condic
 export default function PanelEdicion({ nodo, linea, anuncios, respuestas, errores = [], onCambiarNodo, onCambiarLinea }) {
   if (!nodo && !linea) {
     return (
-      <div style={{ padding: 16, fontSize: 12, color: '#64748b', fontFamily: 'Outfit,sans-serif' }}>
+      <div style={{ padding: 16, fontSize: 12, color: '#7c8ba1', fontFamily: 'Outfit,sans-serif' }}>
         Toca una tarjeta o una línea para editarla.
         <div style={{ marginTop: 10, fontSize: 11, lineHeight: 1.6 }}>
           · Arrastra de un puerto de abajo al de arriba de otra tarjeta para conectarlas.<br />

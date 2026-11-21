@@ -46,7 +46,7 @@ export function Avatar({ name, phone, size = 44 }) {
 export function StatusPill({ estado }) {
   const map = {
     recibido: { bg: 'rgba(239,68,68,.13)',   color: '#f87171', label: 'Sin leer' },
-    leido:    { bg: 'rgba(100,116,139,.11)', color: '#64748b', label: 'Leído'    },
+    leido:    { bg: 'rgba(100,116,139,.11)', color: '#7c8ba1', label: 'Leído'    },
     enviado:  { bg: 'rgba(34,197,94,.11)',   color: '#4ade80', label: 'Enviado'  },
     error:    { bg: 'rgba(239,68,68,.16)',   color: '#f87171', label: 'Error'    },
   }
@@ -116,7 +116,7 @@ const ESTADO_INFO = {
   ventaproceso: { label:'En proceso', color:'#f59e0b' },
   venta:        { label:'Venta',      color:'#10b981' },
   soporte:      { label:'Soporte',    color:'#a78bfa' },
-  archivado:    { label:'Archivado',  color:'#64748b' },
+  archivado:    { label:'Archivado',  color:'#7c8ba1' },
 }
 
 // ── MINI-BURBUJA IA / HUMANO ─────────────────────────────────────
@@ -642,7 +642,7 @@ function ReferralCard({ referral, texto = '' }) {
                 </div>
               )}
               {producto && !producto.enShopify && (
-                <div style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>No está en Shopify con ese nombre: sin foto</div>
+                <div style={{ fontSize: 11, color: '#7c8ba1', marginTop: 2 }}>No está en Shopify con ese nombre: sin foto</div>
               )}
             </>
           ) : (
@@ -659,7 +659,7 @@ function ReferralCard({ referral, texto = '' }) {
             onError={e => { e.currentTarget.style.display = 'none' }} />
         )}
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ ...etiqueta, color: '#475569' }}>📣 CREATIVO QUE VIO</div>
+          <div style={{ ...etiqueta, color: '#7c8ba1' }}>📣 CREATIVO QUE VIO</div>
           {r.body && (
             <div style={{ fontSize: 12, color: '#94a3b8', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', whiteSpace: 'pre-wrap' }}>{r.body}</div>
           )}
@@ -667,7 +667,7 @@ function ReferralCard({ referral, texto = '' }) {
             {r.source_url && (
               <a href={r.source_url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: '#818cf8', fontWeight: 600, textDecoration: 'none' }}>Ver anuncio ↗</a>
             )}
-            {r.source_id && <span style={{ fontSize: 11, color: '#475569' }}>ID: {r.source_id}</span>}
+            {r.source_id && <span style={{ fontSize: 11, color: '#7c8ba1' }}>ID: {r.source_id}</span>}
           </div>
         </div>
       </div>
@@ -711,7 +711,7 @@ function QuotedMessage({ contextoId, allMsgs, esReaccion = false, onIrA = null }
         background: 'rgba(0,0,0,.25)',
         borderRadius: '0 8px 8px 0',
         padding: '5px 10px', marginBottom: 6,
-        fontSize: 12, color: '#64748b', fontStyle: 'italic',
+        fontSize: 12, color: '#7c8ba1', fontStyle: 'italic',
       }}>
         ↩️ Respondió a un mensaje anterior
       </div>
@@ -747,14 +747,14 @@ function QuotedMessage({ contextoId, allMsgs, esReaccion = false, onIrA = null }
             onError={e => { e.currentTarget.style.display = 'none' }}
           />
           {cited.mensaje && (
-            <span style={{ fontSize: 12, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <span style={{ fontSize: 12, color: '#7c8ba1', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {cited.mensaje}
             </span>
           )}
         </div>
       ) : (
         <div style={{
-          fontSize: 12, color: '#64748b',
+          fontSize: 12, color: '#7c8ba1',
           overflow: 'hidden', textOverflow: 'ellipsis',
           display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
         }}>
@@ -885,7 +885,7 @@ function PedidoCard({ pedido }) {
             {/* Sin nombre, el id es lo ÚNICO que identifica el producto: se
                 muestra para que se pueda buscar a mano en el catálogo. */}
             {!it.nombre && (
-              <div style={{ fontSize: 11, color: '#64748b', marginTop: 1, fontFamily: 'monospace' }}>
+              <div style={{ fontSize: 11, color: '#7c8ba1', marginTop: 1, fontFamily: 'monospace' }}>
                 {it.retailerId}
               </div>
             )}
@@ -904,7 +904,7 @@ function PedidoCard({ pedido }) {
       </div>
       {/* ⚠️ La talla NO viene en el pedido: Meta no la manda y el catálogo la
           trae vacía. Hay que preguntársela al cliente SIEMPRE. */}
-      <div style={{ fontSize: 11, color: '#64748b', marginTop: 5 }}>
+      <div style={{ fontSize: 11, color: '#7c8ba1', marginTop: 5 }}>
         ⚠️ El pedido no trae la talla — hay que preguntarla
       </div>
     </div>
@@ -950,7 +950,7 @@ function UbicacionCard({ u }) {
           {/* La dirección desplaza las coordenadas: se muestran igual, porque son
               el dato con el que se busca el sitio si el nombre no alcanza. */}
           {u.direccion && (
-            <div style={{ fontSize: 12, color: '#64748b', marginTop: 1 }}>{coords}</div>
+            <div style={{ fontSize: 12, color: '#7c8ba1', marginTop: 1 }}>{coords}</div>
           )}
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 6,
@@ -1023,7 +1023,7 @@ export function MessageBubble({ msg, allMsgs, onResponder, onAbrirChat, onReenvi
   // también aparezca en el celular, donde no hay hover.
   const sePuedeReenviar = !!onReenviar && puedeReenviar(msg).ok
   const botonReenviar = sePuedeReenviar ? (
-    <button
+    <button aria-label="Reenviar a otro chat"
       onClick={(e) => { e.stopPropagation(); setAccion(false); onReenviar(msg) }}
       title="Reenviar a otro chat"
       style={{
@@ -1037,7 +1037,7 @@ export function MessageBubble({ msg, allMsgs, onResponder, onAbrirChat, onReenvi
   // ☺ Reaccionar: abre la misma barrita que tocar el mensaje. Afuera de la burbuja,
   // tenue, igual que ↪ — en el celular basta con tocar el mensaje.
   const botonReaccionar = onReaccionar ? (
-    <button
+    <button aria-label="Reaccionar"
       onClick={(e) => { e.stopPropagation(); setAccion(v => !v) }}
       title="Reaccionar"
       style={{

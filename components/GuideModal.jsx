@@ -107,7 +107,7 @@ export default function GuideModal({ onClose }) {
                   flexShrink: 0, marginTop: 1,
                 }}>{ii + 1}</span>
                 <span style={{
-                  fontSize: 13, color: step.startsWith('  ') ? '#475569' : '#94a3b8',
+                  fontSize: 13, color: step.startsWith('  ') ? '#7c8ba1' : '#94a3b8',
                   lineHeight: 1.6, fontFamily: step.startsWith('  ') ? 'monospace' : 'inherit',
                 }}>{step.trim()}</span>
               </div>

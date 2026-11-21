@@ -39,7 +39,7 @@ function GrupoSelector({ grupo, onChange }) {
             style={{ padding:'3px 8px', borderRadius:12, fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:'inherit',
               background: on ? 'rgba(37,211,102,.15)' : 'transparent',
               border: `1px solid ${on ? 'rgba(37,211,102,.5)' : '#1e2d3d'}`,
-              color: on ? '#25d366' : '#64748b' }}>
+              color: on ? '#25d366' : '#7c8ba1' }}>
             {o.emoji ? `${o.emoji} ` : ''}{o.nombre}
           </button>
         )
@@ -221,7 +221,7 @@ function MultiImgEditor({ urls, onChange }) {
                 <div title={`Nota de voz — sale en el lugar ${idx + 1}`}
                   style={{ width:44, height:44, borderRadius:6, background:'#132437', border:'1px solid #1e3a52', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:1 }}>
                   <span style={{ fontSize:15 }}>🎤</span>
-                  <span style={{ fontSize:11, color:'#64748b' }}>{idx + 1}º</span>
+                  <span style={{ fontSize:11, color:'#7c8ba1' }}>{idx + 1}º</span>
                 </div>
               ) : url.tipo === 'documento' ? (
                 // Tampoco tiene miniatura. El title lleva el nombre real del
@@ -229,7 +229,7 @@ function MultiImgEditor({ urls, onChange }) {
                 <div title={`${url.nombre || 'Documento'} — sale en el lugar ${idx + 1}`}
                   style={{ width:44, height:44, borderRadius:6, background:'#132437', border:'1px solid #1e3a52', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:1 }}>
                   <span style={{ fontSize:15 }}>📄</span>
-                  <span style={{ fontSize:11, color:'#64748b' }}>{idx + 1}º</span>
+                  <span style={{ fontSize:11, color:'#7c8ba1' }}>{idx + 1}º</span>
                 </div>
               ) : (
               <>
@@ -251,7 +251,7 @@ function MultiImgEditor({ urls, onChange }) {
           ) : (
             <>
               <button onClick={() => refs[idx].current?.click()}
-                style={{ width:44, height:44, border:'1px dashed #2a3f55', borderRadius:6, background:'transparent', cursor:'pointer', color:'#475569', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:'inherit' }}>
+                style={{ width:44, height:44, border:'1px dashed #2a3f55', borderRadius:6, background:'transparent', cursor:'pointer', color:'#7c8ba1', fontSize:18, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:'inherit' }}>
                 {uploading[idx] ? '↑' : '+'}
               </button>
               {/* Sin `accept`: desde que caben documentos no hay tipo prohibido, y una
@@ -268,17 +268,17 @@ function MultiImgEditor({ urls, onChange }) {
         {url && urls.length > 1 && (
           <div style={{ display:'flex', gap:2, marginTop:2 }}>
             {idx > 0
-              ? <button onClick={() => mover(idx, -1)} title="Mover un lugar antes" style={FLECHA}>◀</button>
+              ? <button aria-label="Mover un lugar antes" onClick={() => mover(idx, -1)} title="Mover un lugar antes" style={FLECHA}>◀</button>
               : <span style={{ flex:1 }} />}
             {idx < urls.length - 1
-              ? <button onClick={() => mover(idx, +1)} title="Mover un lugar despues" style={FLECHA}>▶</button>
+              ? <button aria-label="Mover un lugar despues" onClick={() => mover(idx, +1)} title="Mover un lugar despues" style={FLECHA}>▶</button>
               : <span style={{ flex:1 }} />}
           </div>
         )}
         </div>
       ))}
       {urls.length > 0 && (
-        <div style={{ width:'100%', fontSize:11, color:'#475569', marginTop:2 }}>{urls.length}/{MAX_IMGS} adjuntos · salen en este orden{urls.length > 1 ? ' · ◀ ▶ para mover' : ''}</div>
+        <div style={{ width:'100%', fontSize:11, color:'#7c8ba1', marginTop:2 }}>{urls.length}/{MAX_IMGS} adjuntos · salen en este orden{urls.length > 1 ? ' · ◀ ▶ para mover' : ''}</div>
       )}
     </div>
   )
@@ -288,7 +288,7 @@ function MultiImgEditor({ urls, onChange }) {
 // Productos O botones, nunca los dos: Meta no deja botones en un carrusel.
 function CarruselEditor({ productos, hayBotones, onElegir, onQuitar }) {
   if (hayBotones) {
-    return <p style={{ fontSize:11, color:'#64748b', margin:'6px 0 0' }}>🛍️ Para mandar un carrusel de productos, quita primero los botones.</p>
+    return <p style={{ fontSize:11, color:'#7c8ba1', margin:'6px 0 0' }}>🛍️ Para mandar un carrusel de productos, quita primero los botones.</p>
   }
   return (
     <div style={{ marginTop:6 }}>
@@ -350,7 +350,7 @@ function PedidoCard({ p, onVer, onEnviar, envio, puedeEnviar }) {
         </div>
       ))}
       {items.length > 4 && (
-        <div style={{ fontSize:11, color:'#475569', marginTop:2 }}>+{items.length - 4} ítem{items.length - 4 === 1 ? '' : 's'} más…</div>
+        <div style={{ fontSize:11, color:'#7c8ba1', marginTop:2 }}>+{items.length - 4} ítem{items.length - 4 === 1 ? '' : 's'} más…</div>
       )}
       <div style={{ display:'flex', alignItems:'center', gap:5, marginTop:5, flexWrap:'wrap' }}>
         <span style={{ fontSize:11, fontWeight:800, color:estColor, background:`${estColor}1e`, border:`1px solid ${estColor}44`, borderRadius:5, padding:'1px 6px' }}>{p.estado || '—'}</span>
@@ -363,7 +363,7 @@ function PedidoCard({ p, onVer, onEnviar, envio, puedeEnviar }) {
         {p.id && onEnviar && (
           <button onClick={() => onEnviar(p.id)} disabled={!puedeEnviar || envio?.estado === 'enviando'}
             title={puedeEnviar ? 'Enviar la foto del pedido al cliente' : 'Ventana cerrada o ya hay un envío en curso'}
-            style={{ marginLeft:'auto', background: puedeEnviar ? 'rgba(37,211,102,.12)' : 'transparent', border:`1px solid ${puedeEnviar ? 'rgba(37,211,102,.4)' : '#1e2d3d'}`, borderRadius:5, padding:'1px 7px', fontSize:11, fontWeight:700, color: puedeEnviar ? '#25d366' : '#475569', cursor: puedeEnviar ? 'pointer' : 'default', fontFamily:'inherit' }}>
+            style={{ marginLeft:'auto', background: puedeEnviar ? 'rgba(37,211,102,.12)' : 'transparent', border:`1px solid ${puedeEnviar ? 'rgba(37,211,102,.4)' : '#1e2d3d'}`, borderRadius:5, padding:'1px 7px', fontSize:11, fontWeight:700, color: puedeEnviar ? '#25d366' : '#7c8ba1', cursor: puedeEnviar ? 'pointer' : 'default', fontFamily:'inherit' }}>
             {envio?.estado === 'enviando' ? '⏳ Enviando…' : '📤 Enviar'}
           </button>
         )}
@@ -401,22 +401,22 @@ function ProductCard({ p, sending, windowOpen, onSendFoto, onSendInfo }) {
           {p.title}
         </span>
         {p.fuente === 'sucursal' ? (
-          <span style={{ fontSize:11, color:'#475569' }}>
+          <span style={{ fontSize:11, color:'#7c8ba1' }}>
             {[p.talla, p.color].filter(Boolean).join(' · ')}{(p.talla || p.color) ? ' · ' : ''}
             <span style={{ color: p.stock > 0 ? '#10b981' : '#f87171', fontWeight:700 }}>{p.stock > 0 ? `${p.stock} en stock` : 'sin stock'}</span>
           </span>
         ) : p.variants?.length > 0 ? (
-          <span style={{ fontSize:11, color:'#475569' }}>{p.variants.length} variante{p.variants.length === 1 ? '' : 's'}</span>
+          <span style={{ fontSize:11, color:'#7c8ba1' }}>{p.variants.length} variante{p.variants.length === 1 ? '' : 's'}</span>
         ) : null}
         <div style={{ display:'flex', gap:3, marginTop:'auto' }}>
           <button onClick={() => onSendFoto(p)} disabled={sending || !windowOpen}
             title={windowOpen ? 'Enviar solo la foto' : 'Ventana cerrada'}
-            style={{ flex:1, padding:'5px', background: windowOpen ? 'rgba(37,211,102,.12)' : 'rgba(255,255,255,.03)', border:`1px solid ${windowOpen ? 'rgba(37,211,102,.3)' : '#1e2d3d'}`, color: windowOpen ? '#25d366' : '#475569', borderRadius:6, fontSize:11, fontWeight:700, cursor: windowOpen && !sending ? 'pointer' : 'default', fontFamily:'inherit' }}>
+            style={{ flex:1, padding:'5px', background: windowOpen ? 'rgba(37,211,102,.12)' : 'rgba(255,255,255,.03)', border:`1px solid ${windowOpen ? 'rgba(37,211,102,.3)' : '#1e2d3d'}`, color: windowOpen ? '#25d366' : '#7c8ba1', borderRadius:6, fontSize:11, fontWeight:700, cursor: windowOpen && !sending ? 'pointer' : 'default', fontFamily:'inherit' }}>
             {sending === 'foto' ? '⏳' : '📤 Foto'}
           </button>
           <button onClick={() => onSendInfo(p)} disabled={sending || !windowOpen}
             title={windowOpen ? 'Enviar foto + título y precio' : 'Ventana cerrada'}
-            style={{ padding:'5px 8px', background:'rgba(255,255,255,.03)', border:'1px solid #1e2d3d', color: windowOpen ? '#94a3b8' : '#475569', borderRadius:6, fontSize:11, fontWeight:700, cursor: windowOpen && !sending ? 'pointer' : 'default', fontFamily:'inherit' }}>
+            style={{ padding:'5px 8px', background:'rgba(255,255,255,.03)', border:'1px solid #1e2d3d', color: windowOpen ? '#94a3b8' : '#7c8ba1', borderRadius:6, fontSize:11, fontWeight:700, cursor: windowOpen && !sending ? 'pointer' : 'default', fontFamily:'inherit' }}>
             {sending === 'info' ? '⏳' : 'ℹ️'}
           </button>
         </div>
@@ -1006,7 +1006,7 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
               style={{
                 flex:1, padding:'10px 4px 8px', background: active ? 'rgba(37,211,102,.07)' : 'transparent',
                 border:'none', borderBottom: active ? '2px solid #25d366' : '2px solid transparent',
-                color: active ? '#25d366' : '#64748b', fontSize:12, fontWeight:800, cursor:'pointer',
+                color: active ? '#25d366' : '#7c8ba1', fontSize:12, fontWeight:800, cursor:'pointer',
                 fontFamily:'inherit', display:'flex', flexDirection:'column', alignItems:'center', gap:2,
                 transition:'all .15s', letterSpacing:'.02em',
               }}>
@@ -1028,7 +1028,7 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
               <p style={{ fontSize:11, color:'#94a3b8', fontWeight:700, letterSpacing:'.08em', display:'flex', alignItems:'center', gap:5, margin:0 }}>
                 ⚡ RESPUESTAS RÁPIDAS
                 {!repliesLoaded && <span style={{ fontSize:11, color:'#94a3b8' }}>cargando...</span>}
-                <span onClick={() => setRepliesLoaded(false)} title="Recargar" style={{ marginLeft:'auto', background:'transparent', border:'none', color:'#475569', fontSize:12, cursor:'pointer', padding:'0 2px', lineHeight:1 }}>🔄</span>
+                <span onClick={() => setRepliesLoaded(false)} title="Recargar" style={{ marginLeft:'auto', background:'transparent', border:'none', color:'#7c8ba1', fontSize:12, cursor:'pointer', padding:'0 2px', lineHeight:1 }}>🔄</span>
               </p>
               {/* 🔎 Buscador: filtra dentro del botón elegido; los conteos dicen dónde hay. */}
               <div style={{ position:'relative', marginTop:8 }}>
@@ -1037,7 +1037,7 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                   placeholder="🔎 Buscar respuesta…" enterKeyHint="search"
                   style={{ width:'100%', boxSizing:'border-box', background:'#111c2a', border:'1px solid #1e2d3d', borderRadius:8, color:'#e2e8f0', fontSize:12, padding:'6px 26px 6px 9px', outline:'none', fontFamily:'inherit' }} />
                 {buscarResp && (
-                  <button onClick={() => setBuscarResp('')} title="Borrar búsqueda"
+                  <button aria-label="Borrar búsqueda" onClick={() => setBuscarResp('')} title="Borrar búsqueda"
                     style={{ position:'absolute', right:4, top:'50%', transform:'translateY(-50%)', background:'transparent', border:'none', color:'#94a3b8', fontSize:12, cursor:'pointer', padding:'2px 5px' }}>✕</button>
                 )}
               </div>
@@ -1077,7 +1077,7 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                     <div style={{ background:'rgba(255,255,255,.03)', border:'1px solid #25d366', borderRadius:9, padding:'7px', marginBottom:2 }}>
                       <textarea value={editText} onChange={e => setEditText(e.target.value)} rows={5} placeholder="Texto..."
                         style={{ width:'100%', background:'#111c2a', border:'1px solid #25d366', borderRadius:6, color:'#e2e8f0', fontSize:12, padding:'8px 10px', resize:'vertical', outline:'none', fontFamily:'inherit', marginBottom:5, whiteSpace:'pre-wrap', minHeight:100 }} />
-                      <p style={{ fontSize:11, color:'#475569', marginBottom:3 }}>Adjuntos ({editImgUrls.length}/{MAX_IMGS}) — fotos y audios, en orden</p>
+                      <p style={{ fontSize:11, color:'#7c8ba1', marginBottom:3 }}>Adjuntos ({editImgUrls.length}/{MAX_IMGS}) — fotos y audios, en orden</p>
                       <MultiImgEditor urls={editImgUrls} onChange={setEditImgUrls} />
                       {editCarrusel.length === 0 && <BotonesEditor botones={editBotones} onChange={setEditBotones} />}
                       <CarruselEditor productos={editCarrusel} hayBotones={editBotones.some(b => b.trim())} onElegir={() => setEligiendo('edit')} onQuitar={() => setEditCarrusel([])} />
@@ -1130,13 +1130,13 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                         <div className="rr-acciones" style={{ display:'flex', gap:4, flexShrink:0, flexWrap:'wrap', justifyContent:'flex-end' }}>
                           <button onClick={() => reordenar(idx, arriba)} disabled={arriba < 0 || hayAltaPendiente}
                             title={hayAltaPendiente ? 'Espera a que se confirme el alta pendiente' : 'Subir'}
-                            style={{ background:'transparent', border:'1px solid #1e2d3d', color: (arriba < 0 || hayAltaPendiente) ? '#334155' : '#64748b', borderRadius:5, padding:'3px 5px', fontSize:11, cursor: (arriba < 0 || hayAltaPendiente) ? 'default' : 'pointer', fontFamily:'inherit' }}>↑</button>
+                            style={{ background:'transparent', border:'1px solid #1e2d3d', color: (arriba < 0 || hayAltaPendiente) ? '#334155' : '#7c8ba1', borderRadius:5, padding:'3px 5px', fontSize:11, cursor: (arriba < 0 || hayAltaPendiente) ? 'default' : 'pointer', fontFamily:'inherit' }}>↑</button>
                           <button onClick={() => reordenar(idx, abajo)} disabled={abajo < 0 || hayAltaPendiente}
                             title={hayAltaPendiente ? 'Espera a que se confirme el alta pendiente' : 'Bajar'}
-                            style={{ background:'transparent', border:'1px solid #1e2d3d', color: (abajo < 0 || hayAltaPendiente) ? '#334155' : '#64748b', borderRadius:5, padding:'3px 5px', fontSize:11, cursor: (abajo < 0 || hayAltaPendiente) ? 'default' : 'pointer', fontFamily:'inherit' }}>↓</button>
+                            style={{ background:'transparent', border:'1px solid #1e2d3d', color: (abajo < 0 || hayAltaPendiente) ? '#334155' : '#7c8ba1', borderRadius:5, padding:'3px 5px', fontSize:11, cursor: (abajo < 0 || hayAltaPendiente) ? 'default' : 'pointer', fontFamily:'inherit' }}>↓</button>
                           <button onClick={() => handleSendQuick(idx)} disabled={!!sending[idx]||!windowOpen} title="Enviar" style={{ background:'rgba(37,211,102,.12)', border:'1px solid rgba(37,211,102,.2)', color:'#25d366', borderRadius:5, padding:'3px 8px', fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:'inherit', minWidth:56 }}>{sending[idx] || '▶ Enviar'}</button>
-                          <button onClick={() => startEdit(idx)} disabled={guardando} title={guardando ? 'Espera a que se confirme el alta' : undefined} style={{ background:'transparent', border:'1px solid #1e2d3d', color: guardando ? '#334155' : '#64748b', borderRadius:5, padding:'3px 6px', fontSize:11, cursor: guardando ? 'default' : 'pointer', fontFamily:'inherit' }}>✏️</button>
-                          <button className="rr-borrar" onClick={() => deleteReply(idx)} title="Borrar respuesta" style={{ background:'transparent', border:'1px solid #1e2d3d', color:'#64748b', borderRadius:5, padding:'3px 6px', fontSize:11, cursor:'pointer', fontFamily:'inherit' }}>🗑</button>
+                          <button onClick={() => startEdit(idx)} disabled={guardando} title={guardando ? 'Espera a que se confirme el alta' : undefined} style={{ background:'transparent', border:'1px solid #1e2d3d', color: guardando ? '#334155' : '#7c8ba1', borderRadius:5, padding:'3px 6px', fontSize:11, cursor: guardando ? 'default' : 'pointer', fontFamily:'inherit' }}>✏️</button>
+                          <button aria-label="Borrar respuesta" className="rr-borrar" onClick={() => deleteReply(idx)} title="Borrar respuesta" style={{ background:'transparent', border:'1px solid #1e2d3d', color:'#7c8ba1', borderRadius:5, padding:'3px 6px', fontSize:11, cursor:'pointer', fontFamily:'inherit' }}>🗑</button>
                         </div>
                       </div>
                     </div>
@@ -1144,7 +1144,7 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                 </div>
               ) }) })()}
               {visibles_vacio(replies, grupoFiltro, buscarResp) && (
-                <div style={{ fontSize:12, color:'#64748b', padding:'8px 4px' }}>
+                <div style={{ fontSize:12, color:'#7c8ba1', padding:'8px 4px' }}>
                   {!buscarResp.trim() ? 'No hay respuestas en este grupo. Crea una abajo o elige el grupo al editar ✏️.'
                     : conteoPorGrupo(replies, buscarResp)[TODAS] > 0 && (grupoFiltro || TODAS) !== TODAS
                       ? <>Nada con “{buscarResp.trim()}” en este grupo. <span onClick={() => setGrupoFiltro(TODAS)} style={{ color:'#94a3b8', textDecoration:'underline', cursor:'pointer' }}>Ver en Todas ({conteoPorGrupo(replies, buscarResp)[TODAS]})</span></>
@@ -1162,14 +1162,14 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                 onClick={() => setNuevaOpen(o => !o)}
                 style={{ padding:'7px 9px', cursor:'pointer', userSelect:'none', display:'flex', alignItems:'center', gap:5 }}
               >
-                <span style={{ fontSize:11, color:'#475569', transition:'transform .2s', display:'inline-block', transform: nuevaOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
+                <span style={{ fontSize:11, color:'#7c8ba1', transition:'transform .2s', display:'inline-block', transform: nuevaOpen ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
                 <p style={{ fontSize:11, color:'#ffffff', fontWeight:700, letterSpacing:'.06em', margin:0 }}>+ NUEVA RESPUESTA</p>
               </div>
               {nuevaOpen && <div style={{ padding:'0 7px 7px' }}>
               <textarea value={newText} onChange={e => setNewText(e.target.value)} placeholder="Texto..." rows={2}
                 style={{ width:'100%', background:'#111c2a', border:'1px solid #1e2d3d', borderRadius:6, color:'#ffffff', fontSize:12, padding:'5px 7px', resize:'none', outline:'none', fontFamily:'inherit', marginBottom:5, whiteSpace:'pre-wrap' }}
                 onFocus={e => e.target.style.borderColor='#25d366'} onBlur={e => e.target.style.borderColor='#1e2d3d'} />
-              <p style={{ fontSize:11, color:'#475569', margin:'0 0 3px' }}>Adjuntos ({newImgUrls.length}/{MAX_IMGS}) — fotos y audios, en orden</p>
+              <p style={{ fontSize:11, color:'#7c8ba1', margin:'0 0 3px' }}>Adjuntos ({newImgUrls.length}/{MAX_IMGS}) — fotos y audios, en orden</p>
               <MultiImgEditor urls={newImgUrls} onChange={setNewImgUrls} />
               {newCarrusel.length === 0 && <BotonesEditor botones={newBotones} onChange={setNewBotones} />}
               <CarruselEditor productos={newCarrusel} hayBotones={newBotones.some(b => b.trim())} onElegir={() => setEligiendo('new')} onQuitar={() => setNewCarrusel([])} />
@@ -1393,7 +1393,7 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                           {l.estado === 'PAGADO' ? '✅' : l.estado === 'RECHAZADO' ? '❌' : '⏳'} ${Number(l.valor).toFixed(2)} · {l.estado}
                           {l.tarjeta ? ` · ${l.tarjeta}` : ''}{l.transactionId ? ` · #${l.transactionId}` : ''}
                           {l.error ? ` · ${l.error}` : ''}
-                          <span style={{ color:'#64748b' }}> · {new Date(l.creado_en).toLocaleString('es-EC', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })}</span>
+                          <span style={{ color:'#7c8ba1' }}> · {new Date(l.creado_en).toLocaleString('es-EC', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })}</span>
                         </div>
                       ))}
                 </div>
@@ -1467,8 +1467,8 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                       style={{ flexShrink:0, padding:'7px 10px', borderRadius:7, fontSize:12, fontWeight:700, fontFamily:'inherit', background:'transparent', border:'1px solid #1e2d3d', color:'#94a3b8', cursor:'pointer' }}>
                       📋 Copiar
                     </button>
-                    <button onClick={() => setLinkListo(null)} title="Cerrar"
-                      style={{ flexShrink:0, padding:'7px 8px', borderRadius:7, fontSize:12, background:'transparent', border:'1px solid #1e2d3d', color:'#64748b', cursor:'pointer' }}>✕</button>
+                    <button aria-label="Cerrar" onClick={() => setLinkListo(null)} title="Cerrar"
+                      style={{ flexShrink:0, padding:'7px 8px', borderRadius:7, fontSize:12, background:'transparent', border:'1px solid #1e2d3d', color:'#7c8ba1', cursor:'pointer' }}>✕</button>
                   </div>
                   {!windowOpen && <div style={{ marginTop:6, fontSize:11, color:'#f59e0b' }}>Ventana de 24 h cerrada: este texto no se puede mandar suelto.</div>}
                   {linkListo.estado === 'error' && <div style={{ marginTop:6, fontSize:11, color:'#f87171' }}>⚠️ No salió. Reintenta o cópialo.</div>}
@@ -1489,7 +1489,7 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                 <span
                   onClick={() => loadHistorial(activeConv.telefono, contactInfo?.idVenta)}
                   title="Recargar historial"
-                  style={{ marginLeft:'auto', color:'#475569', fontSize:12, cursor:'pointer', padding:'0 2px', lineHeight:1 }}
+                  style={{ marginLeft:'auto', color:'#7c8ba1', fontSize:12, cursor:'pointer', padding:'0 2px', lineHeight:1 }}
                 >🔄</span>
               </div>
 
@@ -1501,7 +1501,7 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                     ))}
                   </div>
                 ) : histError ? (
-                  <div style={{ fontSize:12, color:'#64748b', padding:'4px 0' }}>
+                  <div style={{ fontSize:12, color:'#7c8ba1', padding:'4px 0' }}>
                     No se pudo cargar el historial.{' '}
                     <button onClick={() => loadHistorial(activeConv.telefono, contactInfo?.idVenta)}
                       style={{ background:'transparent', border:'none', color:'#60a5fa', cursor:'pointer', fontSize:12, padding:0, textDecoration:'underline', fontFamily:'inherit' }}>Reintentar</button>
@@ -1561,25 +1561,25 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                       style={{ flex:1, padding:'6px 8px', borderRadius:8, fontSize:12, fontWeight:800, cursor:'pointer', fontFamily:'inherit',
                         border:`1px solid ${on ? 'rgba(37,211,102,.5)' : '#1e2d3d'}`,
                         background: on ? 'rgba(37,211,102,.12)' : 'transparent',
-                        color: on ? '#25d366' : '#64748b', transition:'all .15s' }}>
+                        color: on ? '#25d366' : '#7c8ba1', transition:'all .15s' }}>
                       {f.icon} {f.label}
                     </button>
                   )
                 })}
               </div>
               <div style={{ position:'relative' }}>
-                <span style={{ position:'absolute', left:9, top:'50%', transform:'translateY(-50%)', fontSize:12, color:'#475569' }}>🔍</span>
+                <span style={{ position:'absolute', left:9, top:'50%', transform:'translateY(-50%)', fontSize:12, color:'#7c8ba1' }}>🔍</span>
                 <input value={prodQuery} onChange={e => setProdQuery(e.target.value)} placeholder="Buscar producto…"
                   style={{ width:'100%', background:'#111c2a', border:'1px solid #1e2d3d', borderRadius:8, color:'#e2e8f0', fontSize:12, padding:'7px 28px 7px 28px', outline:'none', fontFamily:'inherit' }}
                   onFocus={e => e.target.style.borderColor='#25d366'} onBlur={e => e.target.style.borderColor='#1e2d3d'} />
                 {prodQuery && (
-                  <button onClick={() => setProdQuery('')} style={{ position:'absolute', right:6, top:'50%', transform:'translateY(-50%)', background:'transparent', border:'none', color:'#64748b', fontSize:12, cursor:'pointer', padding:'2px 4px' }}>✕</button>
+                  <button onClick={() => setProdQuery('')} style={{ position:'absolute', right:6, top:'50%', transform:'translateY(-50%)', background:'transparent', border:'none', color:'#7c8ba1', fontSize:12, cursor:'pointer', padding:'2px 4px' }}>✕</button>
                 )}
               </div>
               {productos !== null && (
                 <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:5 }}>
-                  <span style={{ fontSize:11, color:'#475569' }}>{productosFiltrados.length} producto{productosFiltrados.length === 1 ? '' : 's'}</span>
-                  <span onClick={() => setProdCache(prev => { const n = { ...prev }; delete n[fuente]; return n })} title="Recargar catálogo" style={{ marginLeft:'auto', color:'#475569', fontSize:12, cursor:'pointer', padding:'0 2px', lineHeight:1 }}>🔄</span>
+                  <span style={{ fontSize:11, color:'#7c8ba1' }}>{productosFiltrados.length} producto{productosFiltrados.length === 1 ? '' : 's'}</span>
+                  <span onClick={() => setProdCache(prev => { const n = { ...prev }; delete n[fuente]; return n })} title="Recargar catálogo" style={{ marginLeft:'auto', color:'#7c8ba1', fontSize:12, cursor:'pointer', padding:'0 2px', lineHeight:1 }}>🔄</span>
                 </div>
               )}
             </div>

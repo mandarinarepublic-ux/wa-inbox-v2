@@ -78,7 +78,7 @@ function Tarjeta({ id, nodo, selected, children, conEntrada = true }) {
     <div style={{
       position: 'relative', width: 228, borderRadius: 12, overflow: 'visible',
       background: '#0d1828',
-      border: `1px solid ${errores.length ? '#f87171' : selected ? color : '#1e2d3d'}`,
+      border: `1px solid ${errores.length ? '#f87171' : selected ? color : '#7c8ba1'}`,
       boxShadow: selected ? `0 0 0 2px ${color}55, 0 6px 20px rgba(0,0,0,.4)` : '0 4px 14px rgba(0,0,0,.3)',
       fontFamily: 'Outfit,sans-serif', color: '#e2e8f0',
     }}>
@@ -114,7 +114,7 @@ function Tarjeta({ id, nodo, selected, children, conEntrada = true }) {
               style={{ left: izquierda, background: color, width: 9, height: 9, border: '2px solid #0d1828' }} />
             <span style={{
               position: 'absolute', top: '100%', left: izquierda, transform: 'translateX(-50%)',
-              marginTop: 5, fontSize: 8, fontWeight: 700, color: '#64748b', whiteSpace: 'nowrap',
+              marginTop: 5, fontSize: 8, fontWeight: 700, color: '#7c8ba1', whiteSpace: 'nowrap',
               maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis',
             }}>{etiquetaDePuerto(nodo, p)}</span>
           </React.Fragment>
@@ -212,12 +212,12 @@ function NodoMensaje({ id, data, selected }) {
 
   return (
     <Tarjeta id={id} nodo={nodo} selected={selected}>
-      <div style={{ fontSize: 8, fontWeight: 800, letterSpacing: '.8px', color: '#475569', marginBottom: 2 }}>
+      <div style={{ fontSize: 8, fontWeight: 800, letterSpacing: '.8px', color: '#7c8ba1', marginBottom: 2 }}>
         {data?.origen === 'respuesta' ? 'RESPUESTA RÁPIDA' : 'TEXTO PROPIO'}
       </div>
       {perdida
         ? <div style={{ color: '#f87171', fontWeight: 700 }}>esa respuesta rápida ya no existe</div>
-        : <div style={{ color: texto ? '#cbd5e1' : '#64748b' }}>{texto ? recortar(texto) : '(sin texto)'}</div>}
+        : <div style={{ color: texto ? '#cbd5e1' : '#7c8ba1' }}>{texto ? recortar(texto) : '(sin texto)'}</div>}
       {marcas.length > 0 && (
         <div style={{ marginTop: 5, display: 'flex', flexWrap: 'wrap', gap: 5, fontSize: 9, color: '#94a3b8' }}>
           {marcas.map((m, i) => <span key={i}>{m}</span>)}
@@ -233,7 +233,7 @@ function NodoCondicion({ id, data, selected }) {
   return (
     <Tarjeta id={id} nodo={nodo} selected={selected}>
       <div style={{ fontWeight: 800, color: '#e2e8f0' }}>{campo}</div>
-      <div style={{ color: data?.valor ? '#94a3b8' : '#64748b', marginTop: 2 }}>
+      <div style={{ color: data?.valor ? '#94a3b8' : '#7c8ba1', marginTop: 2 }}>
         {data?.valor ? `= ${recortar(data.valor, 40)}` : '(sin valor)'}
       </div>
     </Tarjeta>

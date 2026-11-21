@@ -91,8 +91,8 @@ function BotonEje({ on, color, onClick, title, icon, label }) {
     <button onClick={onClick} title={title} style={{
       padding:'4px 6px', fontWeight: on ? 800 : 600, flexShrink:0,
       background: on ? `${color}22` : 'transparent',
-      border: `${on ? 2 : 1}px solid ${on ? color : '#1e2d3d'}`,
-      color: on ? color : '#475569',
+      border: `${on ? 2 : 1}px solid ${on ? color : '#7c8ba1'}`,
+      color: on ? color : '#7c8ba1',
       borderRadius:7, cursor:'pointer', fontFamily:'inherit', transition:'all .15s',
       boxShadow: on ? `0 0 8px ${color}44` : 'none',
     }}>
@@ -180,11 +180,11 @@ function EmojiPicker({ onSelect, onClose }) {
     <div style={{ position:'absolute', bottom:'100%', left:0, right:0, marginBottom:8, background:'#0d1828', border:'1px solid rgba(245,158,11,.25)', borderRadius:14, zIndex:60, overflow:'hidden', boxShadow:'0 8px 32px rgba(0,0,0,.6)' }}>
       {/* Búsqueda */}
       <div style={{ padding:'8px 10px 6px', borderBottom:'1px solid #111c2a', display:'flex', gap:6, alignItems:'center' }}>
-        <span style={{ fontSize:13, color:'#475569' }}>🔍</span>
+        <span style={{ fontSize:13, color:'#7c8ba1' }}>🔍</span>
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar emoji..."
           autoFocus
           style={{ flex:1, background:'transparent', border:'none', outline:'none', color:'#e2e8f0', fontSize:12, fontFamily:'Outfit,sans-serif' }} />
-        <button onClick={onClose} style={{ background:'transparent', border:'none', color:'#475569', cursor:'pointer', fontSize:15, padding:0, lineHeight:1 }}>✕</button>
+        <button onClick={onClose} style={{ background:'transparent', border:'none', color:'#7c8ba1', cursor:'pointer', fontSize:15, padding:0, lineHeight:1 }}>✕</button>
       </div>
       {/* Tabs */}
       {!search.trim() && (
@@ -207,7 +207,7 @@ function EmojiPicker({ onSelect, onClose }) {
           >{emoji}</button>
         ))}
         {displayed.length === 0 && (
-          <div style={{ gridColumn:'1/-1', textAlign:'center', padding:'20px 0', color:'#334155', fontSize:12 }}>Sin resultados</div>
+          <div style={{ gridColumn:'1/-1', textAlign:'center', padding:'20px 0', color:'#7c8ba1', fontSize:12 }}>Sin resultados</div>
         )}
       </div>
     </div>
@@ -2869,6 +2869,9 @@ export default function App() {
         .hide-mobile{ display:inline !important; }
         .show-mobile{ display:none !important; }
         .overlay    { display:none; }
+        /* Foco visible SOLO con teclado (20-nov-2026): antes no se veía en qué botón
+           estabas. :focus-visible no se dispara con el clic ni con el dedo. */
+        button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, [role="button"]:focus-visible, [tabindex]:focus-visible{ outline:2px solid #25d366 !important; outline-offset:2px; }
         /* Filtros plegados también en la compu (20-nov-2026): con letra legible ocupaban
            8 líneas antes del primer chat. El botón dice cuántos hay activos. */
         .filtros-toggle{ display:flex !important; }
@@ -3069,9 +3072,9 @@ export default function App() {
                 {/* Por `cambiarLinea` y no por `setLinea` a pelo: salir de la
                     pestaña de chats desmonta el panel derecho y tiraría el
                     PEDIDO MANUAL en silencio. Es el mismo salto, con el guard. */}
-                <button onClick={() => cambiarLinea('AUTO')} title="Mensajes de saludo (automatizaciones)" style={{ background:'rgba(245,158,11,.14)', border:'1px solid rgba(245,158,11,.35)', color:'#f59e0b', borderRadius:8, width:28, height:28, cursor:'pointer', fontSize:13 }}>👋</button>
+                <button aria-label="Mensajes de saludo (automatizaciones)" onClick={() => cambiarLinea('AUTO')} title="Mensajes de saludo (automatizaciones)" style={{ background:'rgba(245,158,11,.14)', border:'1px solid rgba(245,158,11,.35)', color:'#f59e0b', borderRadius:8, width:28, height:28, cursor:'pointer', fontSize:13 }}>👋</button>
                 <PushToggle />
-                <button onClick={() => setShowSetup(true)} style={{ background:'rgba(255,255,255,.04)', border:'1px solid #1a2d40', color:'#64748b', borderRadius:8, width:28, height:28, cursor:'pointer', fontSize:12 }}>⚙</button>
+                <button onClick={() => setShowSetup(true)} style={{ background:'rgba(255,255,255,.04)', border:'1px solid #1a2d40', color:'#7c8ba1', borderRadius:8, width:28, height:28, cursor:'pointer', fontSize:12 }}>⚙</button>
               </div>
             </div>
             <div style={{ position:'relative', marginBottom:6 }}>
@@ -3080,7 +3083,7 @@ export default function App() {
                 placeholder={searchMode === 'mensaje' ? 'Buscar en mensajes (ej: Hoodie)...' : searchMode === 'pedido' ? 'ID de pedido (ej: 6558 o MAN-XAV-6558)...' : 'Buscar nombre o número...'}
                 style={{ width:'100%', padding:'7px 28px 7px 28px', background:'#111c2a', border:`1px solid ${searchMode!=='contacto' ? 'rgba(96,165,250,.4)' : '#1a2d40'}`, borderRadius:8, color:'#e2e8f0', fontSize:12, outline:'none' }} />
               {search && (
-                <button onClick={() => setSearch('')} style={{ position:'absolute', right:8, top:'50%', transform:'translateY(-50%)', background:'transparent', border:'none', color:'#475569', cursor:'pointer', fontSize:13, padding:0, lineHeight:1 }}>✕</button>
+                <button onClick={() => setSearch('')} style={{ position:'absolute', right:8, top:'50%', transform:'translateY(-50%)', background:'transparent', border:'none', color:'#7c8ba1', cursor:'pointer', fontSize:13, padding:0, lineHeight:1 }}>✕</button>
               )}
             </div>
             {/* Selector de tipo de búsqueda */}
@@ -3094,7 +3097,7 @@ export default function App() {
                   flex:1, padding:'5px 2px', fontSize:11, fontWeight:700,
                   background: searchMode===key ? 'rgba(96,165,250,.15)' : 'transparent',
                   border: `1px solid ${searchMode===key ? 'rgba(96,165,250,.45)' : '#1a2d40'}`,
-                  color: searchMode===key ? '#60a5fa' : '#475569',
+                  color: searchMode===key ? '#60a5fa' : '#7c8ba1',
                   borderRadius:7, cursor:'pointer', fontFamily:'inherit', transition:'all .15s',
                 }}>{label}</button>
               ))}
@@ -3131,7 +3134,7 @@ export default function App() {
               </div>
             ) : (<>
               {isSearching && (
-                <div style={{ padding:'8px 16px 4px', fontSize:11, fontWeight:800, letterSpacing:'.06em', color:'#64748b' }}>
+                <div style={{ padding:'8px 16px 4px', fontSize:11, fontWeight:800, letterSpacing:'.06em', color:'#7c8ba1' }}>
                   {filtered.length} {searchingMsgs ? (filtered.length===1?'CHAT CON':'CHATS CON') : `RESULTADO${filtered.length===1?'':'S'}`}{searchingMsgs ? ' ESE MENSAJE' : ' · TODAS LAS BANDEJAS'}
                 </div>
               )}
@@ -3184,7 +3187,7 @@ export default function App() {
                 <button onClick={() => setTope(t => t + 200)} style={{
                   width:'100%', padding:'12px 16px', background:'transparent',
                   border:'none', borderTop:'1px solid #111c2a',
-                  color:'#64748b', fontSize:12, fontWeight:700, cursor:'pointer',
+                  color:'#7c8ba1', fontSize:12, fontWeight:700, cursor:'pointer',
                   fontFamily:'Outfit,sans-serif',
                 }}>
                   Mostrando {tope} de {filtered.length} · ver 200 más
@@ -3194,8 +3197,8 @@ export default function App() {
           </div>
 
           <div style={{ padding:'7px 14px', borderTop:'1px solid #162030', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
-            <span style={{ fontSize:11, color:'#334155' }}>{lastSync?'Sync '+lastSync.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'—'}</span>
-            <button
+            <span style={{ fontSize:11, color:'#7c8ba1' }}>{lastSync?'Sync '+lastSync.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'—'}</span>
+            <button aria-label="Recargar (F5)"
               onClick={() => window.location.reload()}
               title="Recargar (F5)"
               style={{
@@ -3223,7 +3226,7 @@ export default function App() {
               }}>
                 <div style={{ fontSize:44 }}>📥</div>
                 <div style={{ color:'#25d366', fontWeight:800, fontSize:15 }}>Suelta la foto acá</div>
-                <div style={{ color:'#64748b', fontSize:12 }}>imágenes o un video · también funciona Ctrl+V</div>
+                <div style={{ color:'#7c8ba1', fontSize:12 }}>imágenes o un video · también funciona Ctrl+V</div>
               </div>
             )}
             <div className="chat-header">
@@ -3364,7 +3367,7 @@ export default function App() {
               {/* ⚠️ Que se VEA que está trayendo historial. Sin aviso, subir en un
                   chat largo se siente como que la pantalla se trabó. */}
               {cargandoMas && (
-                <div style={{ textAlign:'center', padding:'10px 0', fontSize:12, color:'#64748b' }}>
+                <div style={{ textAlign:'center', padding:'10px 0', fontSize:12, color:'#7c8ba1' }}>
                   Trayendo mensajes anteriores…
                 </div>
               )}
@@ -3400,7 +3403,7 @@ export default function App() {
                   <div key={msg.id} data-salto={claveSalto(msg.id)}>
                     {showDate && (
                       <div style={{ display:'flex', justifyContent:'center', margin:'12px 0 8px' }}>
-                        <span style={{ background:'rgba(255,255,255,.04)', borderRadius:20, padding:'3px 14px', fontSize:12, color:'#475569' }}>{fmtDate(msg.timestamp)}</span>
+                        <span style={{ background:'rgba(255,255,255,.04)', borderRadius:20, padding:'3px 14px', fontSize:12, color:'#7c8ba1' }}>{fmtDate(msg.timestamp)}</span>
                       </div>
                     )}
                     <MessageBubble msg={msg} allMsgs={activeConv.msgs} onResponder={responderA} onAbrirChat={openConv} onReenviar={setReenviando}
@@ -3483,7 +3486,7 @@ export default function App() {
               {avisoAdjunto && (
                 <div style={{ marginBottom:8, padding:'7px 12px', background:'rgba(245,158,11,.08)', border:'1px solid rgba(245,158,11,.25)', borderRadius:8, fontSize:12, color:'#fbbf24', display:'flex', alignItems:'center', gap:8 }}>
                   <span style={{ flex:1 }}>{avisoAdjunto}</span>
-                  <button onClick={() => avisarAdjunto('')} title="Cerrar"
+                  <button aria-label="Cerrar" onClick={() => avisarAdjunto('')} title="Cerrar"
                     style={{ background:'transparent', border:'none', color:'#a16207', fontSize:13, cursor:'pointer', lineHeight:1, flexShrink:0 }}>✕</button>
                 </div>
               )}
@@ -3515,7 +3518,7 @@ export default function App() {
                     ))}
                   </div>
                   <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                    <span style={{ fontSize:11, color:'#64748b' }}>
+                    <span style={{ fontSize:11, color:'#7c8ba1' }}>
                       {imgUploading
                         ? `Enviando ${imgProgress}/${imgFiles.length}...`
                         : imgResult
@@ -3533,7 +3536,7 @@ export default function App() {
                           style={{ padding:'5px 10px', background:imgUploading?'#111c2a':'linear-gradient(135deg,#25d366,#128c7e)', border:'none', borderRadius:7, color:'#fff', fontSize:12, fontWeight:700, cursor:imgUploading?'default':'pointer', fontFamily:'inherit' }}>
                           {imgUploading?'⏳':'📤 Enviar'}
                         </button>
-                        <button onClick={cancelImage} style={{ padding:'5px 8px', background:'transparent', border:'1px solid #1e2d3d', borderRadius:7, color:'#475569', fontSize:12, cursor:'pointer', fontFamily:'inherit' }}>✕</button>
+                        <button onClick={cancelImage} style={{ padding:'5px 8px', background:'transparent', border:'1px solid #1e2d3d', borderRadius:7, color:'#7c8ba1', fontSize:12, cursor:'pointer', fontFamily:'inherit' }}>✕</button>
                       </div>
                     )}
                   </div>
@@ -3555,12 +3558,12 @@ export default function App() {
                     <div style={{ fontSize:11, color:'#25d366', fontWeight:700, marginBottom:7, letterSpacing:'.06em' }}>🔘 BOTONES INTERACTIVOS</div>
                     {btnTexts.map((txt,i) => (
                       <div key={i} style={{ display:'flex', alignItems:'center', gap:6, marginBottom:5 }}>
-                        <span style={{ fontSize:11, color:'#334155', width:12, flexShrink:0 }}>{i+1}.</span>
+                        <span style={{ fontSize:11, color:'#7c8ba1', width:12, flexShrink:0 }}>{i+1}.</span>
                         <input value={txt} onChange={e => setBtnTexts(prev=>prev.map((v,j)=>j===i?e.target.value:v))}
                           placeholder={`Botón ${i+1} (máx 20 caracteres)`} maxLength={20}
                           style={{ flex:1, background:'#111c2a', border:'1px solid #1e2d3d', borderRadius:7, padding:'6px 9px', color:'#e2e8f0', fontSize:12, outline:'none', fontFamily:'inherit' }}
                           onFocus={e=>e.target.style.borderColor='#25d366'} onBlur={e=>e.target.style.borderColor='#1e2d3d'} />
-                        {txt && <span style={{ fontSize:11, color:'#334155' }}>{txt.length}/20</span>}
+                        {txt && <span style={{ fontSize:11, color:'#7c8ba1' }}>{txt.length}/20</span>}
                       </div>
                     ))}
                     {btnTexts.some(t=>t.trim()) && !input.trim() ? (
@@ -3598,8 +3601,8 @@ export default function App() {
                           {citando.mensaje || `[${citando.tipo || 'archivo'}]`}
                         </div>
                       </div>
-                      <button onClick={() => setCitando(null)} title="Quitar la cita"
-                        style={{ background:'transparent', border:'none', color:'#64748b', fontSize:15, cursor:'pointer', lineHeight:1, flexShrink:0 }}>✕</button>
+                      <button aria-label="Quitar la cita" onClick={() => setCitando(null)} title="Quitar la cita"
+                        style={{ background:'transparent', border:'none', color:'#7c8ba1', fontSize:15, cursor:'pointer', lineHeight:1, flexShrink:0 }}>✕</button>
                     </div>
                   )}
                   {/* Arranca en UNA línea (rows={1}); el alto real lo pone ajustarAlto. El
@@ -3653,13 +3656,13 @@ export default function App() {
                   El ➤ de enviar NO baja acá: se queda al costado derecho de la caja,
                   que es donde la mano ya lo busca. */}
               <div style={{ display:'flex', gap:8, alignItems:'center', marginTop:8, flexWrap:'wrap' }}>
-                <button onClick={() => fileRef.current?.click()} style={{ width:42, height:42, flexShrink:0, background:imgFiles.length?'rgba(37,211,102,.12)':'#111c2a', border:`1px solid ${imgFiles.length?'rgba(37,211,102,.3)':'#1e2d3d'}`, borderRadius:11, cursor:'pointer', fontSize:17, display:'flex', alignItems:'center', justifyContent:'center', color:imgFiles.length?'#25d366':'#475569', transition:'all .15s', position:'relative' }} title="Adjuntar imagen o video — también puedes pegar con Ctrl+V o arrastrar la foto al chat">
+                <button onClick={() => fileRef.current?.click()} style={{ width:42, height:42, flexShrink:0, background:imgFiles.length?'rgba(37,211,102,.12)':'#111c2a', border:`1px solid ${imgFiles.length?'rgba(37,211,102,.3)':'#1e2d3d'}`, borderRadius:11, cursor:'pointer', fontSize:17, display:'flex', alignItems:'center', justifyContent:'center', color:imgFiles.length?'#25d366':'#7c8ba1', transition:'all .15s', position:'relative' }} title="Adjuntar imagen o video — también puedes pegar con Ctrl+V o arrastrar la foto al chat">
                   📎
                   {imgFiles.length > 0 && <span style={{ position:'absolute', top:-4, right:-4, width:16, height:16, borderRadius:'50%', background:'#25d366', color:'#080d14', fontSize:11, fontWeight:900, display:'flex', alignItems:'center', justifyContent:'center' }}>{imgFiles.length}</span>}
                 </button>
-                <button onClick={() => setShowCarrusel(true)} title="Enviar productos del catálogo (carrusel)" style={{ width:42, height:42, flexShrink:0, background:'#111c2a', border:'1px solid #1e2d3d', borderRadius:11, cursor:'pointer', fontSize:17, display:'flex', alignItems:'center', justifyContent:'center', transition:'all .15s' }}>🛍️</button>
-                <button onClick={() => setShowBtnPanel(p=>!p)} title="Botones interactivos" style={{ width:42, height:42, flexShrink:0, background:showBtnPanel?'rgba(37,211,102,.15)':'#111c2a', border:`1px solid ${showBtnPanel?'rgba(37,211,102,.4)':'#1e2d3d'}`, borderRadius:11, cursor:'pointer', fontSize:16, display:'flex', alignItems:'center', justifyContent:'center', color:showBtnPanel?'#25d366':'#475569', transition:'all .15s' }}>🔘</button>
-                <button onClick={() => { setShowEmoji(p=>!p); setShowBtnPanel(false) }} title="Emojis" style={{ width:42, height:42, flexShrink:0, background:showEmoji?'rgba(245,158,11,.15)':'#111c2a', border:`1px solid ${showEmoji?'rgba(245,158,11,.4)':'#1e2d3d'}`, borderRadius:11, cursor:'pointer', fontSize:20, display:'flex', alignItems:'center', justifyContent:'center', transition:'all .15s' }}>😊</button>
+                <button aria-label="Enviar productos del catálogo (carrusel)" onClick={() => setShowCarrusel(true)} title="Enviar productos del catálogo (carrusel)" style={{ width:42, height:42, flexShrink:0, background:'#111c2a', border:'1px solid #1e2d3d', borderRadius:11, cursor:'pointer', fontSize:17, display:'flex', alignItems:'center', justifyContent:'center', transition:'all .15s' }}>🛍️</button>
+                <button aria-label="Botones interactivos" onClick={() => setShowBtnPanel(p=>!p)} title="Botones interactivos" style={{ width:42, height:42, flexShrink:0, background:showBtnPanel?'rgba(37,211,102,.15)':'#111c2a', border:`1px solid ${showBtnPanel?'rgba(37,211,102,.4)':'#1e2d3d'}`, borderRadius:11, cursor:'pointer', fontSize:16, display:'flex', alignItems:'center', justifyContent:'center', color:showBtnPanel?'#25d366':'#7c8ba1', transition:'all .15s' }}>🔘</button>
+                <button aria-label="Emojis" onClick={() => { setShowEmoji(p=>!p); setShowBtnPanel(false) }} title="Emojis" style={{ width:42, height:42, flexShrink:0, background:showEmoji?'rgba(245,158,11,.15)':'#111c2a', border:`1px solid ${showEmoji?'rgba(245,158,11,.4)':'#1e2d3d'}`, borderRadius:11, cursor:'pointer', fontSize:20, display:'flex', alignItems:'center', justifyContent:'center', transition:'all .15s' }}>😊</button>
                 {/* Sin `accept`: desde que se pueden mandar documentos no hay tipo prohibido,
                     y una lista aca volveria a esconder archivos — el dialogo del sistema
                     los ocultaria y pareceria que el archivo "no se puede". decidirAdjuntos
@@ -3673,7 +3676,7 @@ export default function App() {
           <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16, position:'relative' }}>
             <button className="mob-ham" onClick={() => setShowSidebar(true)} style={{ position:'absolute', top:14, left:14, background:'rgba(37,211,102,.1)', border:'1px solid rgba(37,211,102,.2)', color:'#25d366', borderRadius:9, width:38, height:38, cursor:'pointer', fontSize:18, display:'none', alignItems:'center', justifyContent:'center' }}>☰</button>
             <div style={{ fontSize:52, opacity:.05 }}>💬</div>
-            <p style={{ color:'#1e2d3d', fontSize:13, fontWeight:700 }}>{loading?'Cargando...':'Selecciona una conversación'}</p>
+            <p style={{ color:'#7c8ba1', fontSize:13, fontWeight:700 }}>{loading?'Cargando...':'Selecciona una conversación'}</p>
           </div>
         )}
 
@@ -3711,7 +3714,7 @@ export default function App() {
         {showRight && (
           <div className={`right-col${crmEnCajon ? ' crm-abierto' : ''}`}>
             <div style={{ display:'flex', justifyContent:'flex-end', padding:'10px 10px 0' }}>
-              <button onClick={cerrarCajonDerecho} style={{ background:'transparent', border:'none', color:'#475569', cursor:'pointer', fontSize:17 }}>✕</button>
+              <button onClick={cerrarCajonDerecho} style={{ background:'transparent', border:'none', color:'#7c8ba1', cursor:'pointer', fontSize:17 }}>✕</button>
             </div>
             <RightPanel
               activeConv={activeConv}
@@ -3795,11 +3798,11 @@ export default function App() {
                   style={{
                     width:'100%', textAlign:'left', display:'block', marginBottom:6, padding:'9px 11px', borderRadius:10,
                     background: d.puede ? 'rgba(255,255,255,.04)' : 'transparent',
-                    border:`1px solid ${'#1e2d3d'}`, color: d.puede ? '#e2e8f0' : '#64748b',
+                    border:`1px solid ${'#1e2d3d'}`, color: d.puede ? '#e2e8f0' : '#7c8ba1',
                     cursor: d.puede && !reenviandoAhora ? 'pointer' : 'not-allowed', fontFamily:'inherit', fontSize:12, fontWeight:700,
                   }}>
                   <span>{d.nombre}</span>
-                  <span style={{ display:'block', fontSize:11, fontWeight:600, color:'#64748b', marginTop:2 }}>
+                  <span style={{ display:'block', fontSize:11, fontWeight:600, color:'#7c8ba1', marginTop:2 }}>
                     {d.puede ? d.telefono : `${d.telefono} · ${d.motivo}`}
                   </span>
                 </button>

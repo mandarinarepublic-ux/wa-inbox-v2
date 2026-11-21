@@ -35,7 +35,7 @@ const TOPE_HISTORIAL = 50
 const boton = (color, activo = true) => ({
   background: activo ? `${color}1f` : 'rgba(255,255,255,.03)',
   border: `1px solid ${activo ? `${color}55` : BORDE}`,
-  color: activo ? color : '#475569',
+  color: activo ? color : '#7c8ba1',
   borderRadius: 9, padding: '6px 12px', fontSize: 11, fontWeight: 800,
   cursor: activo ? 'pointer' : 'default', fontFamily: 'Outfit,sans-serif', whiteSpace: 'nowrap',
 })
@@ -70,7 +70,7 @@ function resumenDisparador(grafo) {
  * OTRA cosa que la que se ve en pantalla, y eso hay que decirlo.
  */
 function estadoDe(f) {
-  if (!f?.publicado) return { txt: 'Borrador', color: '#64748b' }
+  if (!f?.publicado) return { txt: 'Borrador', color: '#7c8ba1' }
   if (JSON.stringify(f.grafo || null) !== JSON.stringify(f.grafo_vivo || null)) {
     return { txt: 'Cambios sin publicar', color: '#f59e0b' }
   }
@@ -88,7 +88,7 @@ const fecha = (iso) => {
 const CSS_LIENZO = `
 .flujos-lienzo .react-flow__controls-button{background:#0d1828;border-bottom:1px solid #1e2d3d;fill:#94a3b8}
 .flujos-lienzo .react-flow__controls-button:hover{background:#16233a}
-.flujos-lienzo .react-flow__attribution{background:transparent;color:#334155;font-size:9px}
+.flujos-lienzo .react-flow__attribution{background:transparent;color:#7c8ba1;font-size:9px}
 .flujos-lienzo .react-flow__handle{cursor:crosshair}
 `
 
@@ -475,7 +475,7 @@ function Lienzo({ active }) {
       <div style={{ width: 236, flexShrink: 0, borderRight: `1px solid ${BORDE}`, display: 'flex', flexDirection: 'column', background: '#080f1a' }}>
         <div style={{ padding: '12px 12px 8px', borderBottom: `1px solid ${BORDE}`, display: 'flex', alignItems: 'center', gap: 6 }}>
           <div style={{ flex: 1, fontSize: 11, fontWeight: 900, letterSpacing: '1.4px', color: MORADO }}>🧭 FLUJOS</div>
-          <button onClick={cargarTodo} title="Volver a leer los flujos" style={boton('#64748b')}>↻</button>
+          <button aria-label="Volver a leer los flujos" onClick={cargarTodo} title="Volver a leer los flujos" style={boton('#64748b')}>↻</button>
         </div>
 
         <div style={{ padding: 10, borderBottom: `1px solid ${BORDE}` }}>
@@ -484,9 +484,9 @@ function Lienzo({ active }) {
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: 8 }}>
-          {cargando && <div style={{ fontSize: 11, color: '#64748b', padding: 8 }}>Cargando…</div>}
+          {cargando && <div style={{ fontSize: 11, color: '#7c8ba1', padding: 8 }}>Cargando…</div>}
           {!cargando && flujos.length === 0 && (
-            <div style={{ padding: 8, fontSize: 11, color: '#64748b', lineHeight: 1.6 }}>
+            <div style={{ padding: 8, fontSize: 11, color: '#7c8ba1', lineHeight: 1.6 }}>
               Todavía no hay ningún flujo.
               {hayRecetas && (
                 <button onClick={importar} disabled={trabajando}
@@ -510,10 +510,10 @@ function Lienzo({ active }) {
                   {f.nombre || '(sin nombre)'}
                 </div>
                 <div style={{ fontSize: 9, fontWeight: 800, color: est.color, marginTop: 2 }}>● {est.txt}</div>
-                <div style={{ fontSize: 10, color: '#64748b', marginTop: 2 }}>{resumenDisparador(f.grafo)}</div>
-                <div style={{ fontSize: 9, color: '#475569', marginTop: 2 }}>{fecha(f.actualizado_at)}</div>
+                <div style={{ fontSize: 10, color: '#7c8ba1', marginTop: 2 }}>{resumenDisparador(f.grafo)}</div>
+                <div style={{ fontSize: 9, color: '#7c8ba1', marginTop: 2 }}>{fecha(f.actualizado_at)}</div>
                 <div style={{ display: 'flex', gap: 5, marginTop: 6 }}>
-                  <button onClick={(e) => { e.stopPropagation(); abrir({ nombre: `${f.nombre} (copia)`, grafo: f.grafo }, { guardado: false }) }}
+                  <button aria-label="Duplicar" onClick={(e) => { e.stopPropagation(); abrir({ nombre: `${f.nombre} (copia)`, grafo: f.grafo }, { guardado: false }) }}
                     title="Duplicar" style={{ ...boton('#64748b'), padding: '3px 8px', fontSize: 10 }}>⧉</button>
                   <button onClick={(e) => { e.stopPropagation(); eliminar(f) }}
                     title={porBorrar === f.flujo_id ? 'Toca otra vez para eliminar' : 'Eliminar'}
@@ -542,11 +542,11 @@ function Lienzo({ active }) {
       {/* ══════ CENTRO — cabecera + lienzo ══════ */}
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
         {!actual ? (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569', fontSize: 13, textAlign: 'center', padding: 24 }}>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7c8ba1', fontSize: 13, textAlign: 'center', padding: 24 }}>
             <div>
               <div style={{ fontSize: 34, marginBottom: 10 }}>🧭</div>
               Elige un flujo de la izquierda o crea uno nuevo.
-              <div style={{ fontSize: 11, color: '#334155', marginTop: 8 }}>
+              <div style={{ fontSize: 11, color: '#7c8ba1', marginTop: 8 }}>
                 Cada flujo arranca con un Disparador y termina en Fin.
               </div>
             </div>
@@ -567,7 +567,7 @@ function Lienzo({ active }) {
                 {actual.publicado ? '⏸ Despublicar' : '🚀 Publicar'}
               </button>
 
-              <span style={{ fontSize: 10, fontWeight: 800, color: (sinGuardar || cambiosSinPublicar) ? '#f59e0b' : actual.publicado ? '#25d366' : '#64748b' }}>
+              <span style={{ fontSize: 10, fontWeight: 800, color: (sinGuardar || cambiosSinPublicar) ? '#f59e0b' : actual.publicado ? '#25d366' : '#7c8ba1' }}>
                 {sinGuardar ? '● Cambios sin guardar' : cambiosSinPublicar ? '● Guardado, falta publicar' : actual.publicado ? '● Publicado' : '● Borrador guardado'}
               </span>
               {totalErrores > 0 && (
@@ -576,13 +576,13 @@ function Lienzo({ active }) {
 
               <div style={{ flex: 1 }} />
 
-              <button onClick={deshacer} disabled={!puedeDeshacer} title="Deshacer (Ctrl+Z)" style={boton('#64748b', puedeDeshacer)}>↶</button>
-              <button onClick={rehacer} disabled={!puedeRehacer} title="Rehacer (Ctrl+Shift+Z)" style={boton('#64748b', puedeRehacer)}>↷</button>
+              <button aria-label="Deshacer (Ctrl+Z)" onClick={deshacer} disabled={!puedeDeshacer} title="Deshacer (Ctrl+Z)" style={boton('#64748b', puedeDeshacer)}>↶</button>
+              <button aria-label="Rehacer (Ctrl+Shift+Z)" onClick={rehacer} disabled={!puedeRehacer} title="Rehacer (Ctrl+Shift+Z)" style={boton('#64748b', puedeRehacer)}>↷</button>
             </div>
 
             {/* Paleta */}
             <div style={{ padding: '7px 12px', borderBottom: `1px solid ${BORDE}`, display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 9, fontWeight: 900, letterSpacing: '1.2px', color: '#475569' }}>AGREGAR</span>
+              <span style={{ fontSize: 9, fontWeight: 900, letterSpacing: '1.2px', color: '#7c8ba1' }}>AGREGAR</span>
               <button onClick={() => agregarNodo('mensaje')} style={boton(COLORES.mensaje)}>+ Mensaje</button>
               <button onClick={() => agregarNodo('condicion')} style={boton(COLORES.condicion)}>+ Condición</button>
               <button onClick={() => agregarNodo('fin')} style={boton(COLORES.fin)}>+ Fin</button>
