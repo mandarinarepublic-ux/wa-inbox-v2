@@ -38,7 +38,7 @@ import { actualizarNoLeidos, notificar } from '@/lib/notif'
 import { hayQueConfirmarDescarte, AVISO_DESCARTAR_PEDIDO, anchoPanelPedido, anchoPanelMinimo, bytesDeDataUrl, MAX_HOJA_BYTES } from '@/lib/pedido-manual'
 import { decidirArrastre } from '@/lib/arrastre'
 import { ventanaAbierta, pautaAbierta, etiquetaVencePauta } from '@/lib/bandeja'
-import { reaccionesNuestras, seMuestraComoBurbuja, puedeReaccionar, siguienteReaccion } from '@/lib/reacciones'
+import { reaccionesNuestras, reaccionesDelCliente, seMuestraComoBurbuja, puedeReaccionar, siguienteReaccion } from '@/lib/reacciones'
 import { avisoDeFormato } from '@/lib/audio-nota-voz'
 import { adjuntosDeRespuesta } from '@/lib/adjuntos-respuesta'
 import { citaUnaVez } from '@/lib/cita'
@@ -3375,6 +3375,8 @@ export default function App() {
                 // ❤️ Nuestras reacciones se pegan bajo su mensaje en vez de ir sueltas.
                 const mias = reaccionesNuestras(activeConv.msgs)
                 for (const [k, v] of Object.entries(reaccionLocal)) mias.set(k, v)
+                // …y las del CLIENTE, bajo nuestro mensaje (antes: línea suelta).
+                const suyas = reaccionesDelCliente(activeConv.msgs)
                 const ids = new Set(activeConv.msgs.map(m => String(m.id)))
                 const visibles = activeConv.msgs.filter(m => seMuestraComoBurbuja(m, ids))
                 // 🗓️ Meses anteriores plegados (lib/meses-chat.js): el mes en curso
@@ -3408,6 +3410,7 @@ export default function App() {
                     )}
                     <MessageBubble msg={msg} allMsgs={activeConv.msgs} onResponder={responderA} onAbrirChat={openConv} onReenviar={setReenviando}
                       reaccion={mias.get(String(msg.id)) || ''}
+                      reaccionCliente={suyas.get(String(msg.id)) || ''}
                       onReaccionar={windowOpen && puedeReaccionar(msg) ? (emoji) => reaccionar(msg, emoji) : null}
                       onIrACita={irACita}
                       onCrearPedido={(datos) => {

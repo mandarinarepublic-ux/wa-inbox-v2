@@ -51,3 +51,39 @@ test('quitar se lee como "Reaccionó a un mensaje" al volver de la base: cuenta 
   assert.equal(m.get('wamid.CLIENTE1'), '')
   assert.equal(reaccionesNuestras([reac('🙏', '2026-10-08T14:01:00Z')]).get('wamid.CLIENTE1'), '🙏')
 })
+
+// ── Reacciones del CLIENTE a mensajes nuestros (20-nov-2026) ──────────────
+import { reaccionesDelCliente, esReaccionDelCliente, emojiDeReaccion } from '../lib/reacciones.js'
+
+const nuestro = { id: 'wamid.NUESTRO1', direccion: 'SALIENTE', tipo: 'texto', mensaje: 'Te paso el catálogo', timestamp: '2026-11-20T14:00:00Z' }
+const suya = (texto, ts, destino = 'wamid.NUESTRO1') => ({ id: `wamid.S${ts}`, direccion: 'ENTRANTE', tipo: 'reaction', mensaje: texto, contextoId: destino, timestamp: ts })
+
+test('la reacción del cliente se lee SIN la etiqueta: "❤️ Reaccionó a un mensaje" → ❤️', () => {
+  assert.equal(emojiDeReaccion(suya('❤️ Reaccionó a un mensaje', '2026-11-20T14:01:00Z')), '❤️')
+  assert.equal(emojiDeReaccion(suya('👍🏻 Reaccionó a un mensaje', '2026-11-20T14:01:00Z')), '👍🏻')
+  // Quitarla llega sin emoji: queda la etiqueta pelada → cuenta como quitada.
+  assert.equal(emojiDeReaccion(suya('Reaccionó a un mensaje', '2026-11-20T14:01:00Z')), '')
+})
+
+test('gana la ÚLTIMA reacción del cliente, y quitarla la borra', () => {
+  const m = reaccionesDelCliente([suya('👍 Reaccionó a un mensaje', '2026-11-20T14:05:00Z'), suya('❤️ Reaccionó a un mensaje', '2026-11-20T14:01:00Z')])
+  assert.equal(m.get('wamid.NUESTRO1'), '👍')
+  const q = reaccionesDelCliente([suya('❤️ Reaccionó a un mensaje', '2026-11-20T14:01:00Z'), suya('Reaccionó a un mensaje', '2026-11-20T14:02:00Z')])
+  assert.equal(q.get('wamid.NUESTRO1'), '')
+})
+
+test('las nuestras y las del cliente no se mezclan', () => {
+  assert.equal(esReaccionDelCliente(reac('❤️', '2026-10-08T14:01:00Z')), false)
+  assert.equal(reaccionesNuestras([suya('❤️ Reaccionó a un mensaje', '2026-11-20T14:01:00Z')]).size, 0)
+})
+
+test('☠️ la del cliente NO sale como línea suelta si nuestro mensaje está en pantalla; si no está, SÍ', () => {
+  const r = suya('❤️ Reaccionó a un mensaje', '2026-11-20T14:01:00Z')
+  assert.equal(seMuestraComoBurbuja(r, new Set(['wamid.NUESTRO1'])), false)
+  // Sin el destino cargado se pinta igual: esconderla sería perder algo que pasó.
+  assert.equal(seMuestraComoBurbuja(r, new Set(['wamid.OTRO'])), true)
+  // Un mensaje normal siempre se pinta.
+  assert.equal(seMuestraComoBurbuja(nuestro, new Set(['wamid.NUESTRO1'])), true)
+  // Una reacción sin destino (fila rara) se pinta suelta, nunca desaparece.
+  assert.equal(seMuestraComoBurbuja({ ...r, contextoId: '' }, new Set(['wamid.NUESTRO1'])), true)
+})

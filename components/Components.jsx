@@ -999,7 +999,7 @@ export function AvisoInterno({ msg }) {
   )
 }
 
-export function MessageBubble({ msg, allMsgs, onResponder, onAbrirChat, onReenviar, reaccion = '', onReaccionar = null, onIrACita = null, onCrearPedido = null }) {
+export function MessageBubble({ msg, allMsgs, onResponder, onAbrirChat, onReenviar, reaccion = '', reaccionCliente = '', onReaccionar = null, onIrACita = null, onCrearPedido = null }) {
   const [accion, setAccion] = useState(false)
   const [hover, setHover] = useState(false)
   // Después de los hooks: un return antes rompería el orden de los useState.
@@ -1086,7 +1086,7 @@ export function MessageBubble({ msg, allMsgs, onResponder, onAbrirChat, onReenvi
         cursor: onResponder ? 'pointer' : 'default',
         position: 'relative',
         // Deja sitio a la reacción, que cuelga del borde de abajo.
-        marginBottom: reaccion ? 12 : 0,
+        marginBottom: (reaccion || reaccionCliente) ? 12 : 0,
       }}>
 
         {/* Reacciones: aparecen SOLO en el mensaje que tocaste, ARRIBA del contenido,
@@ -1221,6 +1221,15 @@ export function MessageBubble({ msg, allMsgs, onResponder, onAbrirChat, onReenvi
             background: '#1a2636', border: '1px solid #2a3a4f', borderRadius: 12,
             padding: '1px 6px', fontSize: 13, lineHeight: 1.4,
           }}>{reaccion}</span>
+        )}
+        {/* ❤️ La reacción del CLIENTE a un mensaje nuestro: colgada del borde, como en
+            WhatsApp, en vez de una línea suelta en el hilo (lib/reacciones.js). */}
+        {reaccionCliente && (
+          <span title="Reacción del cliente" style={{
+            position: 'absolute', bottom: -12, left: 10,
+            background: '#1a2636', border: '1px solid #2a3a4f', borderRadius: 12,
+            padding: '1px 6px', fontSize: 13, lineHeight: 1.4,
+          }}>{reaccionCliente}</span>
         )}
       </div>
       {!isMe && botonReaccionar}
