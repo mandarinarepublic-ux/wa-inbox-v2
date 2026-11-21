@@ -33,8 +33,8 @@ const TONO_TEMP = { caliente: '#fb923c', tibio: '#fbbf24', frio: '#38bdf8', dorm
 export default function FiltrosLista({ filtro, conteos, onCambiar, etiquetas = [], onAdministrarEtiquetas }) {
   const n = conteos || { bandeja: {}, temp: {}, etapa: {} }
   // 📱 En el celular las filas de abajo ocupaban media pantalla antes del primer
-  // chat. Ahí quedan plegadas detrás de "Más filtros" (el CSS vive en App.jsx);
-  // en la compu se ven siempre y el botón no existe.
+  // chat. Ahí quedan plegadas detrás de "Más filtros" (el CSS vive en App.jsx).
+  // Desde el 20-nov-2026 también en la compu: con letra legible ocupaban 8 líneas.
   const [abiertos, setAbiertos] = React.useState(false)
   const activos = [filtro.temp, filtro.etapa, filtro.deuda, filtro.ia, filtro.alerta, filtro.interno, filtro.etiqueta].filter(Boolean).length
   return (

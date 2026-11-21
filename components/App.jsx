@@ -2869,7 +2869,11 @@ export default function App() {
         .hide-mobile{ display:inline !important; }
         .show-mobile{ display:none !important; }
         .overlay    { display:none; }
-        .filtros-toggle{ display:none !important; }
+        /* Filtros plegados también en la compu (20-nov-2026): con letra legible ocupaban
+           8 líneas antes del primer chat. El botón dice cuántos hay activos. */
+        .filtros-toggle{ display:flex !important; }
+        .filtros-extra{ display:none; }
+        .filtros-extra.abiertos{ display:block; }
         @media (max-width:767px){
           /* Los cajones arrancan DEBAJO de la barra de pestañas (alto 38px, z-index
              200), no en top:0. Si no, la barra tapa la cabecera del sidebar (logo,
