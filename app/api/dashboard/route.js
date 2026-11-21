@@ -26,6 +26,15 @@ const TIENDAS = [
   { id: 'MANDARINA', cuenta: 'MANDI', label: 'Mandarina' },
   { id: 'INDSTORE',  cuenta: 'IND',   label: 'IND Store' },
 ]
+// Tiendas del CRM SIN inbox propio: entran al TOTAL del negocio (ventas), no a las
+// métricas de chats. Antes "Total del negocio" dejaba fuera YAW (42 pedidos y
+// $3.706 en nov-2026).
+const TIENDAS_SIN_INBOX = ['YAW']
+// Orígenes del pedido (crm.pedidos.origen) que TUVIERON chat de WhatsApp: son las
+// "ventas por WhatsApp", lo único que tiene sentido dividir entre los contactos
+// nuevos del inbox. Fuera: tienda web, cliente de paso (mostrador) y sin rastro.
+const ORIGEN_CHAT = new Set(['por_chat', 'mensaje_directo', 'digital_a_fisico'])
+const PAGINA_PEDIDOS = 1000
 
 // Rango [desde, hasta) en UTC según el preset (o rango custom), alineado a días de Ecuador.
 function calcRango(rango, desdeQ, hastaQ) {
@@ -91,26 +100,45 @@ export async function GET(req) {
     const ventasHi = new Date(Math.max(hasta.getTime(), hoyHasta.getTime()))
 
     const sb = getSupabase()
+    // Pedidos del rango, PAGINADOS (PostgREST corta en 1000 sin avisar; un "Rango…"
+    // de varios meses lo pasaba). Si la lectura falla, NO se muestra $0 como si fuera
+    // real: viaja `ventasError` y la pantalla lo avisa.
+    let ventasError = null
+    const leerPedidos = async () => {
+      const filas = []
+      for (let ini = 0; ini < 20 * PAGINA_PEDIDOS; ini += PAGINA_PEDIDOS) {
+        const { data, error } = await sb.schema('crm').from('pedidos')
+          .select('pedido_id, tienda_id, fecha_pedido, monto_total, estado_pedido, origen')
+          .gte('fecha_pedido', ventasLo.toISOString())
+          .lt('fecha_pedido', ventasHi.toISOString())
+          .order('fecha_pedido', { ascending: true }).order('pedido_id', { ascending: true })
+          .range(ini, ini + PAGINA_PEDIDOS - 1)
+        if (error) throw error
+        filas.push(...(data || []))
+        if (!data || data.length < PAGINA_PEDIDOS) break
+      }
+      return filas
+    }
     const [convRes, serieRes, perRes, hoyRes, pedidos] = await Promise.all([
       sb.rpc('dashboard_conversaciones'),
       sb.rpc('dashboard_series',  { p_desde: desde.toISOString(), p_hasta: hasta.toISOString(), p_gran: gran }),
       sb.rpc('dashboard_periodo', { p_desde: desde.toISOString(), p_hasta: hasta.toISOString() }),
       sb.rpc('dashboard_periodo', { p_desde: hoyDesde.toISOString(), p_hasta: hoyHasta.toISOString() }),
-      // Ventas ($) del CRM — ahora desde Supabase (schema crm), no del Google Sheet.
-      sb.schema('crm').from('pedidos')
-        .select('tienda_id, fecha_pedido, monto_total')
-        .gte('fecha_pedido', ventasLo.toISOString())
-        .lt('fecha_pedido', ventasHi.toISOString())
-        .then(r => r?.data || [], () => []),
+      // Ventas ($) del CRM — desde Supabase (schema crm), no del Google Sheet.
+      leerPedidos().catch((e) => { ventasError = e?.message || 'no se pudieron leer los pedidos'; return [] }),
     ])
     for (const r of [convRes, serieRes, perRes, hoyRes]) if (r.error) throw r.error
 
     // Pedidos del CRM normalizados: tienda + monto + fecha (en día de Ecuador).
-    const pedidosVentas = (pedidos || []).map(p => ({
-      tienda: String(p.tienda_id || '').toUpperCase(),
-      monto:  n(p.monto_total),
-      f:      p.fecha_pedido ? ecParts(new Date(p.fecha_pedido)) : null,
-    }))
+    // Los CANCELADOS no son ventas (3 pedidos y $329 en nov-2026 se contaban).
+    const pedidosVentas = (pedidos || [])
+      .filter(p => String(p.estado_pedido || '').toUpperCase() !== 'CANCELADO')
+      .map(p => ({
+        tienda: String(p.tienda_id || '').toUpperCase(),
+        monto:  n(p.monto_total),
+        chat:   ORIGEN_CHAT.has(String(p.origen || '')),
+        f:      p.fecha_pedido ? ecParts(new Date(p.fecha_pedido)) : null,
+      }))
 
     const convBy = Object.fromEntries((convRes.data || []).map(r => [r.cuenta, r]))
     const perBy  = Object.fromEntries((perRes.data  || []).map(r => [r.cuenta, r]))
@@ -131,7 +159,7 @@ export async function GET(req) {
 
       // Ventas del CRM (por TIENDA_ID): total del rango, por periodo, y HOY.
       const ventasNPorPeriodo = zero(), ventasMontoPorPeriodo = zero()
-      let ventasTotal = 0, ventasMonto = 0, ventasHoy = 0, ventasMontoHoy = 0
+      let ventasTotal = 0, ventasMonto = 0, ventasHoy = 0, ventasMontoHoy = 0, ventasChat = 0, ventasChatMonto = 0
       for (const p of pedidosVentas) {
         if (p.tienda !== tiendaId) continue
         const f = p.f; if (!f) continue
@@ -141,6 +169,7 @@ export async function GET(req) {
         const k = periodKey(f)
         if (k in ventasNPorPeriodo) { ventasNPorPeriodo[k]++; ventasMontoPorPeriodo[k] += monto }
         ventasTotal++; ventasMonto += monto
+        if (p.chat) { ventasChat++; ventasChatMonto += monto }
       }
 
       const leads = n(per.leads), leadsCont = n(per.leads_contestados)
@@ -158,8 +187,12 @@ export async function GET(req) {
         respAvgSeg: n(per.resp_avg_seg), respN: n(per.resp_n),
         tiempoRespMin: n(per.resp_n) ? Math.round(n(per.resp_avg_seg) / 60) : null,
         ventasTotal, ventasMonto: Math.round(ventasMonto * 100) / 100,
+        ventasChat, ventasChatMonto: Math.round(ventasChatMonto * 100) / 100,
         ticket: ventasTotal ? Math.round((ventasMonto / ventasTotal) * 100) / 100 : null,
-        conversion: leads ? Math.round((ventasTotal / leads) * 1000) / 10 : null, // %
+        // Conversión de WhatsApp: ventas que TUVIERON chat ÷ contactos nuevos del inbox
+        // (pedido de Rodrigo, 20-nov-2026). Antes dividía TODOS los pedidos del CRM
+        // (web, mostrador, canceladas) y podía pasar de 100 %.
+        conversion: leads ? Math.round((ventasChat / leads) * 1000) / 10 : null, // %
         salientesPorPeriodo, leadsPorPeriodo, ventasNPorPeriodo,
         ventasMontoPorPeriodo: Object.fromEntries(Object.entries(ventasMontoPorPeriodo).map(([k, v]) => [k, Math.round(v * 100) / 100])),
         // HOY (siempre)
@@ -182,7 +215,7 @@ export async function GET(req) {
       totalContactos: 0, estados: { pendiente: 0, atendido: 0, soporte: 0, archivado: 0 },
       temperatura: { caliente: 0, tibio: 0, frio: 0 }, ventasInbox: 0, sinResponder: 0,
       leads: 0, leadsContestados: 0, salientes: 0, entrantes: 0, rastreados: 0, leidos: 0,
-      ventasTotal: 0, ventasMonto: 0,
+      ventasTotal: 0, ventasMonto: 0, ventasChat: 0, ventasChatMonto: 0,
       salientesPorPeriodo: zero(), leadsPorPeriodo: zero(), ventasNPorPeriodo: zero(), ventasMontoPorPeriodo: zero(),
       hoy: { porContestar: 0, nuevos: 0, entrantes: 0, salientes: 0, ventas: 0, ventasMonto: 0, calientes: 0 },
     }
@@ -194,6 +227,7 @@ export async function GET(req) {
       total.salientes += x.salientes; total.entrantes += x.entrantes
       total.rastreados += x.rastreados; total.leidos += x.leidos
       total.ventasTotal += x.ventasTotal; total.ventasMonto += x.ventasMonto
+      total.ventasChat += x.ventasChat; total.ventasChatMonto += x.ventasChatMonto
       respSeg += x.respAvgSeg * x.respN; respN += x.respN
       for (const e of Object.keys(total.estados)) total.estados[e] += x.estados[e]
       for (const e of Object.keys(total.temperatura)) total.temperatura[e] += x.temperatura[e]
@@ -205,15 +239,30 @@ export async function GET(req) {
         total.ventasMontoPorPeriodo[k] += x.ventasMontoPorPeriodo[k]
       }
     }
+    // Tiendas sin inbox (YAW): suman VENTAS al total del negocio, no chats.
+    const sinInbox = {}
+    for (const p of pedidosVentas) {
+      if (!TIENDAS_SIN_INBOX.includes(p.tienda) || !p.f) continue
+      const s = (sinInbox[p.tienda] ||= { ventas: 0, monto: 0 })
+      if (esHoy(p.f)) { total.hoy.ventas++; total.hoy.ventasMonto += p.monto }
+      if (!enRango(p.f)) continue
+      s.ventas++; s.monto += p.monto
+      total.ventasTotal++; total.ventasMonto += p.monto
+      const k = periodKey(p.f)
+      if (k in total.ventasNPorPeriodo) { total.ventasNPorPeriodo[k]++; total.ventasMontoPorPeriodo[k] += p.monto }
+    }
+    total.sinInbox = Object.fromEntries(Object.entries(sinInbox).map(([t, s]) => [t, { ventas: s.ventas, monto: Math.round(s.monto * 100) / 100 }]))
+    total.tiendasIncluidas = [...TIENDAS.map(t => t.id), ...TIENDAS_SIN_INBOX]
     total.ventasMonto = Math.round(total.ventasMonto * 100) / 100
+    total.ventasChatMonto = Math.round(total.ventasChatMonto * 100) / 100
     total.hoy.ventasMonto = Math.round(total.hoy.ventasMonto * 100) / 100
     total.tiempoRespMin = respN ? Math.round(respSeg / respN / 60) : null
     total.readRate = pct(total.leidos, total.rastreados)
     total.leadsContestadosPct = pct(total.leadsContestados, total.leads)
-    total.conversion = total.leads ? Math.round((total.ventasTotal / total.leads) * 1000) / 10 : null
+    total.conversion = total.leads ? Math.round((total.ventasChat / total.leads) * 1000) / 10 : null
     total.ticket = total.ventasTotal ? Math.round((total.ventasMonto / total.ventasTotal) * 100) / 100 : null
 
-    return NextResponse.json({ generadoEn: new Date().toISOString(), rango, gran, periods, porTienda, total })
+    return NextResponse.json({ generadoEn: new Date().toISOString(), rango, gran, periods, porTienda, total, ventasError })
   } catch (err) {
     console.error('[/api/dashboard]', err)
     return NextResponse.json({ error: err.message }, { status: 500 })
