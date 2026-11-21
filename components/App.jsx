@@ -39,6 +39,7 @@ import { hayQueConfirmarDescarte, AVISO_DESCARTAR_PEDIDO, anchoPanelPedido, anch
 import { decidirArrastre } from '@/lib/arrastre'
 import { ventanaAbierta, pautaAbierta, etiquetaVencePauta } from '@/lib/bandeja'
 import { reaccionesNuestras, reaccionesDelCliente, seMuestraComoBurbuja, puedeReaccionar, siguienteReaccion } from '@/lib/reacciones'
+import { vecinoEnLista, siguienteTrasAtender, hayLogroPendientes } from '@/lib/siguiente-chat'
 import { avisoDeFormato } from '@/lib/audio-nota-voz'
 import { adjuntosDeRespuesta } from '@/lib/adjuntos-respuesta'
 import { citaUnaVez } from '@/lib/cita'
@@ -1818,6 +1819,26 @@ export default function App() {
   }, [convs, search, searchMode, msgHits, pedidoHits, contacts, pedidosChat, ahora, filtro, pendNuevosArriba, etiquetasChat])
   /* eslint-enable react-hooks/exhaustive-deps */
 
+  // ⌨️ J / K: siguiente / anterior chat de la lista, sin el mouse (paso 7 de la
+  // revisión de UX, 20-nov-2026). Nunca mientras escribes (caja de texto,
+  // buscador, selectores) ni con Ctrl/Alt/Cmd. Solo ABRE chats: no cambia
+  // estados ni envía nada. Pasa por `openConv`, con su guarda del pedido manual.
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return
+      const t = e.target
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return
+      const k = String(e.key || '').toLowerCase()
+      if (k !== 'j' && k !== 'k') return
+      const v = vecinoEnLista(filtered, active ? { telefono: active, phoneId: activeCanal } : null, k === 'j' ? 1 : -1)
+      if (!v) return
+      e.preventDefault()
+      openConv(v.telefono, v.phoneId)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [filtered, active, activeCanal])  // eslint-disable-line react-hooks/exhaustive-deps
+
   const lastMsg      = activeConv?.last
   const lastIncoming = activeConv ? [...activeConv.msgs].reverse().find(m => m.direccion === 'ENTRANTE') : null
   /**
@@ -3162,6 +3183,16 @@ export default function App() {
               <div style={{ display:'flex', flexDirection:'column', alignItems:'center', paddingTop:48, gap:12 }}>
                 <Spinner size={24} /><span style={{ fontSize:12, color:'#7c8ba1' }}>Cargando...</span>
               </div>
+            ) : filtered.length === 0 && hayLogroPendientes({ bandeja: filtro.bandeja, buscando: isSearching, totalPendientes, lastSyncMs: lastSync ? lastSync.getTime() : NaN }) ? (
+              // 🎉 Pendientes vacío DE VERDAD (lib/siguiente-chat.js): "si esa
+              // bandeja está vacía, contesté a todos". Solo con una sincronización
+              // buena reciente: una lista vacía por un fallo no se festeja.
+              <div style={{ padding:'40px 24px', textAlign:'center' }}>
+                <div style={{ fontSize:40, lineHeight:1 }}>🎉</div>
+                <div style={{ fontSize:15, fontWeight:800, color:'#e2e8f0', marginTop:12 }}>0 pendientes</div>
+                <div style={{ fontSize:13, color:'#94a3b8', marginTop:6 }}>Respondiste a todos.</div>
+                <div style={{ fontSize:12, color:'#7c8ba1', marginTop:4 }}>Cuando un cliente escriba, aparece acá.</div>
+              </div>
             ) : filtered.length === 0 ? (
               <div style={{ padding:28, textAlign:'center', color:'#7c8ba1', fontSize:12 }}>
                 {isSearching
@@ -3347,7 +3378,16 @@ export default function App() {
                         if (necesitaConfirmarAtendido(ultimo?.direccion) &&
                             !window.confirm('El cliente escribió de último. ¿Lo contestaste por otro lado?')) return
                       }
+                      // ➡️ Atendido desde Pendientes abre el siguiente pendiente
+                      // (lib/siguiente-chat.js). Se calcula ANTES de cambiar el
+                      // estado, con la lista tal como la ves. Con algo escrito en la
+                      // caja no salta: el borrador no se vacía al cambiar de chat.
+                      const sig = (key === 'atendido' && currentStatusView !== 'atendido' &&
+                        filtro.bandeja === 'pendiente' && !isSearching)
+                        ? siguienteTrasAtender(filtered, { telefono: activeConv.telefono, phoneId: activeCanal }, { hayBorrador: !!input.trim() })
+                        : null
                       changeStatus(activeConv.telefono, key)
+                      if (sig) openConv(sig.telefono, sig.phoneId)
                     }} />
                 ))}
                 <Separador />
