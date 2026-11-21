@@ -967,7 +967,7 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
                 borderBottom: `2px solid ${bandeja===key ? color : 'transparent'}`,
                 fontFamily:'Outfit,sans-serif', transition:'all .2s',
               }}>
-                <div style={{ fontSize:12, fontWeight:800, color: bandeja===key ? color : '#334155', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', display:'flex', alignItems:'center', justifyContent:'center', gap:4 }}>
+                <div style={{ fontSize:12, fontWeight:800, color: bandeja===key ? color : '#7c8ba1', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', display:'flex', alignItems:'center', justifyContent:'center', gap:4 }}>
                   {icon} {label}
                   {pendientesPorBandeja[key] > 0 && (
                     <span title="Pendientes" style={{ background:'#f87171', color:'#fff', borderRadius:9, minWidth:16, height:16, display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:900, padding:'0 4px' }}>
@@ -975,7 +975,7 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
                     </span>
                   )}
                 </div>
-                <div style={{ fontSize:11, color: bandeja===key ? color+'a0' : '#2a3f55', whiteSpace:'nowrap' }}>{sub}</div>
+                <div style={{ fontSize:11, color: bandeja===key ? color+'a0' : '#7c8ba1', whiteSpace:'nowrap' }}>{sub}</div>
               </button>
             ))}
           </div>
@@ -992,7 +992,7 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
                   flex:1, padding:'3px 4px', fontSize:11, fontWeight:700, borderRadius:6, cursor:'pointer',
                   background: active ? 'rgba(148,163,184,.15)' : 'transparent',
                   border: `1px solid ${active ? 'rgba(148,163,184,.45)' : '#1a2d40'}`,
-                  color: active ? '#cbd5e1' : '#334155',
+                  color: active ? '#cbd5e1' : '#7c8ba1',
                   fontFamily:'Outfit,sans-serif', transition:'all .15s',
                 }}>{icon} {label}</button>
               )
@@ -1020,7 +1020,7 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
                   padding:'3px 7px', fontSize:11, fontWeight:700, borderRadius:6, cursor:'pointer',
                   background: active ? `${meta.color}22` : 'transparent',
                   border: `1px solid ${active ? meta.color+'60' : '#1a2d40'}`,
-                  color: active ? meta.color : '#334155',
+                  color: active ? meta.color : '#7c8ba1',
                   fontFamily:'Outfit,sans-serif', transition:'all .15s',
                 }}>
                   {meta.filterLabel}
@@ -1041,7 +1041,7 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
                     padding:'3px 7px', fontSize:11, fontWeight:700, borderRadius:6, cursor:'pointer',
                     background: active ? `${color}22` : 'transparent',
                     border: `1px solid ${active ? color+'60' : '#1a2d40'}`,
-                    color: active ? color : '#334155',
+                    color: active ? color : '#7c8ba1',
                     fontFamily:'Outfit,sans-serif', transition:'all .15s',
                   }}>
                     {icon} {label}
@@ -1059,7 +1059,7 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
                   padding:'3px 7px', fontSize:11, fontWeight:700, borderRadius:6, cursor:'pointer',
                   background: active ? `${color}22` : 'transparent',
                   border: `1px solid ${active ? color+'60' : '#1a2d40'}`,
-                  color: active ? color : '#334155',
+                  color: active ? color : '#7c8ba1',
                   fontFamily:'Outfit,sans-serif', transition:'all .15s',
                 }}>
                   {icon} {label}
@@ -1073,9 +1073,9 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
         {/* Lista */}
         <div style={{ flex:1, overflowY:'auto', minHeight:0 }}>
           {loading ? (
-            <div style={{ padding:28, textAlign:'center', color:'#2a3f55', fontSize:12 }}>Cargando...</div>
+            <div style={{ padding:28, textAlign:'center', color:'#7c8ba1', fontSize:12 }}>Cargando...</div>
           ) : filtered.length === 0 ? (
-            <div style={{ padding:28, textAlign:'center', color:'#2a3f55', fontSize:12 }}>Sin conversaciones</div>
+            <div style={{ padding:28, textAlign:'center', color:'#7c8ba1', fontSize:12 }}>Sin conversaciones</div>
           ) : filtered.map(conv => (
             <ConvRow key={convKey(conv)} conv={conv} isActive={selected === convKey(conv)}
               onClick={() => openConv(conv)} filtroActivo={filter} />
@@ -1260,7 +1260,7 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
                     padding:'3px 9px', fontSize:11, fontWeight:700, borderRadius:6, cursor:'pointer',
                     background: modoRespuesta === m.id ? 'rgba(37,211,102,.15)' : 'transparent',
                     border: `1px solid ${modoRespuesta === m.id ? 'rgba(37,211,102,.4)' : '#1a2d40'}`,
-                    color: modoRespuesta === m.id ? '#25d366' : '#334155',
+                    color: modoRespuesta === m.id ? '#25d366' : '#7c8ba1',
                     fontFamily:'Outfit,sans-serif',
                   }}>{m.label}</button>
                 ))}
@@ -1336,7 +1336,7 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
                 <EmojiPicker onSelect={insertarEmoji} onClose={() => setShowEmoji(false)} />
               )}
             </div>
-            <div style={{ fontSize:11, color:'#2a3f55', marginTop:4, textAlign:'right' }}>
+            <div style={{ fontSize:11, color:'#7c8ba1', marginTop:4, textAlign:'right' }}>
               {isMobile ? 'Toca ➤ para enviar' : 'Enter · Shift+Enter nueva línea'}
             </div>
             </>

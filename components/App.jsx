@@ -2846,7 +2846,11 @@ export default function App() {
         ::-webkit-scrollbar { width:4px; }
         ::-webkit-scrollbar-track { background:transparent; }
         ::-webkit-scrollbar-thumb { background:#1e2d3d; border-radius:4px; }
-        ::-webkit-scrollbar-thumb:hover { background:#25d366; }
+        ::-webkit-scrollbar-thumb:hover { background:#f97316; }
+        /* 🍊 Toques de Mandarina (20-nov-2026) donde no cambian el significado de nada:
+           el verde sigue siendo enviar/en vivo, el rojo Pendientes y el ámbar los botones. */
+        ::selection { background:rgba(249,115,22,.35); color:#fff; }
+        input, textarea { caret-color:#f97316; }
         @keyframes spin  { to{transform:rotate(360deg)} }
         @keyframes up    { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
         @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
@@ -2871,7 +2875,7 @@ export default function App() {
         .overlay    { display:none; }
         /* Foco visible SOLO con teclado (20-nov-2026): antes no se veía en qué botón
            estabas. :focus-visible no se dispara con el clic ni con el dedo. */
-        button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, [role="button"]:focus-visible, [tabindex]:focus-visible{ outline:2px solid #25d366 !important; outline-offset:2px; }
+        button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, [role="button"]:focus-visible, [tabindex]:focus-visible{ outline:2px solid #f97316 !important; outline-offset:2px; }
         /* Filtros plegados también en la compu (20-nov-2026): con letra legible ocupaban
            8 líneas antes del primer chat. El botón dice cuántos hay activos. */
         .filtros-toggle{ display:flex !important; }
@@ -3030,7 +3034,7 @@ export default function App() {
               borderTop: '2px solid transparent',
               fontFamily:'Outfit,sans-serif', transition:'all .2s', height:'100%',
             }}>
-              <div style={{ fontSize:11, fontWeight:800, color: linea===id ? color : '#334155', letterSpacing:'1.5px', display:'flex', alignItems:'center', justifyContent:'center', gap:5 }}>
+              <div style={{ fontSize:11, fontWeight:800, color: linea===id ? color : '#7c8ba1', letterSpacing:'1.5px', display:'flex', alignItems:'center', justifyContent:'center', gap:5 }}>
                 {/* Ícono y nombre por separado: en el celular van uno ENCIMA del
                     otro y el contador flota en la esquina (ver CSS .tab-ico). */}
                 <span><span className="tab-ico">{icon}</span> <span className="tab-lbl">{label}{armado ? ' ◉' : ''}</span></span>
@@ -3042,7 +3046,7 @@ export default function App() {
                   }}>{badge}</span>
                 )}
               </div>
-              <div className="tab-sub" style={{ fontSize:11, color: linea===id ? color+'80' : '#2a3f55', letterSpacing:'1px' }}>{sub}</div>
+              <div className="tab-sub" style={{ fontSize:11, color: linea===id ? color+'80' : '#7c8ba1', letterSpacing:'1px' }}>{sub}</div>
             </button>
           ))}
         </div>
@@ -3078,7 +3082,7 @@ export default function App() {
               </div>
             </div>
             <div style={{ position:'relative', marginBottom:6 }}>
-              <span style={{ position:'absolute', left:9, top:'50%', transform:'translateY(-50%)', color:'#2a3f55', fontSize:12, pointerEvents:'none' }}>🔍</span>
+              <span style={{ position:'absolute', left:9, top:'50%', transform:'translateY(-50%)', color:'#7c8ba1', fontSize:12, pointerEvents:'none' }}>🔍</span>
               <input value={search} onChange={e => setSearch(e.target.value)}
                 placeholder={searchMode === 'mensaje' ? 'Buscar en mensajes (ej: Hoodie)...' : searchMode === 'pedido' ? 'ID de pedido (ej: 6558 o MAN-XAV-6558)...' : 'Buscar nombre o número...'}
                 style={{ width:'100%', padding:'7px 28px 7px 28px', background:'#111c2a', border:`1px solid ${searchMode!=='contacto' ? 'rgba(96,165,250,.4)' : '#1a2d40'}`, borderRadius:8, color:'#e2e8f0', fontSize:12, outline:'none' }} />
@@ -3122,10 +3126,10 @@ export default function App() {
           <div style={{ flex:1, overflowY:'auto', minHeight:0 }}>
             {loading ? (
               <div style={{ display:'flex', flexDirection:'column', alignItems:'center', paddingTop:48, gap:12 }}>
-                <Spinner size={24} /><span style={{ fontSize:12, color:'#2a3f55' }}>Cargando...</span>
+                <Spinner size={24} /><span style={{ fontSize:12, color:'#7c8ba1' }}>Cargando...</span>
               </div>
             ) : filtered.length === 0 ? (
-              <div style={{ padding:28, textAlign:'center', color:'#2a3f55', fontSize:12 }}>
+              <div style={{ padding:28, textAlign:'center', color:'#7c8ba1', fontSize:12 }}>
                 {isSearching
                   ? (searchingMsgs ? `Ningún mensaje dice "${search.trim()}"`
                     : searchingPedido ? (pedidoHits === null && queBuscarPedido(search) ? 'Buscando el pedido…' : `Ningún chat con el pedido "${search.trim()}"`)
@@ -3574,7 +3578,7 @@ export default function App() {
                         ⚠️ Falta escribir el mensaje (va arriba de los botones) — luego dale a ➤
                       </div>
                     ) : (
-                      <div style={{ fontSize:11, color:'#2a3f55', marginTop:3 }}>Escribe el mensaje abajo y dale a enviar · Máx 3 botones</div>
+                      <div style={{ fontSize:11, color:'#7c8ba1', marginTop:3 }}>Escribe el mensaje abajo y dale a enviar · Máx 3 botones</div>
                     )}
                   </div>
                 )}
