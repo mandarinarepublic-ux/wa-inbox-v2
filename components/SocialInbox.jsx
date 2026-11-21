@@ -703,9 +703,30 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
     })
   }
 
+  // ☠️ Antes dependía de [selected, convs]: el sondeo de cada 8 s cambia `convs`
+  // SIEMPRE, así que el hilo bajaba solo al fondo cada 8 s y quien leía mensajes
+  // viejos perdía el lugar (revisión web-design-guidelines, 21-nov-2026). Ahora:
+  //   · al ABRIR un hilo → al fondo, sin animación;
+  //   · solo con un mensaje NUEVO y si ya estabas abajo → al fondo, suave.
+  const ultimoMsgSel = selectedConv?.messages?.[selectedConv.messages.length - 1]
+  const ultimoIdSel = ultimoMsgSel ? String(ultimoMsgSel.id || ultimoMsgSel.timestamp || selectedConv.messages.length) : ''
+  const ultimoIdVistoRef = useRef('')
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [selected, convs])
+    ultimoIdVistoRef.current = ''
+    bottomRef.current?.scrollIntoView({ behavior: 'auto' })
+  }, [selected])
+  useEffect(() => {
+    if (!ultimoIdSel) return
+    const antes = ultimoIdVistoRef.current
+    ultimoIdVistoRef.current = ultimoIdSel
+    if (!antes) { bottomRef.current?.scrollIntoView({ behavior: 'auto' }); return }   // primera carga del hilo
+    if (antes === ultimoIdSel) return
+    // ¿Estaba abajo? El contenedor con scroll es el ancestro con overflowY auto.
+    let el = bottomRef.current?.parentElement
+    while (el && !/(auto|scroll)/.test(getComputedStyle(el).overflowY)) el = el.parentElement
+    const abajo = !el || el.scrollHeight - el.scrollTop - el.clientHeight < 160
+    if (abajo) bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [ultimoIdSel])
 
   // Cambiar de conversación vuelve SIEMPRE a 'privado'. El modo es del hilo, no del
   // vendedor: si se quedara pegado, contestar un comentario en 🌎 Público dejaría el

@@ -6,7 +6,7 @@ export const metadata = {
   manifest: '/manifest.webmanifest',
   appleWebApp: {
     capable: true,
-    statusBarStyle: 'default',
+    statusBarStyle: 'black',
     title: 'WA Inbox',
   },
   icons: {
@@ -16,7 +16,7 @@ export const metadata = {
 }
 
 export const viewport = {
-  themeColor: '#0b1622',
+  themeColor: '#080d14',
   width: 'device-width',
   initialScale: 1,
   // Al abrir el teclado del celular, encoge el viewport (y con él 100dvh) en vez
@@ -27,8 +27,8 @@ export const viewport = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="es">
-      <body style={{ margin: 0, padding: 0 }}>
+    <html lang="es" style={{ colorScheme: 'dark', background: '#080d14' }}>
+      <body style={{ margin: 0, padding: 0, background: '#080d14' }}>
         <PwaRegister />
         {children}
       </body>

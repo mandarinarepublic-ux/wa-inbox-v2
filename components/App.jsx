@@ -2895,6 +2895,12 @@ export default function App() {
         @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap');
         *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
         html, body, #root { height:100%; height:100dvh; }
+        /* (21-nov-2026, web-design-guidelines) Deslizar una lista hasta el tope ya no
+           arrastra la página (en Android disparaba "tirar para recargar" y se perdían
+           borradores). Toques sin la demora del doble toque, y un destello suave en vez
+           del azul de Android. */
+        body * { overscroll-behavior: contain; }
+        button, a, [role="button"], label { touch-action: manipulation; -webkit-tap-highlight-color: rgba(255,255,255,.08); }
         body { background:#080d14; font-family:'Outfit',sans-serif; overflow:hidden; }
         ::-webkit-scrollbar { width:4px; }
         ::-webkit-scrollbar-track { background:transparent; }
