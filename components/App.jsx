@@ -56,6 +56,16 @@ import { piezasDeReenvio, destinosParaReenviar, resumenDeReenvio } from '@/lib/r
 // librería mide el lienzo contra el navegador.
 const Flujos = dynamic(() => import('./flujos/Flujos'), { ssr: false })
 
+// ⚡ Las pestañas ocultas (Social, Contactos, Autos, Flujos, Guías) viven SIEMPRE
+// montadas y se redibujaban con cada letra de la caja de texto (21-nov-2026: medido
+// ~73 ms por letra con el panel en Ventas). Con memo solo se redibujan si cambian sus
+// propiedades: `active` y funciones estables (ver abrirDesdeContactos).
+const SocialInboxMemo = React.memo(SocialInbox)
+const ContactosMemo = React.memo(Contactos)
+const AutomatizacionesMemo = React.memo(Automatizaciones)
+const GuiasMemo = React.memo(Guias)
+const FlujosMemo = React.memo(Flujos)
+
 // ── Ancho del panel derecho: UNA sola fuente ──────────────────────
 // Lo usan el asa de arrastre, la restauración de localStorage y el ensanchado
 // automático del PEDIDO MANUAL. Tienen que salir del mismo lado: cuando el
@@ -424,6 +434,9 @@ export default function App() {
   // components/Components.jsx): una fila que no se redibujó llama por acá, nunca a
   // una versión vieja con otro chat u otro número en su cierre.
   const ultimasRef = useRef({})
+  // Estable para ContactosMemo: abrir un chat desde el directorio es un clic inmediato,
+  // así que siempre se usa la versión más reciente de abrirChatDesdeContactos.
+  const abrirDesdeContactos = useCallback((tel) => ultimasRef.current.abrirChatDesdeContactos?.(tel), [])
   const taRef      = useRef(null)  // caja de texto del compositor (para que crezca sola)
   const avisoRef   = useRef(null)  // temporizador del aviso de adjuntos
 
@@ -2898,7 +2911,7 @@ export default function App() {
   const displayName    = (tel) => contacts[tel]?.alias || convs.find(c=>c.telefono===tel)?.nombre || tel
 
   ultimasRef.current = {
-    openConv, responderA, irACita, reaccionar, setReenviando,
+    openConv, responderA, irACita, reaccionar, setReenviando, abrirChatDesdeContactos,
     crearPedidoDesde: (datos) => {
       setPrefillPedido({ telefono: activeConv?.telefono, datos: prefillDeFormulario(datos), n: Date.now() })
       if (window.matchMedia?.('(max-width:767px)').matches) setShowRight(true)
@@ -3863,27 +3876,27 @@ export default function App() {
 
         {/* ══════ SOCIAL ══════ — FB + IG */}
         <div style={{ flex:1, display: linea === 'SOCIAL' ? 'flex' : 'none', overflow:'hidden', height:'100%' }}>
-          <SocialInbox active={linea === 'SOCIAL'} onPendientes={setPendientesSocial} />
+          <SocialInboxMemo active={linea === 'SOCIAL'} onPendientes={setPendientesSocial} />
         </div>
 
         {/* ══════ CONTACTOS ══════ — directorio + envío por ventana 24h */}
         <div style={{ flex:1, display: linea === 'CONTACTOS' ? 'flex' : 'none', overflow:'hidden', height:'100%' }}>
-          <Contactos active={linea === 'CONTACTOS'} onOpenChat={abrirChatDesdeContactos} />
+          <ContactosMemo active={linea === 'CONTACTOS'} onOpenChat={abrirDesdeContactos} />
         </div>
 
         {/* ══════ AUTOMATIZACIONES ══════ — reglas on/off */}
         <div style={{ flex:1, display: linea === 'AUTO' ? 'flex' : 'none', overflow:'hidden', height:'100%' }}>
-          <Automatizaciones active={linea === 'AUTO'} />
+          <AutomatizacionesMemo active={linea === 'AUTO'} />
         </div>
 
         {/* ══════ FLUJOS ══════ — el lienzo de nodos */}
         <div style={{ flex:1, display: linea === 'FLUJOS' ? 'flex' : 'none', overflow:'hidden', height:'100%' }}>
-          {flujosVisitado && <Flujos active={linea === 'FLUJOS'} />}
+          {flujosVisitado && <FlujosMemo active={linea === 'FLUJOS'} />}
         </div>
 
         {/* 🚚 GUÍAS de Servientrega → CRM (components/Guias.jsx) */}
         <div style={{ flex:1, display: linea === 'GUIAS' ? 'flex' : 'none', overflow:'hidden', height:'100%' }}>
-          <Guias active={linea === 'GUIAS'} />
+          <GuiasMemo active={linea === 'GUIAS'} />
         </div>
 
         </div>{/* fin app-shell */}
