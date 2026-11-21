@@ -1179,6 +1179,23 @@ export default function App() {
   const cargandoMasRef = useRef(false)
   const sinMasRef      = useRef({})   // clave → ya no queda historial
   const anclaScrollRef = useRef(null) // para no saltar al agregar arriba
+  // 🖼️ Una foto o un video que TERMINA de cargar estira el hilo sin que nadie deslice,
+  // y el último mensaje quedaba fuera de la pantalla (revisión web-design-guidelines,
+  // 21-nov-2026; opción elegida por Rodrigo: no tocar las fotos, arreglar el salto).
+  // Si estabas ABAJO (autoScroll, que mide handleMsgsScroll), se vuelve a bajar. Si
+  // subiste a leer, no se mueve. "load" no burbujea: se escucha en captura.
+  useEffect(() => {
+    const el = msgsRef.current
+    if (!el) return
+    const alCargar = (e) => {
+      const t = e.target
+      if (!t || !/^(IMG|VIDEO)$/.test(t.tagName)) return
+      if (autoScroll.current && !anclaScrollRef.current) endRef.current?.scrollIntoView({ behavior: 'instant' })
+    }
+    el.addEventListener('load', alCargar, true)
+    el.addEventListener('loadedmetadata', alCargar, true)
+    return () => { el.removeEventListener('load', alCargar, true); el.removeEventListener('loadedmetadata', alCargar, true) }
+  }, [active])
 
   // 🗓️ Meses del hilo que el vendedor abrió a mano: clave `tel|canal|AAAA-MM`.
   // Abrir uno agrega mensajes ARRIBA de lo que estás leyendo: se ancla el scroll
