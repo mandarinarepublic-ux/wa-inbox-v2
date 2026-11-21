@@ -2879,8 +2879,9 @@ export default function App() {
         /* Filtros plegados también en la compu (20-nov-2026): con letra legible ocupaban
            8 líneas antes del primer chat. El botón dice cuántos hay activos. */
         .filtros-toggle{ display:flex !important; }
-        .filtros-extra{ display:none; }
-        .filtros-extra.abiertos{ display:block; }
+        /* Plegado: se ven SOLO los filtros activos, para quitarlos con un toque (20-nov-2026). */
+        .filtros-extra:not(.abiertos) button:not(.chip-activo){ display:none; }
+        .filtros-extra:not(.abiertos) > div:not(:has(.chip-activo)){ display:none; }
         @media (max-width:767px){
           /* Los cajones arrancan DEBAJO de la barra de pestañas (alto 38px, z-index
              200), no en top:0. Si no, la barra tapa la cabecera del sidebar (logo,
@@ -2927,8 +2928,9 @@ export default function App() {
           .eje-mob-lbl{ font-size:11px; font-weight:700; white-space:nowrap; max-width:60px; overflow:hidden; text-overflow:ellipsis; }
           /* Filtros: en la compu se ven todos; en el celular, detrás de un botón. */
           .filtros-toggle{ display:flex !important; }
-          .filtros-extra{ display:none; }
-          .filtros-extra.abiertos{ display:block; }
+          /* Plegado: se ven SOLO los filtros activos, para quitarlos con un toque (20-nov-2026). */
+          .filtros-extra:not(.abiertos) button:not(.chip-activo){ display:none; }
+          .filtros-extra:not(.abiertos) > div:not(:has(.chip-activo)){ display:none; }
           /* Respuestas rápidas: botones de 21px → 34px, y el 🗑 apartado del resto. */
           .rr-fila{ flex-direction:column; align-items:stretch !important; }
           .rr-acciones{ gap:6px !important; justify-content:flex-end; }
