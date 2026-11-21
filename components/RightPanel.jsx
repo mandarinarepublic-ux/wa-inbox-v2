@@ -437,22 +437,15 @@ const CATALOGO_LABEL = 'Mandarina'
 // (WhatsApp), así App.jsx sigue igual sin tocar una línea. SOCIAL pasa un subconjunto:
 // nunca 'ventas' (escribiría contactos basura con el sender_id como si fuera teléfono),
 // y en un hilo de COMENTARIO tampoco 'tienda' (es público).
-export default function RightPanel({ activeConv, onQuickReply, onSendText, onSendImage, onSendProducto, contactInfo, onUpdateContact, windowOpen, ventanaPautaHasta = null, prefillPedido = null, onPedidoManual, onVerPedido, onEnviarHojaPedido, onEnviandoHoja, pestanas = ['respuestas', 'ventas', 'tienda'] }) {
-  const [tab, setTab]           = useState(pestanas[0] || 'respuestas')
-  // El panel NO se desmonta al cambiar de conversación (SOCIAL reutiliza la misma
-  // instancia entre chats): si `tab` quedó en una pestaña que la conversación nueva
-  // ya no permite (p.ej. veníamos de un DM en 'tienda' y se abrió un COMENTARIO),
-  // se cae a la primera permitida. En App.jsx esto nunca dispara porque ahí
-  // `pestanas` siempre trae las tres.
-  const tabActiva = pestanas.includes(tab) ? tab : (pestanas[0] || 'respuestas')
+// ⏱ Contador de la ventana de 24 h en su PROPIO componente (21-nov-2026): antes su
+// setInterval de 1 s vivía en RightPanel y redibujaba el panel entero (respuestas,
+// tienda) cada segundo, x2 porque hay dos paneles montados. Ahora solo se redibuja esto.
+function ContadorVentana({ activeConv }) {
   const [countdown, setCountdown] = useState('')
-
-  // ── Contador regresivo ventana 24h ───────────────────────────
   useEffect(() => {
     if (!activeConv) return
     const lastIncoming = [...activeConv.msgs].reverse().find(m => m.direccion === 'ENTRANTE')
-    if (!lastIncoming) return
-
+    if (!lastIncoming) { setCountdown(''); return }
     const tick = () => {
       const diff = parseDate(lastIncoming.timestamp).getTime() + 24 * 60 * 60 * 1000 - Date.now()
       if (diff <= 0) { setCountdown('00:00:00'); return }
@@ -465,6 +458,23 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
     const t = setInterval(tick, 1000)
     return () => clearInterval(t)
   }, [activeConv])
+  if (!countdown) return null
+  const urgente = parseInt(countdown.split(':')[0]) === 0 && parseInt(countdown.split(':')[1]) < 30
+  return (
+    <span style={{ fontFamily:'monospace', fontSize:12, fontWeight:800, color: urgente ? '#f87171' : '#25d366', animation: urgente ? 'blink 1s infinite' : 'none' }}>
+      ⏱ {countdown}
+    </span>
+  )
+}
+
+export default function RightPanel({ activeConv, onQuickReply, onSendText, onSendImage, onSendProducto, contactInfo, onUpdateContact, windowOpen, ventanaPautaHasta = null, prefillPedido = null, onPedidoManual, onVerPedido, onEnviarHojaPedido, onEnviandoHoja, pestanas = ['respuestas', 'ventas', 'tienda'] }) {
+  const [tab, setTab]           = useState(pestanas[0] || 'respuestas')
+  // El panel NO se desmonta al cambiar de conversación (SOCIAL reutiliza la misma
+  // instancia entre chats): si `tab` quedó en una pestaña que la conversación nueva
+  // ya no permite (p.ej. veníamos de un DM en 'tienda' y se abrió un COMENTARIO),
+  // se cae a la primera permitida. En App.jsx esto nunca dispara porque ahí
+  // `pestanas` siempre trae las tres.
+  const tabActiva = pestanas.includes(tab) ? tab : (pestanas[0] || 'respuestas')
   const [replies,       setReplies]       = useState([])
   const [repliesLoaded, setRepliesLoaded] = useState(false)
   const [arrastrando, setArrastrando] = useState(null)   // índice que se está arrastrando
@@ -985,11 +995,7 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
           {ventanaPautaHasta && (
             <span style={{ fontFamily:'monospace', fontSize:12, color:'#25d366' }}>hasta {etiquetaVencePauta(ventanaPautaHasta)}</span>
           )}
-          {countdown && windowOpen && !ventanaPautaHasta && (
-            <span style={{ fontFamily:'monospace', fontSize:12, fontWeight:800, color: parseInt(countdown.split(':')[0]) === 0 && parseInt(countdown.split(':')[1]) < 30 ? '#f87171' : '#25d366', animation: parseInt(countdown.split(':')[0]) === 0 && parseInt(countdown.split(':')[1]) < 30 ? 'blink 1s infinite' : 'none' }}>
-              ⏱ {countdown}
-            </span>
-          )}
+          {windowOpen && !ventanaPautaHasta && <ContadorVentana activeConv={activeConv} />}
           {!windowOpen && (
             <span style={{ fontFamily:'monospace', fontSize:12, color:'#94a3b8' }}>Expirada</span>
           )}

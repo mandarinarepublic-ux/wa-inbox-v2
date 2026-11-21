@@ -420,6 +420,10 @@ export default function App() {
   }, [])
   const autoScroll = useRef(true)
   const prevMsgLen = useRef(0)
+  // ⚡ Las funciones MÁS RECIENTES para filas y burbujas memorizadas (ver el final de
+  // components/Components.jsx): una fila que no se redibujó llama por acá, nunca a
+  // una versión vieja con otro chat u otro número en su cierre.
+  const ultimasRef = useRef({})
   const taRef      = useRef(null)  // caja de texto del compositor (para que crezca sola)
   const avisoRef   = useRef(null)  // temporizador del aviso de adjuntos
 
@@ -2502,6 +2506,7 @@ export default function App() {
     }
   }
 
+  // (se rellena en cada render, después de definir todas: ver ultimasRef)
   const responderA = (msg) => {
     setCitando(msg)
     requestAnimationFrame(() => {
@@ -2892,6 +2897,14 @@ export default function App() {
   }) : null
   const displayName    = (tel) => contacts[tel]?.alias || convs.find(c=>c.telefono===tel)?.nombre || tel
 
+  ultimasRef.current = {
+    openConv, responderA, irACita, reaccionar, setReenviando,
+    crearPedidoDesde: (datos) => {
+      setPrefillPedido({ telefono: activeConv?.telefono, datos: prefillDeFormulario(datos), n: Date.now() })
+      if (window.matchMedia?.('(max-width:767px)').matches) setShowRight(true)
+    },
+  }
+
   return (
     <>
       {/* Va lo primero y fuera de todo layout: es fixed y tiene que verse aunque
@@ -3248,7 +3261,7 @@ export default function App() {
                   // El canal de la fila viaja con el clic: es lo que le dice a
                   // `openConv` por cuál número responde este chat. No cambia de
                   // pestaña — te quedas en GENERAL, que es como se trabaja.
-                  onClick={() => openConv(conv.telefono, conv.phoneId)}
+                  onClick={() => ultimasRef.current.openConv(conv.telefono, conv.phoneId)}
                   search={search}
                   estado={estadoFila(conv)}
                   modoIA={getModoIA(conv.telefono)}
@@ -3513,15 +3526,15 @@ export default function App() {
                         <span style={{ background:'rgba(255,255,255,.04)', borderRadius:20, padding:'3px 14px', fontSize:12, color:'#7c8ba1' }}>{fmtDate(msg.timestamp)}</span>
                       </div>
                     )}
-                    <MessageBubble msg={msg} allMsgs={activeConv.msgs} onResponder={responderA} onAbrirChat={openConv} onReenviar={setReenviando}
+                    <MessageBubble msg={msg} allMsgs={activeConv.msgs}
+                      onResponder={(m) => ultimasRef.current.responderA(m)}
+                      onAbrirChat={(...a) => ultimasRef.current.openConv(...a)}
+                      onReenviar={(m) => ultimasRef.current.setReenviando(m)}
                       reaccion={mias.get(String(msg.id)) || ''}
                       reaccionCliente={suyas.get(String(msg.id)) || ''}
-                      onReaccionar={windowOpen && puedeReaccionar(msg) ? (emoji) => reaccionar(msg, emoji) : null}
-                      onIrACita={irACita}
-                      onCrearPedido={(datos) => {
-                        setPrefillPedido({ telefono: activeConv.telefono, datos: prefillDeFormulario(datos), n: Date.now() })
-                        if (window.matchMedia?.('(max-width:767px)').matches) setShowRight(true)
-                      }} />
+                      onReaccionar={windowOpen && puedeReaccionar(msg) ? (emoji) => ultimasRef.current.reaccionar(msg, emoji) : null}
+                      onIrACita={(id) => ultimasRef.current.irACita(id)}
+                      onCrearPedido={(datos) => ultimasRef.current.crearPedidoDesde(datos)} />
                   </div>
                 )
                     })}
