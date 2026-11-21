@@ -2944,6 +2944,7 @@ export default function App() {
           .right-col{ position:fixed !important; right:0; top:calc(38px + env(safe-area-inset-top, 0px)); bottom:0; z-index:100; width:88% !important; max-width:300px; box-shadow:-4px 0 32px rgba(0,0,0,.6); animation:slideR .25s ease; }
           .desktop-right{ display:none !important; }
           .mob-ham{ display:flex !important; }
+          .vacio-pc{ display:none; }
           .mob-refresh{ display:flex !important; }
           .hide-mobile{ display:none !important; }
           .show-mobile{ display:inline !important; }
@@ -2973,8 +2974,11 @@ export default function App() {
           .tab-lbl{ font-size:11px; letter-spacing:0; max-width:100%; overflow:hidden; text-overflow:ellipsis; }
           .tab-badge{ position:absolute; top:0; right:1px; min-width:16px !important; height:16px !important; font-size:11px !important; line-height:16px !important; padding:0 3px !important; }
           .tab-sub{ display:none !important; }
-          /* ☰ volver a la lista: el botón más usado en el celular medía 22×20. */
-          .chat-header .mob-ham{ min-width:40px; min-height:40px; font-size:24px !important; align-items:center; justify-content:center; }
+          /* ‹ Chats: volver a la lista, el botón más usado en el celular. Antes era ☰,
+             que se lee como "menú" y nadie lo asociaba con ver los otros chats (Rodrigo,
+             20-nov-2026; igual que en AtiendeTodo a424afb). */
+          .chat-header .mob-ham{ min-height:40px; align-items:center; gap:3px; }
+          @media (max-width:360px){ .chat-header .mob-ham .vol-txt{ display:none; } }
           /* Botones de la cabecera del chat: emoji + nombre debajo, 40px de alto. */
           .chat-actions > button{ min-height:40px; }
           .eje-mob{ display:inline-flex !important; flex-direction:column; align-items:center; gap:2px; }
@@ -3300,7 +3304,13 @@ export default function App() {
             )}
             <div className="chat-header">
               <div className="chat-header-left">
-                <button className="mob-ham" onClick={() => setShowSidebar(s=>!s)} style={{ background:'transparent', border:'none', color:'#25d366', cursor:'pointer', fontSize:20, padding:'0 2px', lineHeight:1, flexShrink:0 }}>☰</button>
+                <button className="mob-ham" onClick={() => setShowSidebar(s=>!s)} aria-label={totalPendientes ? `Volver a los chats (${totalPendientes} pendientes)` : 'Volver a los chats'} style={{ background:'transparent', border:'none', color:'#25d366', cursor:'pointer', padding:'0 4px 0 0', lineHeight:1, flexShrink:0, fontFamily:'inherit' }}>
+                  <span aria-hidden="true" style={{ fontSize:28, fontWeight:400, marginTop:-3 }}>‹</span>
+                  <span className="vol-txt" style={{ fontSize:14, fontWeight:700 }}>Chats</span>
+                  {totalPendientes > 0 && (
+                    <span aria-hidden="true" style={{ background:'#ef4444', color:'#fff', borderRadius:10, minWidth:20, height:20, padding:'0 6px', fontSize:12, fontWeight:800, display:'inline-flex', alignItems:'center', justifyContent:'center', boxSizing:'border-box' }}>{totalPendientes > 99 ? '99+' : totalPendientes}</span>
+                  )}
+                </button>
                 <Avatar name={displayName(activeConv.telefono)} phone={activeConv.telefono} size={34} />
                 <div style={{ minWidth:0, flex:1 }}>
                   <div style={{ fontWeight:800, color:'#f1f5f9', fontSize:13, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:160 }}>{displayName(activeConv.telefono)}</div>
@@ -3749,9 +3759,12 @@ export default function App() {
           </div>
         ) : (
           <div style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:16, position:'relative' }}>
-            <button className="mob-ham" onClick={() => setShowSidebar(true)} style={{ position:'absolute', top:14, left:14, background:'rgba(37,211,102,.1)', border:'1px solid rgba(37,211,102,.2)', color:'#25d366', borderRadius:9, width:38, height:38, cursor:'pointer', fontSize:18, display:'none', alignItems:'center', justifyContent:'center' }}>☰</button>
             <div style={{ fontSize:52, opacity:.05 }}>💬</div>
-            <p style={{ color:'#7c8ba1', fontSize:13, fontWeight:700 }}>{loading?'Cargando...':'Selecciona una conversación'}</p>
+            <p className="vacio-pc" style={{ color:'#7c8ba1', fontSize:13, fontWeight:700 }}>{loading?'Cargando...':'Selecciona una conversación'}</p>
+            {/* En el celular: botón grande al centro en vez de un ☰ chico en la esquina. */}
+            <button className="mob-ham" onClick={() => setShowSidebar(true)} style={{ background:'#25d366', border:'none', color:'#06231a', borderRadius:12, minHeight:48, padding:'0 22px', cursor:'pointer', fontSize:15, fontWeight:800, fontFamily:'inherit', alignItems:'center', justifyContent:'center', gap:8 }}>
+              {loading ? 'Cargando...' : (totalPendientes > 0 ? `Ver chats (${totalPendientes} pendiente${totalPendientes === 1 ? '' : 's'})` : 'Ver chats')}
+            </button>
           </div>
         )}
 
