@@ -29,7 +29,7 @@ function Ventana({ titulo, onCerrar, children }) {
 export function ChipEtiqueta({ e, chico = false }) {
   return (
     <span title={e.nombre} style={{
-      fontSize: chico ? 9.5 : 11, fontWeight: 700, lineHeight: 1.2, whiteSpace: 'nowrap',
+      fontSize: chico ? 11 : 12, fontWeight: 700, lineHeight: 1.2, whiteSpace: 'nowrap',
       color: e.color, background: `${e.color}1a`, border: `1px solid ${e.color}55`,
       borderRadius: 6, padding: chico ? '1px 6px' : '3px 8px', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis',
     }}>{e.nombre}</span>
@@ -51,9 +51,9 @@ export function MenuEtiquetas({ etiquetas, puestas, onAlternar, onAdministrar, o
               background: on ? `${e.color}18` : 'transparent', border: `1px solid ${on ? e.color + '77' : P.borde}`,
               color: P.texto, fontFamily: 'inherit', fontSize: 13, textAlign: 'left', opacity: ocupado === e.id ? .5 : 1,
             }}>
-              <span style={{ width: 16, height: 16, borderRadius: 4, border: `2px solid ${e.color}`, background: on ? e.color : 'transparent', color: '#0d1520', fontSize: 11, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{on ? '✓' : ''}</span>
+              <span style={{ width: 16, height: 16, borderRadius: 4, border: `2px solid ${e.color}`, background: on ? e.color : 'transparent', color: '#0d1520', fontSize: 12, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{on ? '✓' : ''}</span>
               <span style={{ flex: 1 }}>{e.nombre}</span>
-              {e.clave && <span title="La pone sola una regla automática" style={{ fontSize: 10, color: P.muy }}>auto</span>}
+              {e.clave && <span title="La pone sola una regla automática" style={{ fontSize: 11, color: P.muy }}>auto</span>}
             </button>
           )
         })}
@@ -114,12 +114,12 @@ export function AdminEtiquetas({ etiquetas, onCrear, onEditar, onCerrar }) {
         ) : (
           <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: e.activa ? 1 : .45 }}>
             <ChipEtiqueta e={e} />
-            {e.clave && <span style={{ fontSize: 10, color: P.muy }}>auto</span>}
+            {e.clave && <span style={{ fontSize: 11, color: P.muy }}>auto</span>}
             <span style={{ flex: 1 }} />
             <button onClick={() => setEditando({ id: e.id, nombre: e.nombre, color: e.color })} title="Editar" style={{ background: 'transparent', border: 'none', color: P.tenue, cursor: 'pointer', fontSize: 13 }}>✏️</button>
             <button disabled={ocupado} onClick={() => correr(() => onEditar(e.id, { activa: !e.activa }))}
               title={e.activa ? 'Desactivar: se esconde de todos los chats (no se borra)' : 'Volver a activar'}
-              style={{ background: 'transparent', border: `1px solid ${P.borde}`, borderRadius: 6, color: P.tenue, cursor: 'pointer', fontSize: 10, padding: '2px 6px', fontFamily: 'inherit' }}>
+              style={{ background: 'transparent', border: `1px solid ${P.borde}`, borderRadius: 6, color: P.tenue, cursor: 'pointer', fontSize: 11, padding: '2px 6px', fontFamily: 'inherit' }}>
               {e.activa ? 'Desactivar' : 'Activar'}
             </button>
           </div>

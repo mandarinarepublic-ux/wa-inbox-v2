@@ -33,7 +33,7 @@ function render(txt, params = []) {
 function Badge24h({ on }) {
   return (
     <span style={{
-      fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 999, whiteSpace: 'nowrap',
+      fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 999, whiteSpace: 'nowrap',
       background: on ? 'rgba(37,211,102,.12)' : 'rgba(148,163,184,.1)',
       color: on ? '#25d366' : '#94a3b8',
       border: `1px solid ${on ? 'rgba(37,211,102,.3)' : 'rgba(148,163,184,.2)'}`,
@@ -83,7 +83,7 @@ export default function Contactos({ active, onOpenChat }) {
       <div style={{ padding: '16px 16px 10px', borderBottom: '1px solid #162030', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
           <div style={{ fontSize: 19, fontWeight: 900, color: '#e2e8f0' }}>👥 Contactos</div>
-          <div style={{ fontSize: 11, color: '#64748b' }}>
+          <div style={{ fontSize: 12, color: '#64748b' }}>
             {contactos.length} en total · <b style={{ color: '#25d366' }}>{dentro24h}</b> dentro de 24h
           </div>
         </div>
@@ -109,10 +109,10 @@ export default function Contactos({ active, onOpenChat }) {
               background: 'linear-gradient(135deg,#1e2d3d,#0d1828)', color: ORANGE, fontWeight: 800, fontSize: 15,
             }}>{(c.nombre || c.telefono || '?').trim().charAt(0).toUpperCase()}</div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 700, color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {c.nombre || c.alias || c.telefono}
               </div>
-              <div style={{ fontSize: 11, color: '#64748b', marginTop: 1 }}>
+              <div style={{ fontSize: 12, color: '#64748b', marginTop: 1 }}>
                 {soloDig(c.telefono)} · {hace(c.ultimoEntranteAt)}
               </div>
             </div>
@@ -120,7 +120,7 @@ export default function Contactos({ active, onOpenChat }) {
           </button>
         ))}
         {!loading && contactos.length > 400 && !search && (
-          <div style={{ color: '#334155', fontSize: 11, padding: '12px 16px', textAlign: 'center' }}>
+          <div style={{ color: '#334155', fontSize: 12, padding: '12px 16px', textAlign: 'center' }}>
             Mostrando los 400 más recientes · usa el buscador para el resto
           </div>
         )}
@@ -209,7 +209,7 @@ function PanelContacto({ contacto: c, onClose, onOpenChat, flash }) {
         <div style={{ marginBottom: 14 }}>
           <div style={{ fontSize: 12, fontWeight: 800, color: '#64748b', marginBottom: 8 }}>¿Por cuál número le escribes?</div>
           {opciones.length === 0 && (
-            <div style={{ fontSize: 12.5, color: '#475569', padding: '10px 12px', borderRadius: 10, border: '1px dashed #1e2d3d' }}>
+            <div style={{ fontSize: 13, color: '#475569', padding: '10px 12px', borderRadius: 10, border: '1px dashed #1e2d3d' }}>
               No hay números configurados.
             </div>
           )}
@@ -224,7 +224,7 @@ function PanelContacto({ contacto: c, onClose, onOpenChat, flash }) {
                 color: '#e2e8f0', fontFamily: 'Outfit,sans-serif',
               }}>
                 <span style={{ fontSize: 13, opacity: sel ? 1 : .45 }}>{sel ? '◉' : '○'}</span>
-                <span style={{ fontSize: 13.5, fontWeight: 800, flex: 1 }}>{o.etiqueta}</span>
+                <span style={{ fontSize: 13, fontWeight: 800, flex: 1 }}>{o.etiqueta}</span>
                 <Badge24h on={o.dentro24h} />
               </button>
             )
@@ -232,7 +232,7 @@ function PanelContacto({ contacto: c, onClose, onOpenChat, flash }) {
           {opciones.length > 0 && !canalSel && (
             // Sin preseleccionado = no sabemos por dónde escribió. Que elija a
             // propósito es justo lo que impide un envío que muere en Meta.
-            <div style={{ fontSize: 11.5, color: ORANGE, marginTop: 6 }}>
+            <div style={{ fontSize: 12, color: ORANGE, marginTop: 6 }}>
               Este contacto no ha escrito por ninguno de los dos. Elige uno para escribirle por plantilla.
             </div>
           )}
@@ -243,7 +243,7 @@ function PanelContacto({ contacto: c, onClose, onOpenChat, flash }) {
           onClick={() => { onOpenChat?.(c.telefono); onClose() }}
           style={{
             width: '100%', padding: '11px', borderRadius: 11, border: '1px solid #1e2d3d', marginBottom: 16,
-            background: '#0d1828', color: '#e2e8f0', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', fontFamily: 'Outfit,sans-serif',
+            background: '#0d1828', color: '#e2e8f0', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'Outfit,sans-serif',
           }}>💬 Abrir la conversación</button>
 
         {abierta ? (
@@ -351,23 +351,23 @@ function SelectorPlantilla({ contacto: c, flash, onClose, onCarrusel }) {
 
   return (
     <div>
-      <div style={{ fontSize: 11.5, color: '#f59e0b', background: 'rgba(245,158,11,.08)', border: '1px solid rgba(245,158,11,.2)', borderRadius: 9, padding: '8px 10px', marginBottom: 12, lineHeight: 1.4 }}>
+      <div style={{ fontSize: 12, color: '#f59e0b', background: 'rgba(245,158,11,.08)', border: '1px solid rgba(245,158,11,.2)', borderRadius: 9, padding: '8px 10px', marginBottom: 12, lineHeight: 1.4 }}>
         ⚠️ Pasaron más de 24h desde su último mensaje. WhatsApp solo permite enviar una <b>plantilla aprobada</b>.
       </div>
 
       {estado === 'loading' && <div style={{ color: '#475569', fontSize: 13 }}>Cargando plantillas…</div>}
 
       {estado === 'needsEnv' && (
-        <div style={{ color: '#94a3b8', fontSize: 12.5, lineHeight: 1.5 }}>
+        <div style={{ color: '#94a3b8', fontSize: 13, lineHeight: 1.5 }}>
           Falta configurar <b style={{ color: ORANGE }}>{error}</b> en Vercel para listar tus plantillas.
           {error === 'META_WABA_ID' && ' Es el ID de tu cuenta de WhatsApp Business (no el phone id).'}
         </div>
       )}
 
-      {estado === 'error' && <div style={{ color: '#ef4444', fontSize: 12.5 }}>Error: {error}</div>}
+      {estado === 'error' && <div style={{ color: '#ef4444', fontSize: 13 }}>Error: {error}</div>}
 
       {estado === 'ready' && tpls.length === 0 && (
-        <div style={{ color: '#94a3b8', fontSize: 12.5, lineHeight: 1.5 }}>
+        <div style={{ color: '#94a3b8', fontSize: 13, lineHeight: 1.5 }}>
           No hay plantillas aprobadas todavía. Crea una en Meta (WhatsApp Manager → Plantillas) para poder escribir fuera de 24h.
         </div>
       )}
@@ -384,8 +384,8 @@ function SelectorPlantilla({ contacto: c, flash, onClose, onCarrusel }) {
               width: '100%', textAlign: 'left', background: '#0d1828', border: '1px solid #1e2d3d', borderRadius: 10,
               padding: '10px 12px', marginBottom: 8, cursor: 'pointer',
             }}>
-              <div style={{ fontSize: 13, fontWeight: 800, color: '#e2e8f0' }}>{t.carrusel ? '🛍️ ' : ''}{t.name} <span style={{ fontSize: 10, color: '#475569' }}>· {t.language}{t.carrusel ? ' · carrusel: eliges los productos' : ''}</span></div>
-              <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{t.bodyText}</div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: '#e2e8f0' }}>{t.carrusel ? '🛍️ ' : ''}{t.name} <span style={{ fontSize: 11, color: '#475569' }}>· {t.language}{t.carrusel ? ' · carrusel: eliges los productos' : ''}</span></div>
+              <div style={{ fontSize: 12, color: '#64748b', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{t.bodyText}</div>
             </button>
           ))}
         </div>
@@ -397,25 +397,25 @@ function SelectorPlantilla({ contacto: c, flash, onClose, onCarrusel }) {
           <div style={{ fontSize: 13, fontWeight: 800, color: '#e2e8f0', marginBottom: 8 }}>{chosen.name}</div>
 
           {chosen.header?.format === 'IMAGE' && (
-            <><div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>URL de la imagen del encabezado</div>
+            <><div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>URL de la imagen del encabezado</div>
               <input value={headImg} onChange={e => setHeadImg(e.target.value)} placeholder="https://…" style={inp} /></>
           )}
           {headP.map((v, i) => (
             <div key={`h${i}`}>
-              <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>Encabezado · variable {i + 1}</div>
+              <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Encabezado · variable {i + 1}</div>
               <input value={v} onChange={e => setHeadP(p => p.map((x, j) => j === i ? e.target.value : x))} style={inp} />
             </div>
           ))}
           {bodyP.map((v, i) => (
             <div key={`b${i}`}>
-              <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>Variable {'{{'}{i + 1}{'}}'}</div>
+              <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 4 }}>Variable {'{{'}{i + 1}{'}}'}</div>
               <input value={v} onChange={e => setBodyP(p => p.map((x, j) => j === i ? e.target.value : x))} style={inp} />
             </div>
           ))}
 
           {chosen.bodyText && (
             <div style={{ background: '#080d14', border: '1px solid #1e2d3d', borderRadius: 10, padding: '10px 12px', margin: '4px 0 12px' }}>
-              <div style={{ fontSize: 10, color: '#475569', fontWeight: 800, marginBottom: 4 }}>VISTA PREVIA</div>
+              <div style={{ fontSize: 11, color: '#475569', fontWeight: 800, marginBottom: 4 }}>VISTA PREVIA</div>
               <div style={{ fontSize: 13, color: '#cbd5e1', whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>{preview}</div>
             </div>
           )}

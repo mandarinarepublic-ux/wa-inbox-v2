@@ -68,7 +68,7 @@ function BotonEje({ on, color, onClick, title, icon, label }) {
       borderRadius:7, cursor:'pointer', fontFamily:'inherit', transition:'all .15s',
       boxShadow: on ? `0 0 8px ${color}44` : 'none',
     }}>
-      <span className="hide-mobile" style={{ fontSize:10 }}>{icon} {label}</span>
+      <span className="hide-mobile" style={{ fontSize:11 }}>{icon} {label}</span>
       <span className="show-mobile" style={{ fontSize:14 }}>{icon}</span>
     </button>
   )
@@ -118,8 +118,8 @@ function PautaBadge({ conv }) {
     <div style={{ display:'inline-flex', alignItems:'center', gap:6, marginTop:5, padding:'4px 9px', borderRadius:8, background:'rgba(245,158,11,.1)', border:'1px solid rgba(245,158,11,.28)', maxWidth:'100%' }}>
       <span style={{ fontSize:12, flexShrink:0 }}>📢</span>
       <div style={{ minWidth:0 }}>
-        <div style={{ fontSize:10, fontWeight:800, color:'#f59e0b', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{info.titulo}</div>
-        {info.detalle && <div style={{ fontSize:9, color:'#64748b', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>ID: {info.detalle}</div>}
+        <div style={{ fontSize:11, fontWeight:800, color:'#f59e0b', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{info.titulo}</div>
+        {info.detalle && <div style={{ fontSize:11, color:'#64748b', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>ID: {info.detalle}</div>}
       </div>
     </div>
   )
@@ -186,7 +186,7 @@ function EmojiPicker({ onSelect, onClose }) {
 function ChannelBadge({ channel }) {
   const meta = CHANNEL_META[channel] || CHANNEL_META.FB
   return (
-    <span style={{ display:'inline-flex', alignItems:'center', gap:3, padding:'1px 6px', borderRadius:5, fontSize:10, fontWeight:700, background: meta.bg, color: meta.color }}>
+    <span style={{ display:'inline-flex', alignItems:'center', gap:3, padding:'1px 6px', borderRadius:5, fontSize:11, fontWeight:700, background: meta.bg, color: meta.color }}>
       {meta.icon} {channel}
     </span>
   )
@@ -199,7 +199,7 @@ function ChannelBadge({ channel }) {
 function StatusBadge({ status }) {
   const meta = STATUS_META[status] || STATUS_META.pendiente
   return (
-    <span style={{ padding:'1px 6px', borderRadius:5, fontSize:9, fontWeight:700, background: `${meta.color}26`, color: meta.color }}>
+    <span style={{ padding:'1px 6px', borderRadius:5, fontSize:11, fontWeight:700, background: `${meta.color}26`, color: meta.color }}>
       {meta.icon} {meta.label}
     </span>
   )
@@ -228,7 +228,7 @@ function SyncLabel({ lastSync, refrescando }) {
   // #334155 sobre este fondo casi no se lee: era la única señal de que el botón había
   // hecho algo, y por eso el dueño lo daba por muerto.
   return (
-    <span style={{ fontSize:10, fontWeight:600, color: refrescando ? '#25d366' : '#94a3b8' }}>
+    <span style={{ fontSize:11, fontWeight:600, color: refrescando ? '#25d366' : '#94a3b8' }}>
       {refrescando ? 'Actualizando…' : lastSync ? haceCuanto(lastSync.getTime()) : '—'}
     </span>
   )
@@ -242,7 +242,7 @@ function SocialAvatar({ name, channel }) {
       <div style={{ width:40, height:40, borderRadius:'50%', background: meta.color, display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontSize:14, fontWeight:700 }}>
         {initials || '?'}
       </div>
-      <div style={{ position:'absolute', bottom:-1, right:-1, width:16, height:16, borderRadius:'50%', background: meta.color, border:'2px solid #0d1520', display:'flex', alignItems:'center', justifyContent:'center', fontSize:8 }}>
+      <div style={{ position:'absolute', bottom:-1, right:-1, width:16, height:16, borderRadius:'50%', background: meta.color, border:'2px solid #0d1520', display:'flex', alignItems:'center', justifyContent:'center', fontSize:11 }}>
         {meta.icon}
       </div>
     </div>
@@ -267,29 +267,29 @@ function ConvRow({ conv, isActive, onClick, filtroActivo }) {
       <div style={{ flex:1, minWidth:0 }}>
         <div style={{ display:'flex', justifyContent:'space-between', marginBottom:2 }}>
           <span style={{ fontSize:13, fontWeight:700, color:'#e2e8f0', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:130 }}>{conv.nombre}</span>
-          <span style={{ fontSize:9, color:'#334155', flexShrink:0 }}>{fmtTime(conv.last_time)}</span>
+          <span style={{ fontSize:11, color:'#334155', flexShrink:0 }}>{fmtTime(conv.last_time)}</span>
         </div>
         <div style={{ display:'flex', gap:4, marginBottom:3, alignItems:'center', flexWrap:'wrap' }}>
           <ChannelBadge channel={conv.canal} />
           {conv.status !== filtroActivo && <StatusBadge status={conv.status} />}
           {conv.temperatura && TEMP_META[conv.temperatura] && conv.temperatura !== filtroActivo && (
-            <span title={`Lead ${TEMP_META[conv.temperatura].label}`} style={{ fontSize:11 }}>{TEMP_META[conv.temperatura].icon}</span>
+            <span title={`Lead ${TEMP_META[conv.temperatura].label}`} style={{ fontSize:12 }}>{TEMP_META[conv.temperatura].icon}</span>
           )}
           {conv.etapa && ETAPAS[conv.etapa] && conv.etapa !== filtroActivo && (
-            <span title={ETAPAS[conv.etapa].label} style={{ fontSize:9, fontWeight:700, color: ETAPAS[conv.etapa].color }}>
+            <span title={ETAPAS[conv.etapa].label} style={{ fontSize:11, fontWeight:700, color: ETAPAS[conv.etapa].color }}>
               {ETAPAS[conv.etapa].icon} {ETAPAS[conv.etapa].label}
             </span>
           )}
           {pautaInfo(conv) && (
-            <span title="Vino de un anuncio/publicación" style={{ fontSize:10, color:'#f59e0b' }}>📢</span>
+            <span title="Vino de un anuncio/publicación" style={{ fontSize:11, color:'#f59e0b' }}>📢</span>
           )}
         </div>
-        <div style={{ fontSize:11, color:'#334155', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+        <div style={{ fontSize:12, color:'#334155', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
           {conv.messages[conv.messages.length - 1]?.text || '—'}
         </div>
       </div>
       {conv.unread > 0 && (
-        <span style={{ flexShrink:0, width:18, height:18, borderRadius:'50%', background:'#f59e0b', color:'#000', fontSize:9, fontWeight:800, display:'flex', alignItems:'center', justifyContent:'center' }}>{conv.unread}</span>
+        <span style={{ flexShrink:0, width:18, height:18, borderRadius:'50%', background:'#f59e0b', color:'#000', fontSize:11, fontWeight:800, display:'flex', alignItems:'center', justifyContent:'center' }}>{conv.unread}</span>
       )}
     </button>
   )
@@ -313,7 +313,7 @@ function MsgBubble({ msg, channel }) {
         fontSize:13, lineHeight:1.5,
         border: isUser ? '1px solid #1e2d3d' : 'none',
       }}>
-        {isMandi && <div style={{ fontSize:9, fontWeight:700, opacity:.75, marginBottom:3 }}>🍊 MANDI</div>}
+        {isMandi && <div style={{ fontSize:11, fontWeight:700, opacity:.75, marginBottom:3 }}>🍊 MANDI</div>}
         {imagen && (
           <a href={imagen} target="_blank" rel="noreferrer">
             {/* Mismo tope que la burbuja de WhatsApp (Components.jsx): una guía de
@@ -323,7 +323,7 @@ function MsgBubble({ msg, channel }) {
         )}
         {msg.text && <div>{msg.text}</div>}
         {msg.time && (
-          <div style={{ fontSize:9, opacity:.5, marginTop:4, textAlign:'right' }}
+          <div style={{ fontSize:11, opacity:.5, marginTop:4, textAlign:'right' }}
                title={new Date(msg.time).toLocaleString('es-EC', { timeZone:'America/Guayaquil', dateStyle:'full', timeStyle:'short' })}>
             {fmtTime(msg.time)}
           </div>
@@ -951,7 +951,7 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
             <div style={{ width:36, height:36, borderRadius:10, background:'linear-gradient(135deg,#1877F2,#E1306C)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:17 }}>🌐</div>
             <div>
               <div style={{ fontSize:13, fontWeight:800, color:'#e2e8f0' }}>Social Inbox</div>
-              <div style={{ fontSize:10, color:'#25d366', display:'flex', alignItems:'center', gap:3 }}>
+              <div style={{ fontSize:11, color:'#25d366', display:'flex', alignItems:'center', gap:3 }}>
                 <span style={{ width:5, height:5, borderRadius:'50%', background:'#25d366', display:'inline-block' }} />
                 {loading ? 'Cargando...' : `${convs.length} conversaciones`}
               </div>
@@ -967,15 +967,15 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
                 borderBottom: `2px solid ${bandeja===key ? color : 'transparent'}`,
                 fontFamily:'Outfit,sans-serif', transition:'all .2s',
               }}>
-                <div style={{ fontSize:11, fontWeight:800, color: bandeja===key ? color : '#334155', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', display:'flex', alignItems:'center', justifyContent:'center', gap:4 }}>
+                <div style={{ fontSize:12, fontWeight:800, color: bandeja===key ? color : '#334155', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', display:'flex', alignItems:'center', justifyContent:'center', gap:4 }}>
                   {icon} {label}
                   {pendientesPorBandeja[key] > 0 && (
-                    <span title="Pendientes" style={{ background:'#f87171', color:'#fff', borderRadius:9, minWidth:16, height:16, display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:9, fontWeight:900, padding:'0 4px' }}>
+                    <span title="Pendientes" style={{ background:'#f87171', color:'#fff', borderRadius:9, minWidth:16, height:16, display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:900, padding:'0 4px' }}>
                       {pendientesPorBandeja[key]}
                     </span>
                   )}
                 </div>
-                <div style={{ fontSize:8, color: bandeja===key ? color+'a0' : '#2a3f55', whiteSpace:'nowrap' }}>{sub}</div>
+                <div style={{ fontSize:11, color: bandeja===key ? color+'a0' : '#2a3f55', whiteSpace:'nowrap' }}>{sub}</div>
               </button>
             ))}
           </div>
@@ -989,7 +989,7 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
               const active = canalFiltro === key
               return (
                 <button key={key} onClick={() => cambiarCanal(key)} style={{
-                  flex:1, padding:'3px 4px', fontSize:9, fontWeight:700, borderRadius:6, cursor:'pointer',
+                  flex:1, padding:'3px 4px', fontSize:11, fontWeight:700, borderRadius:6, cursor:'pointer',
                   background: active ? 'rgba(148,163,184,.15)' : 'transparent',
                   border: `1px solid ${active ? 'rgba(148,163,184,.45)' : '#1a2d40'}`,
                   color: active ? '#cbd5e1' : '#334155',
@@ -1017,14 +1017,14 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
               const active = filter === key
               return (
                 <button key={key} onClick={() => cambiarFiltro(key)} style={{
-                  padding:'3px 7px', fontSize:9, fontWeight:700, borderRadius:6, cursor:'pointer',
+                  padding:'3px 7px', fontSize:11, fontWeight:700, borderRadius:6, cursor:'pointer',
                   background: active ? `${meta.color}22` : 'transparent',
                   border: `1px solid ${active ? meta.color+'60' : '#1a2d40'}`,
                   color: active ? meta.color : '#334155',
                   fontFamily:'Outfit,sans-serif', transition:'all .15s',
                 }}>
                   {meta.filterLabel}
-                  {counts[key] > 0 && <span style={{ marginLeft:3, background: active ? meta.color : '#1a2d40', color: active ? '#080d14' : '#475569', borderRadius:10, padding:'0 4px', fontSize:8, fontWeight:800 }}>{counts[key]}</span>}
+                  {counts[key] > 0 && <span style={{ marginLeft:3, background: active ? meta.color : '#1a2d40', color: active ? '#080d14' : '#475569', borderRadius:10, padding:'0 4px', fontSize:11, fontWeight:800 }}>{counts[key]}</span>}
                 </button>
               )
             })}
@@ -1038,14 +1038,14 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
                 const active = filter === key
                 return (
                   <button key={key} onClick={() => cambiarFiltro(key)} style={{
-                    padding:'3px 7px', fontSize:9, fontWeight:700, borderRadius:6, cursor:'pointer',
+                    padding:'3px 7px', fontSize:11, fontWeight:700, borderRadius:6, cursor:'pointer',
                     background: active ? `${color}22` : 'transparent',
                     border: `1px solid ${active ? color+'60' : '#1a2d40'}`,
                     color: active ? color : '#334155',
                     fontFamily:'Outfit,sans-serif', transition:'all .15s',
                   }}>
                     {icon} {label}
-                    {counts[key] > 0 && <span style={{ marginLeft:3, background: active ? color : '#1a2d40', color: active ? '#080d14' : '#475569', borderRadius:10, padding:'0 4px', fontSize:8, fontWeight:800 }}>{counts[key]}</span>}
+                    {counts[key] > 0 && <span style={{ marginLeft:3, background: active ? color : '#1a2d40', color: active ? '#080d14' : '#475569', borderRadius:10, padding:'0 4px', fontSize:11, fontWeight:800 }}>{counts[key]}</span>}
                   </button>
                 )
               })}
@@ -1056,14 +1056,14 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
               const active = filter === key
               return (
                 <button key={key} onClick={() => cambiarFiltro(key)} style={{
-                  padding:'3px 7px', fontSize:9, fontWeight:700, borderRadius:6, cursor:'pointer',
+                  padding:'3px 7px', fontSize:11, fontWeight:700, borderRadius:6, cursor:'pointer',
                   background: active ? `${color}22` : 'transparent',
                   border: `1px solid ${active ? color+'60' : '#1a2d40'}`,
                   color: active ? color : '#334155',
                   fontFamily:'Outfit,sans-serif', transition:'all .15s',
                 }}>
                   {icon} {label}
-                  {counts[key] > 0 && <span style={{ marginLeft:3, background: active ? color : '#1a2d40', color: active ? '#080d14' : '#475569', borderRadius:10, padding:'0 4px', fontSize:8, fontWeight:800 }}>{counts[key]}</span>}
+                  {counts[key] > 0 && <span style={{ marginLeft:3, background: active ? color : '#1a2d40', color: active ? '#080d14' : '#475569', borderRadius:10, padding:'0 4px', fontSize:11, fontWeight:800 }}>{counts[key]}</span>}
                 </button>
               )
             })}
@@ -1116,16 +1116,16 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
                     nada -la respuesta pública nunca caduca- y pintar "Cerrada" ahí le
                     mentía al vendedor que sí podía contestar. */}
                 {selectedConv.tipo === 'COMENTARIO' ? (
-                  <span style={{ fontSize:10, fontWeight:700, color:'#25d366', flexShrink:0 }}>
+                  <span style={{ fontSize:11, fontWeight:700, color:'#25d366', flexShrink:0 }}>
                     🌎 La respuesta pública no caduca
                   </span>
                 ) : (
-                  <span style={{ fontSize:10, fontWeight:700, color: ventana.abierta ? '#25d366' : '#f87171', flexShrink:0 }}>
+                  <span style={{ fontSize:11, fontWeight:700, color: ventana.abierta ? '#25d366' : '#f87171', flexShrink:0 }}>
                     {ventana.etiqueta}
                   </span>
                 )}
               </div>
-              <div style={{ fontSize:10, color:'#475569', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+              <div style={{ fontSize:11, color:'#475569', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                 {CHANNEL_META[selectedConv.canal]?.label} · {selectedConv.sender_id}
                 {/* Mientras Meta no apruebe pages_messaging, a un cliente real solo se le
                     puede contestar desde Business Suite: el link va siempre a mano. */}
@@ -1139,7 +1139,7 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
               {/* Aviso fijo (no solo un badge chiquito): un comentario es público y
                   pedir ahí una dirección o teléfono expone al cliente ante cualquiera. */}
               {selectedConv.tipo === 'COMENTARIO' && (
-                <div style={{ fontSize:10, color:'#f59e0b', fontWeight:700 }}>
+                <div style={{ fontSize:11, color:'#f59e0b', fontWeight:700 }}>
                   ⚠️ Comentario público — no pidas datos de entrega acá
                 </div>
               )}
@@ -1179,7 +1179,7 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
           {/* Mensajes */}
           <div style={{ flex:1, overflowY:'auto', minHeight:0, padding:'16px 20px' }}>
             <div style={{ textAlign:'center', marginBottom:16 }}>
-              <span style={{ fontSize:10, background: CHANNEL_META[selectedConv.canal]?.bg, color: CHANNEL_META[selectedConv.canal]?.color, padding:'3px 10px', borderRadius:20, fontWeight:700 }}>
+              <span style={{ fontSize:11, background: CHANNEL_META[selectedConv.canal]?.bg, color: CHANNEL_META[selectedConv.canal]?.color, padding:'3px 10px', borderRadius:20, fontWeight:700 }}>
                 {CHANNEL_META[selectedConv.canal]?.icon} Conversación de {CHANNEL_META[selectedConv.canal]?.label}
               </span>
             </div>
@@ -1193,11 +1193,11 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
                   ? <img src={mediaInfo.image} alt="" style={{ width:52, height:52, borderRadius:8, objectFit:'cover', flexShrink:0 }} />
                   : <div style={{ width:52, height:52, borderRadius:8, background:'#111c2a', display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, flexShrink:0 }}>🖼️</div>}
                 <div style={{ minWidth:0, flex:1 }}>
-                  <div style={{ fontSize:10, fontWeight:800, color:'#E1306C', marginBottom:2 }}>📸 Comentó en esta publicación</div>
-                  <div style={{ fontSize:11, color:'#cbd5e1', lineHeight:1.35, display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden' }}>
+                  <div style={{ fontSize:11, fontWeight:800, color:'#E1306C', marginBottom:2 }}>📸 Comentó en esta publicación</div>
+                  <div style={{ fontSize:12, color:'#cbd5e1', lineHeight:1.35, display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden' }}>
                     {mediaInfo.caption || 'Ver publicación en Instagram'}
                   </div>
-                  {mediaInfo.permalink && <div style={{ fontSize:9, color:'#475569', marginTop:2 }}>Toca para abrir en Instagram ↗</div>}
+                  {mediaInfo.permalink && <div style={{ fontSize:11, color:'#475569', marginTop:2 }}>Toca para abrir en Instagram ↗</div>}
                 </div>
               </a>
             )}
@@ -1218,7 +1218,7 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
                             padding:'10px 12px', background:'#1a1116', border:'1px solid #3a1f28', borderRadius:12 }}>
                 <div style={{ flex:'1 1 220px', color:'#f87171', fontSize:12, lineHeight:1.45 }}>
                   ❌ <b>Meta no dejó enviar desde el inbox.</b> Respóndele directo en Meta.
-                  <div style={{ color:'#64748b', fontSize:10, marginTop:2 }}>{bloqueo.texto}</div>
+                  <div style={{ color:'#64748b', fontSize:11, marginTop:2 }}>{bloqueo.texto}</div>
                 </div>
                 <a href={bloqueo.enlace} target="_blank" rel="noreferrer" style={{
                   padding:'7px 12px', borderRadius:8, background:'#25d366', color:'#06110b',
@@ -1251,13 +1251,13 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
               // (el aviso de "Comentario público" de la cabecera ya da ese contexto) y
               // se usan etiquetas cortas para que quepan sin desbordar.
               <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:6, marginBottom:8 }}>
-                {!isMobile && <span style={{ fontSize:10, color:'#475569' }}>Responder al comentario:</span>}
+                {!isMobile && <span style={{ fontSize:11, color:'#475569' }}>Responder al comentario:</span>}
                 {[
                   { id:'privado', label: isMobile ? '🔒 Privado' : '🔒 En privado (DM)' },
                   { id:'publico', label: isMobile ? '🌎 Público' : '🌎 En público' },
                 ].map(m => (
                   <button key={m.id} onClick={() => setModoRespuesta(m.id)} style={{
-                    padding:'3px 9px', fontSize:10, fontWeight:700, borderRadius:6, cursor:'pointer',
+                    padding:'3px 9px', fontSize:11, fontWeight:700, borderRadius:6, cursor:'pointer',
                     background: modoRespuesta === m.id ? 'rgba(37,211,102,.15)' : 'transparent',
                     border: `1px solid ${modoRespuesta === m.id ? 'rgba(37,211,102,.4)' : '#1a2d40'}`,
                     color: modoRespuesta === m.id ? '#25d366' : '#334155',
@@ -1336,7 +1336,7 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
                 <EmojiPicker onSelect={insertarEmoji} onClose={() => setShowEmoji(false)} />
               )}
             </div>
-            <div style={{ fontSize:9, color:'#2a3f55', marginTop:4, textAlign:'right' }}>
+            <div style={{ fontSize:11, color:'#2a3f55', marginTop:4, textAlign:'right' }}>
               {isMobile ? 'Toca ➤ para enviar' : 'Enter · Shift+Enter nueva línea'}
             </div>
             </>
@@ -1348,7 +1348,7 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
           <div style={{ textAlign:'center', color:'#1e2d3d' }}>
             <div style={{ fontSize:48, marginBottom:12 }}>🌐</div>
             <div style={{ fontSize:13, fontWeight:700, marginBottom:4 }}>Social Inbox</div>
-            <div style={{ fontSize:11 }}>Selecciona una conversación de FB o IG</div>
+            <div style={{ fontSize:12 }}>Selecciona una conversación de FB o IG</div>
           </div>
         </div>
       ))}

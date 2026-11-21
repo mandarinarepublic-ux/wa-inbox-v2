@@ -57,12 +57,12 @@ export default function TranscribirNota({ src, mensajeId, transcripcion = '' }) 
   }
 
   const avisoEl = aviso && (
-    <div style={{ fontSize: 11, color: '#fbbf24', marginTop: 4 }}>{aviso}</div>
+    <div style={{ fontSize: 12, color: '#fbbf24', marginTop: 4 }}>{aviso}</div>
   )
 
   if (texto) return (
     <div style={{ marginTop: 6, padding: '6px 10px', borderRadius: 8, background: 'rgba(255,255,255,.05)', borderLeft: '2px solid #25d366' }}>
-      <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 2 }}>📝 Transcripción automática, puede tener errores</div>
+      <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 2 }}>📝 Transcripción automática, puede tener errores</div>
       <div style={{ fontSize: 13, color: '#e2e8f0', lineHeight: 1.45, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{texto}</div>
       {avisoEl}
     </div>
@@ -72,7 +72,7 @@ export default function TranscribirNota({ src, mensajeId, transcripcion = '' }) 
   if (!enCompu) return null
 
   if (estado) return (
-    <div role="status" style={{ marginTop: 6, fontSize: 11, color: '#94a3b8' }}>⏳ {textoEstado(estado)}</div>
+    <div role="status" style={{ marginTop: 6, fontSize: 12, color: '#94a3b8' }}>⏳ {textoEstado(estado)}</div>
   )
 
   return (

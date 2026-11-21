@@ -56,7 +56,7 @@ export default function CarruselModal({ nombreCliente, onEnviar, onCerrar, venta
         </div>
 
         {ventanaCerrada && !modoElegir && (
-          <div style={{ fontSize: 11.5, color: '#fbbf24', background: 'rgba(245,158,11,.08)', border: '1px solid rgba(245,158,11,.25)', borderRadius: 8, padding: '7px 10px', lineHeight: 1.4 }}>
+          <div style={{ fontSize: 12, color: '#fbbf24', background: 'rgba(245,158,11,.08)', border: '1px solid rgba(245,158,11,.25)', borderRadius: 8, padding: '7px 10px', lineHeight: 1.4 }}>
             ⚠️ La ventana de 24 h está cerrada: sale con la <b>plantilla de carrusel</b> (la cobra Meta como marketing). Tu texto va en el saludo: «¡Hola! 🧡 <i>tu texto</i> … Desliza para ver más 👉».
           </div>
         )}
@@ -84,8 +84,8 @@ export default function CarruselModal({ nombreCliente, onEnviar, onCerrar, venta
                   }}>
                     <img src={p.foto} alt="" loading="lazy" style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', display: 'block' }} />
                     <div style={{ padding: '5px 6px' }}>
-                      <div style={{ fontSize: 11, color: P.texto, lineHeight: 1.25, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{p.nombre}</div>
-                      <div style={{ fontSize: 11, color: P.verde, fontWeight: 800, marginTop: 2 }}>{p.precio}</div>
+                      <div style={{ fontSize: 12, color: P.texto, lineHeight: 1.25, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{p.nombre}</div>
+                      <div style={{ fontSize: 12, color: P.verde, fontWeight: 800, marginTop: 2 }}>{p.precio}</div>
                     </div>
                     {on && <span style={{ position: 'absolute', top: 5, right: 5, width: 22, height: 22, borderRadius: 11, background: P.verde, color: '#0d1520', fontWeight: 900, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{n + 1}</span>}
                   </button>
@@ -103,7 +103,7 @@ export default function CarruselModal({ nombreCliente, onEnviar, onCerrar, venta
           <span style={{ fontSize: 12, color: elegidos.length >= MIN_TARJETAS ? P.verde : P.tenue }}>
             {elegidos.length}/{MAX_TARJETAS} elegidos{elegidos.length < MIN_TARJETAS ? ` · mínimo ${MIN_TARJETAS}` : ''}
           </span>
-          {elegidos.length > 0 && <button onClick={() => setElegidos([])} style={{ background: 'transparent', border: 'none', color: P.muy, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>limpiar</button>}
+          {elegidos.length > 0 && <button onClick={() => setElegidos([])} style={{ background: 'transparent', border: 'none', color: P.muy, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>limpiar</button>}
           <span style={{ flex: 1 }} />
           <button disabled={!listo || enviando} onClick={enviar} style={{
             padding: '9px 16px', borderRadius: 9, border: 'none', fontWeight: 800, fontSize: 13, fontFamily: 'inherit',

@@ -102,12 +102,12 @@ export default function GuideModal({ onClose }) {
                 <span style={{
                   minWidth: 22, height: 22, borderRadius: 6,
                   background: sec.color + '18', color: sec.color,
-                  fontSize: 10, fontWeight: 700,
+                  fontSize: 11, fontWeight: 700,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   flexShrink: 0, marginTop: 1,
                 }}>{ii + 1}</span>
                 <span style={{
-                  fontSize: 12.5, color: step.startsWith('  ') ? '#475569' : '#94a3b8',
+                  fontSize: 13, color: step.startsWith('  ') ? '#475569' : '#94a3b8',
                   lineHeight: 1.6, fontFamily: step.startsWith('  ') ? 'monospace' : 'inherit',
                 }}>{step.trim()}</span>
               </div>

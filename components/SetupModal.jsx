@@ -19,7 +19,7 @@ export default function SetupModal({ onClose }) {
     outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit',
   }
   const labelStyle = {
-    fontSize: 11, color: '#64748b', fontWeight: 700, letterSpacing: '.06em',
+    fontSize: 12, color: '#64748b', fontWeight: 700, letterSpacing: '.06em',
   }
 
   return (

@@ -78,10 +78,10 @@ function Asignar({ guia, onListo }) {
         </button>
       </div>
       {res && (
-        <div style={{ fontSize: 11, color: '#64748b', marginTop: 8 }}>
+        <div style={{ fontSize: 12, color: '#64748b', marginTop: 8 }}>
           {deLaGuia ? 'Sugeridos con el celular, el nombre y la dirección de la guía' : `Resultados para "${buscado}"`}
           {!deLaGuia && (
-            <button onClick={() => { setQ(''); correr(sugeridos, true) }} style={{ marginLeft: 8, background: 'none', border: 'none', color: '#38bdf8', cursor: 'pointer', fontSize: 11, fontFamily: 'inherit', padding: 0 }}>
+            <button onClick={() => { setQ(''); correr(sugeridos, true) }} style={{ marginLeft: 8, background: 'none', border: 'none', color: '#38bdf8', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit', padding: 0 }}>
               volver a los sugeridos
             </button>
           )}
@@ -108,7 +108,7 @@ function Asignar({ guia, onListo }) {
                 )}
                 {p.razones?.length > 0 && (
                   <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
-                    {p.razones.map(r => <span key={r} style={{ fontSize: 10.5, padding: '1px 6px', borderRadius: 6, background: 'rgba(56,189,248,.1)', color: '#7dd3fc' }}>{r}</span>)}
+                    {p.razones.map(r => <span key={r} style={{ fontSize: 11, padding: '1px 6px', borderRadius: 6, background: 'rgba(56,189,248,.1)', color: '#7dd3fc' }}>{r}</span>)}
                   </div>
                 )}
               </button>

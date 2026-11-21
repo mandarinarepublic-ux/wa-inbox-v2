@@ -36,7 +36,7 @@ function estiloTipo(tipo) {
 
 const sTextarea = {
   width: '100%', background: '#111c2a', border: '1px solid #1e2d3d', borderRadius: 7,
-  color: '#ffffff', fontSize: 11, padding: '6px 8px', resize: 'vertical', outline: 'none',
+  color: '#ffffff', fontSize: 12, padding: '6px 8px', resize: 'vertical', outline: 'none',
   fontFamily: 'inherit', whiteSpace: 'pre-wrap', minHeight: 56,
 }
 
@@ -164,19 +164,19 @@ export default function Notas({ telefono, refrescar = 0, onVerPedido }) {
           width: '100%', marginTop: 5, padding: 6,
           background: guardando ? '#111c2a' : 'rgba(245,158,11,.12)',
           border: '1px solid rgba(245,158,11,.3)', color: AMBAR, borderRadius: 7,
-          fontSize: 11, fontWeight: 700, fontFamily: 'inherit', transition: 'all .15s',
+          fontSize: 12, fontWeight: 700, fontFamily: 'inherit', transition: 'all .15s',
           cursor: !nueva.trim() || guardando ? 'default' : 'pointer',
           opacity: !nueva.trim() && !guardando ? .45 : 1,
         }}>
         {guardando ? '⏳ Guardando...' : '＋ Agregar nota'}
       </button>
 
-      {error && <div style={{ fontSize: 10, color: '#f87171', marginTop: 5 }}>⚠️ {error}</div>}
+      {error && <div style={{ fontSize: 11, color: '#f87171', marginTop: 5 }}>⚠️ {error}</div>}
 
       {cargando ? (
-        <div style={{ fontSize: 10, color: '#64748b', marginTop: 8 }}>Cargando notas...</div>
+        <div style={{ fontSize: 11, color: '#64748b', marginTop: 8 }}>Cargando notas...</div>
       ) : notas.length === 0 ? (
-        <div style={{ fontSize: 10, color: '#475569', marginTop: 8 }}>Sin notas todavía.</div>
+        <div style={{ fontSize: 11, color: '#475569', marginTop: 8 }}>Sin notas todavía.</div>
       ) : (
         <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
           {(() => {
@@ -187,7 +187,7 @@ export default function Notas({ telefono, refrescar = 0, onVerPedido }) {
                 {visibles.map(pintarNota)}
                 {antiguas.length > 0 && (
                   <button onClick={() => setVerAntiguas(v => !v)}
-                    style={{ marginTop: 2, padding: '5px 8px', background: 'rgba(255,255,255,.03)', border: '1px dashed #2a3f55', color: '#94a3b8', borderRadius: 7, fontSize: 10, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    style={{ marginTop: 2, padding: '5px 8px', background: 'rgba(255,255,255,.03)', border: '1px dashed #2a3f55', color: '#94a3b8', borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
                     {verAntiguas
                       ? '▲ Ocultar notas anteriores'
                       : `▼ Ver ${antiguas.length} nota${antiguas.length === 1 ? '' : 's'} anterior${antiguas.length === 1 ? '' : 'es'}`}
@@ -216,15 +216,15 @@ export default function Notas({ telefono, refrescar = 0, onVerPedido }) {
                 <div
                   onClick={() => alternar(nota.id)}
                   style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', cursor: 'pointer' }}>
-                  <span style={{ fontSize: 8, color: '#64748b', flexShrink: 0 }}>{abierta ? '▼' : '▶'}</span>
-                  <span style={{ fontSize: 10, color: '#64748b', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
+                  <span style={{ fontSize: 11, color: '#64748b', flexShrink: 0 }}>{abierta ? '▼' : '▶'}</span>
+                  <span style={{ fontSize: 11, color: '#64748b', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
                     {fmtFecha(nota.creado_at)}
                   </span>
-                  {est && <span style={{ fontSize: 10, flexShrink: 0 }}>{est.marca}</span>}
+                  {est && <span style={{ fontSize: 11, flexShrink: 0 }}>{est.marca}</span>}
                   {/* Cerrada muestra la primera línea: así se encuentra la nota
                       que se busca sin tener que abrirlas todas. */}
                   {!abierta && (
-                    <span style={{ fontSize: 11, color: est ? est.color : '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <span style={{ fontSize: 12, color: est ? est.color : '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {primeraLinea(nota.texto)}
                     </span>
                   )}
@@ -237,9 +237,9 @@ export default function Notas({ telefono, refrescar = 0, onVerPedido }) {
                         <textarea value={editTexto} onChange={e => setEditTexto(e.target.value)} rows={4} autoFocus style={sTextarea} />
                         <div style={{ display: 'flex', gap: 5, marginTop: 5 }}>
                           <button onClick={() => guardarEdicion(nota.id)}
-                            style={{ flex: 1, padding: 5, background: 'rgba(245,158,11,.12)', border: '1px solid rgba(245,158,11,.3)', color: AMBAR, borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Guardar</button>
+                            style={{ flex: 1, padding: 5, background: 'rgba(245,158,11,.12)', border: '1px solid rgba(245,158,11,.3)', color: AMBAR, borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Guardar</button>
                           <button onClick={() => setEditandoId(null)}
-                            style={{ flex: 1, padding: 5, background: 'rgba(255,255,255,.04)', border: '1px solid #2a3f55', color: '#94a3b8', borderRadius: 6, fontSize: 10, cursor: 'pointer', fontFamily: 'inherit' }}>Cancelar</button>
+                            style={{ flex: 1, padding: 5, background: 'rgba(255,255,255,.04)', border: '1px solid #2a3f55', color: '#94a3b8', borderRadius: 6, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>Cancelar</button>
                         </div>
                       </>
                     ) : (
@@ -262,30 +262,30 @@ export default function Notas({ telefono, refrescar = 0, onVerPedido }) {
                           const id = pedidoIdDeNota(nota.texto)
                           return id && onVerPedido ? (
                             <button onClick={() => onVerPedido(id)} title="Ver el pedido acá mismo"
-                              style={{ display: 'inline-block', marginBottom: 5, padding: '3px 8px', background: 'rgba(16,185,129,.15)', border: '1px solid rgba(16,185,129,.35)', color: '#10b981', borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>📄 Ver pedido</button>
+                              style={{ display: 'inline-block', marginBottom: 5, padding: '3px 8px', background: 'rgba(16,185,129,.15)', border: '1px solid rgba(16,185,129,.35)', color: '#10b981', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>📄 Ver pedido</button>
                           ) : null
                         })()}
-                        <div style={{ fontSize: 11, color: est ? est.color : '#e2e8f0', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                        <div style={{ fontSize: 12, color: est ? est.color : '#e2e8f0', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                           {est ? `${est.marca} ` : ''}{nota.texto}
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
                           <button onClick={() => copiarNota(nota.id, nota.texto)}
-                            style={{ background: 'none', border: 'none', padding: 0, color: copiadoId === nota.id ? VERDE : '#64748b', fontSize: 10, fontWeight: copiadoId === nota.id ? 700 : 400, cursor: 'pointer', fontFamily: 'inherit' }}>
+                            style={{ background: 'none', border: 'none', padding: 0, color: copiadoId === nota.id ? VERDE : '#64748b', fontSize: 11, fontWeight: copiadoId === nota.id ? 700 : 400, cursor: 'pointer', fontFamily: 'inherit' }}>
                             {copiadoId === nota.id ? '✅ Copiado' : '📋 Copiar'}
                           </button>
                           <button onClick={() => { setEditandoId(nota.id); setEditTexto(nota.texto) }}
-                            style={{ background: 'none', border: 'none', padding: 0, color: '#64748b', fontSize: 10, cursor: 'pointer', fontFamily: 'inherit' }}>✏️ Editar</button>
+                            style={{ background: 'none', border: 'none', padding: 0, color: '#64748b', fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>✏️ Editar</button>
                           {confirmarBorrar === nota.id ? (
                             <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                              <span style={{ fontSize: 10, color: '#f87171' }}>¿Borrar?</span>
+                              <span style={{ fontSize: 11, color: '#f87171' }}>¿Borrar?</span>
                               <button onClick={() => borrar(nota.id)}
-                                style={{ background: '#ef4444', border: 'none', color: '#fff', fontSize: 10, padding: '2px 8px', borderRadius: 5, cursor: 'pointer', fontFamily: 'inherit' }}>Sí</button>
+                                style={{ background: '#ef4444', border: 'none', color: '#fff', fontSize: 11, padding: '2px 8px', borderRadius: 5, cursor: 'pointer', fontFamily: 'inherit' }}>Sí</button>
                               <button onClick={() => setConfirmarBorrar(null)}
-                                style={{ background: '#334155', border: 'none', color: '#fff', fontSize: 10, padding: '2px 8px', borderRadius: 5, cursor: 'pointer', fontFamily: 'inherit' }}>No</button>
+                                style={{ background: '#334155', border: 'none', color: '#fff', fontSize: 11, padding: '2px 8px', borderRadius: 5, cursor: 'pointer', fontFamily: 'inherit' }}>No</button>
                             </span>
                           ) : (
                             <button onClick={() => setConfirmarBorrar(nota.id)}
-                              style={{ background: 'none', border: 'none', padding: 0, color: '#475569', fontSize: 10, cursor: 'pointer', fontFamily: 'inherit' }}>✕ Borrar</button>
+                              style={{ background: 'none', border: 'none', padding: 0, color: '#475569', fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>✕ Borrar</button>
                           )}
                         </div>
                       </>

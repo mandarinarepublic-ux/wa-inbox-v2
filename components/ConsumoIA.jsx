@@ -37,17 +37,17 @@ export default function ConsumoIA({ telefono }) {
     <div style={{ padding: '8px 12px', borderTop: '1px solid #111c2a', marginTop: 8, background: '#0a1019' }}>
       <button onClick={() => setAbierto(a => !a)}
         style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
-        <span style={{ fontSize: 10, color: '#f59e0b', fontWeight: 700, letterSpacing: '.08em' }}>
+        <span style={{ fontSize: 11, color: '#f59e0b', fontWeight: 700, letterSpacing: '.08em' }}>
           {abierto ? '▾' : '▸'} 🤖 IA
         </span>
-        <span style={{ fontSize: 11, color: '#cbd5e1', whiteSpace: 'nowrap' }}>
+        <span style={{ fontSize: 12, color: '#cbd5e1', whiteSpace: 'nowrap' }}>
           {chat.respuestas} resp. · {tokensLegibles(chat.tokens)} tokens · <b style={{ color: '#f59e0b' }}>{dolaresLegibles(chat.costo)}</b>
         </span>
       </button>
       {abierto && mes && (
-        <div style={{ marginTop: 6, fontSize: 11, color: '#94a3b8' }}>
+        <div style={{ marginTop: 6, fontSize: 12, color: '#94a3b8' }}>
           Este mes (todos los chats): {mes.chats} chat{mes.chats === 1 ? '' : 's'} · {mes.respuestas} resp. · {tokensLegibles(mes.tokens)} tokens · <b style={{ color: '#f59e0b' }}>{dolaresLegibles(mes.costo)}</b>
-          <div style={{ fontSize: 9.5, color: '#475569', marginTop: 4 }}>Estimado. La factura real está en la consola de Anthropic.</div>
+          <div style={{ fontSize: 11, color: '#475569', marginTop: 4 }}>Estimado. La factura real está en la consola de Anthropic.</div>
         </div>
       )}
     </div>

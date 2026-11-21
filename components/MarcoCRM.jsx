@@ -82,14 +82,14 @@ export default function MarcoCRM({ titulo, src, tituloIframe, onCerrar, iframeRe
             Al vivir acá, vale para PEDIDO MANUAL y para VER PEDIDO de una vez. */}
         <button onClick={onCerrar} style={{
           background:'rgba(248,113,113,.15)', border:'1px solid rgba(248,113,113,.5)', color:'#f87171',
-          borderRadius:6, padding:'4px 10px', fontSize:11, fontWeight:800,
+          borderRadius:6, padding:'4px 10px', fontSize:12, fontWeight:800,
           cursor:'pointer', fontFamily:'inherit',
         }}>✕ Cerrar</button>
       </div>
       {aviso && (
         <div style={{
           flexShrink:0, padding:'5px 10px', background:'#0a0f1a',
-          borderBottom:'1px solid #111c2a', fontSize:10, color:'#64748b', lineHeight:1.35,
+          borderBottom:'1px solid #111c2a', fontSize:11, color:'#64748b', lineHeight:1.35,
         }}>
           {aviso}
         </div>

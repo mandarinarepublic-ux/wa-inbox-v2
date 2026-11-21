@@ -96,7 +96,7 @@ function BotonEje({ on, color, onClick, title, icon, label }) {
       borderRadius:7, cursor:'pointer', fontFamily:'inherit', transition:'all .15s',
       boxShadow: on ? `0 0 8px ${color}44` : 'none',
     }}>
-      <span className="hide-mobile" style={{ fontSize:10 }}>{icon} {label}</span>
+      <span className="hide-mobile" style={{ fontSize:11 }}>{icon} {label}</span>
       {/* En el celular no hay "pasar el mouse" para ver el title: el nombre va
           debajo del emoji, si no hay que saberse los 15 botones de memoria. */}
       <span className="show-mobile eje-mob">
@@ -2832,7 +2832,7 @@ export default function App() {
         <button onClick={() => window.location.reload()} title="Hay una versión nueva del inbox. Se recarga sola cuando cierres el chat; o toca para recargar ya." style={{
           position:'fixed', bottom:10, left:10, zIndex:9999,
           background:'rgba(37,211,102,.14)', color:'#25d366', border:'1px solid rgba(37,211,102,.35)',
-          borderRadius:14, padding:'3px 10px', fontWeight:600, fontSize:11, cursor:'pointer',
+          borderRadius:14, padding:'3px 10px', fontWeight:600, fontSize:12, cursor:'pointer',
           fontFamily:'inherit',
         }}>
           🔄 versión nueva
@@ -2891,29 +2891,29 @@ export default function App() {
           .chat-actions::-webkit-scrollbar{ display:none; }
           .msg-bubble{ max-width:86% !important; }
           .order-btn-mob{ display:flex !important; }
-          .ia-toggle{ padding:5px 9px !important; font-size:10px !important; }
+          .ia-toggle{ padding:5px 9px !important; font-size:11px !important; }
           /* En celular las 5 pestañas se reparten el ancho en partes iguales → entran
              todas completas sin scroll ni cortes, sea cual sea el ancho del equipo. */
           .tab-selector{ overflow-x:hidden !important; }
           .tab-selector > button{ flex:1 1 0 !important; min-width:0 !important; padding:3px 2px !important; }
           .tab-selector > button > div{ letter-spacing:0 !important; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-          .tab-selector > button > div:first-child{ font-size:8.5px !important; }
-          .tab-selector > button > div:last-child{ font-size:7px !important; }
+          .tab-selector > button > div:first-child{ font-size:11px !important; }
+          .tab-selector > button > div:last-child{ font-size:11px !important; }
           /* Ya son 8 pestañas, no 5: en una línea "📥 GENERAL 6" no entraba en 51px
              y el contador tapaba el nombre. Ahora: ícono arriba, nombre abajo, el
              contador flotando en la esquina y sin la línea de subtítulo. */
           .tab-selector > button{ position:relative; }
           .tab-selector > button > div:first-child > span:first-child{ display:flex; flex-direction:column; align-items:center; line-height:1.15; min-width:0; max-width:100%; }
           .tab-ico{ font-size:15px; }
-          .tab-lbl{ font-size:8px; letter-spacing:0; max-width:100%; overflow:hidden; text-overflow:ellipsis; }
-          .tab-badge{ position:absolute; top:1px; right:2px; min-width:14px !important; height:14px !important; font-size:8px !important; padding:0 3px !important; }
+          .tab-lbl{ font-size:11px; letter-spacing:0; max-width:100%; overflow:hidden; text-overflow:ellipsis; }
+          .tab-badge{ position:absolute; top:0; right:1px; min-width:16px !important; height:16px !important; font-size:11px !important; line-height:16px !important; padding:0 3px !important; }
           .tab-sub{ display:none !important; }
           /* ☰ volver a la lista: el botón más usado en el celular medía 22×20. */
           .chat-header .mob-ham{ min-width:40px; min-height:40px; font-size:24px !important; align-items:center; justify-content:center; }
           /* Botones de la cabecera del chat: emoji + nombre debajo, 40px de alto. */
           .chat-actions > button{ min-height:40px; }
           .eje-mob{ display:inline-flex !important; flex-direction:column; align-items:center; gap:2px; }
-          .eje-mob-lbl{ font-size:8.5px; font-weight:700; white-space:nowrap; max-width:60px; overflow:hidden; text-overflow:ellipsis; }
+          .eje-mob-lbl{ font-size:11px; font-weight:700; white-space:nowrap; max-width:60px; overflow:hidden; text-overflow:ellipsis; }
           /* Filtros: en la compu se ven todos; en el celular, detrás de un botón. */
           .filtros-toggle{ display:flex !important; }
           .filtros-extra{ display:none; }
@@ -3023,7 +3023,7 @@ export default function App() {
               borderTop: '2px solid transparent',
               fontFamily:'Outfit,sans-serif', transition:'all .2s', height:'100%',
             }}>
-              <div style={{ fontSize:10, fontWeight:800, color: linea===id ? color : '#334155', letterSpacing:'1.5px', display:'flex', alignItems:'center', justifyContent:'center', gap:5 }}>
+              <div style={{ fontSize:11, fontWeight:800, color: linea===id ? color : '#334155', letterSpacing:'1.5px', display:'flex', alignItems:'center', justifyContent:'center', gap:5 }}>
                 {/* Ícono y nombre por separado: en el celular van uno ENCIMA del
                     otro y el contador flota en la esquina (ver CSS .tab-ico). */}
                 <span><span className="tab-ico">{icon}</span> <span className="tab-lbl">{label}{armado ? ' ◉' : ''}</span></span>
@@ -3031,11 +3031,11 @@ export default function App() {
                   <span className="tab-badge" style={{
                     background:'#f87171', color:'#fff', borderRadius:9, minWidth:16, height:16,
                     display:'inline-flex', alignItems:'center', justifyContent:'center',
-                    fontSize:9, fontWeight:900, padding:'0 4px', letterSpacing:0,
+                    fontSize:11, fontWeight:900, padding:'0 4px', letterSpacing:0,
                   }}>{badge}</span>
                 )}
               </div>
-              <div className="tab-sub" style={{ fontSize:8, color: linea===id ? color+'80' : '#2a3f55', letterSpacing:'1px' }}>{sub}</div>
+              <div className="tab-sub" style={{ fontSize:11, color: linea===id ? color+'80' : '#2a3f55', letterSpacing:'1px' }}>{sub}</div>
             </button>
           ))}
         </div>
@@ -3053,7 +3053,7 @@ export default function App() {
                 <div style={{ width:36, height:36, borderRadius:10, background:'linear-gradient(135deg,#f97316,#dc2626)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:17, fontWeight:900, color:'#fff', boxShadow:'0 4px 16px rgba(249,115,22,.3)' }}>M</div>
                 <div>
                   <div style={{ fontSize:13, fontWeight:800, color:'#e2e8f0' }}>Mandarina Inbox</div>
-                  <div style={{ fontSize:10, fontWeight:700, color:demo?'#f59e0b':'#25d366', display:'flex', alignItems:'center', gap:3, marginTop:1 }}>
+                  <div style={{ fontSize:11, fontWeight:700, color:demo?'#f59e0b':'#25d366', display:'flex', alignItems:'center', gap:3, marginTop:1 }}>
                     <span style={{ animation:'pulse 2s infinite', display:'inline-block', width:5, height:5, borderRadius:'50%', background:'currentColor' }} />
                     {demo ? 'Demo' : `En vivo · ${totalPendientes} pendiente${totalPendientes===1?'':'s'}`}
                   </div>
@@ -3087,7 +3087,7 @@ export default function App() {
                 { key:'pedido',   label:'📦 Pedido'    },
               ].map(({ key, label }) => (
                 <button key={key} onClick={() => setSearchMode(key)} style={{
-                  flex:1, padding:'5px 2px', fontSize:10, fontWeight:700,
+                  flex:1, padding:'5px 2px', fontSize:11, fontWeight:700,
                   background: searchMode===key ? 'rgba(96,165,250,.15)' : 'transparent',
                   border: `1px solid ${searchMode===key ? 'rgba(96,165,250,.45)' : '#1a2d40'}`,
                   color: searchMode===key ? '#60a5fa' : '#475569',
@@ -3103,7 +3103,7 @@ export default function App() {
               <button onClick={alternarOrdenPend}
                 title="Cambiar el orden de Pendientes"
                 style={{
-                  width:'100%', marginTop:8, padding:'5px 8px', fontSize:10, fontWeight:700,
+                  width:'100%', marginTop:8, padding:'5px 8px', fontSize:11, fontWeight:700,
                   background:'transparent', border:'1px solid #1a2d40', color:'#94a3b8',
                   borderRadius:7, cursor:'pointer', fontFamily:'inherit',
                 }}>
@@ -3115,7 +3115,7 @@ export default function App() {
           <div style={{ flex:1, overflowY:'auto', minHeight:0 }}>
             {loading ? (
               <div style={{ display:'flex', flexDirection:'column', alignItems:'center', paddingTop:48, gap:12 }}>
-                <Spinner size={24} /><span style={{ fontSize:11, color:'#2a3f55' }}>Cargando...</span>
+                <Spinner size={24} /><span style={{ fontSize:12, color:'#2a3f55' }}>Cargando...</span>
               </div>
             ) : filtered.length === 0 ? (
               <div style={{ padding:28, textAlign:'center', color:'#2a3f55', fontSize:12 }}>
@@ -3127,7 +3127,7 @@ export default function App() {
               </div>
             ) : (<>
               {isSearching && (
-                <div style={{ padding:'8px 16px 4px', fontSize:10, fontWeight:800, letterSpacing:'.06em', color:'#64748b' }}>
+                <div style={{ padding:'8px 16px 4px', fontSize:11, fontWeight:800, letterSpacing:'.06em', color:'#64748b' }}>
                   {filtered.length} {searchingMsgs ? (filtered.length===1?'CHAT CON':'CHATS CON') : `RESULTADO${filtered.length===1?'':'S'}`}{searchingMsgs ? ' ESE MENSAJE' : ' · TODAS LAS BANDEJAS'}
                 </div>
               )}
@@ -3180,7 +3180,7 @@ export default function App() {
                 <button onClick={() => setTope(t => t + 200)} style={{
                   width:'100%', padding:'12px 16px', background:'transparent',
                   border:'none', borderTop:'1px solid #111c2a',
-                  color:'#64748b', fontSize:11.5, fontWeight:700, cursor:'pointer',
+                  color:'#64748b', fontSize:12, fontWeight:700, cursor:'pointer',
                   fontFamily:'Outfit,sans-serif',
                 }}>
                   Mostrando {tope} de {filtered.length} · ver 200 más
@@ -3190,7 +3190,7 @@ export default function App() {
           </div>
 
           <div style={{ padding:'7px 14px', borderTop:'1px solid #162030', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
-            <span style={{ fontSize:10, color:'#334155' }}>{lastSync?'Sync '+lastSync.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'—'}</span>
+            <span style={{ fontSize:11, color:'#334155' }}>{lastSync?'Sync '+lastSync.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'—'}</span>
             <button
               onClick={() => window.location.reload()}
               title="Recargar (F5)"
@@ -3219,7 +3219,7 @@ export default function App() {
               }}>
                 <div style={{ fontSize:44 }}>📥</div>
                 <div style={{ color:'#25d366', fontWeight:800, fontSize:15 }}>Suelta la foto acá</div>
-                <div style={{ color:'#64748b', fontSize:11 }}>imágenes o un video · también funciona Ctrl+V</div>
+                <div style={{ color:'#64748b', fontSize:12 }}>imágenes o un video · también funciona Ctrl+V</div>
               </div>
             )}
             <div className="chat-header">
@@ -3252,7 +3252,7 @@ export default function App() {
                       style={{
                         display:'flex', alignItems:'center', gap:6, flexShrink:0,
                         padding:'6px 11px', borderRadius:20, cursor: togglingIA ? 'default' : 'pointer',
-                        fontFamily:'inherit', fontWeight:800, fontSize:11, whiteSpace:'nowrap',
+                        fontFamily:'inherit', fontWeight:800, fontSize:12, whiteSpace:'nowrap',
                         border: `2px ${motivoIA ? 'dashed' : 'solid'} ${iaOn ? '#f59e0b' : '#475569'}`,
                         background: iaOn ? 'rgba(245,158,11,.16)' : 'rgba(148,163,184,.08)',
                         color: iaOn ? '#fbbf24' : '#cbd5e1',
@@ -3272,7 +3272,7 @@ export default function App() {
                 })()}
                 {/* Acceso directo a Crear pedido / herramientas (solo móvil) */}
                 <button onClick={() => setShowRight(true)} className="order-btn-mob" title="Crear pedido y herramientas"
-                  style={{ alignItems:'center', gap:5, padding:'6px 12px', borderRadius:20, border:'1px solid rgba(16,185,129,.5)', background:'linear-gradient(135deg,#10b981,#059669)', color:'#fff', fontSize:11, fontWeight:800, cursor:'pointer', whiteSpace:'nowrap', flexShrink:0, boxShadow:'0 2px 10px rgba(16,185,129,.3)' }}>
+                  style={{ alignItems:'center', gap:5, padding:'6px 12px', borderRadius:20, border:'1px solid rgba(16,185,129,.5)', background:'linear-gradient(135deg,#10b981,#059669)', color:'#fff', fontSize:12, fontWeight:800, cursor:'pointer', whiteSpace:'nowrap', flexShrink:0, boxShadow:'0 2px 10px rgba(16,185,129,.3)' }}>
                   🧾 Pedido
                 </button>
               </div>
@@ -3360,7 +3360,7 @@ export default function App() {
               {/* ⚠️ Que se VEA que está trayendo historial. Sin aviso, subir en un
                   chat largo se siente como que la pantalla se trabó. */}
               {cargandoMas && (
-                <div style={{ textAlign:'center', padding:'10px 0', fontSize:11, color:'#64748b' }}>
+                <div style={{ textAlign:'center', padding:'10px 0', fontSize:12, color:'#64748b' }}>
                   Trayendo mensajes anteriores…
                 </div>
               )}
@@ -3384,7 +3384,7 @@ export default function App() {
                       <div style={{ display:'flex', alignItems:'center', gap:10, margin:'14px 0 8px' }}>
                         <div style={{ flex:1, height:1, background:'rgba(255,255,255,.08)' }} />
                         <button onClick={() => alternarMes(`${claveChat}|${t.clave}`)}
-                          style={{ background:'rgba(37,211,102,.08)', border:'1px solid rgba(37,211,102,.25)', color:'#25d366', borderRadius:20, padding:'4px 14px', fontSize:11, fontWeight:700, cursor:'pointer', fontFamily:'Outfit,sans-serif' }}>
+                          style={{ background:'rgba(37,211,102,.08)', border:'1px solid rgba(37,211,102,.25)', color:'#25d366', borderRadius:20, padding:'4px 14px', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:'Outfit,sans-serif' }}>
                           {estaAbierto ? '▴ Ocultar' : '▾ Mostrar'} {t.nombre} · {t.msgs.length} {t.msgs.length === 1 ? 'mensaje' : 'mensajes'}
                         </button>
                         <div style={{ flex:1, height:1, background:'rgba(255,255,255,.08)' }} />
@@ -3396,7 +3396,7 @@ export default function App() {
                   <div key={msg.id} data-salto={claveSalto(msg.id)}>
                     {showDate && (
                       <div style={{ display:'flex', justifyContent:'center', margin:'12px 0 8px' }}>
-                        <span style={{ background:'rgba(255,255,255,.04)', borderRadius:20, padding:'3px 14px', fontSize:11, color:'#475569' }}>{fmtDate(msg.timestamp)}</span>
+                        <span style={{ background:'rgba(255,255,255,.04)', borderRadius:20, padding:'3px 14px', fontSize:12, color:'#475569' }}>{fmtDate(msg.timestamp)}</span>
                       </div>
                     )}
                     <MessageBubble msg={msg} allMsgs={activeConv.msgs} onResponder={responderA} onAbrirChat={openConv} onReenviar={setReenviando}
@@ -3460,15 +3460,15 @@ export default function App() {
               ) : (<>
               {enPauta && (
                 <div title="El cliente llegó de un anuncio: Meta deja escribirle texto libre y gratis hasta que vence esta ventana, aunque ya pasaron 24 h."
-                  style={{ marginBottom:8, padding:'6px 12px', background:'rgba(37,211,102,.06)', border:'1px solid rgba(37,211,102,.2)', borderRadius:8, fontSize:11, color:'#25d366', textAlign:'center' }}>
+                  style={{ marginBottom:8, padding:'6px 12px', background:'rgba(37,211,102,.06)', border:'1px solid rgba(37,211,102,.2)', borderRadius:8, fontSize:12, color:'#25d366', textAlign:'center' }}>
                   🎯 Ventana de pauta — puedes escribirle gratis hasta el <b>{etiquetaVencePauta(activeConv?.pautaVenceEn)}</b>
                 </div>
               )}
               {!windowOpen && lastMsg && (
-                <div style={{ marginBottom:8, padding:'7px 12px', background:'rgba(245,158,11,.08)', border:'1px solid rgba(245,158,11,.2)', borderRadius:8, fontSize:11, color:'#fbbf24', display:'flex', alignItems:'center', justifyContent:'center', gap:10, flexWrap:'wrap' }}>
+                <div style={{ marginBottom:8, padding:'7px 12px', background:'rgba(245,158,11,.08)', border:'1px solid rgba(245,158,11,.2)', borderRadius:8, fontSize:12, color:'#fbbf24', display:'flex', alignItems:'center', justifyContent:'center', gap:10, flexWrap:'wrap' }}>
                   <span>⚠️ Ventana de 24h cerrada — solo plantilla</span>
                   <button onClick={() => setShowTplModal(true)}
-                    style={{ background:'linear-gradient(135deg,#f59e0b,#f97316)', border:'none', color:'#0b1220', fontWeight:800, fontSize:11, padding:'4px 12px', borderRadius:7, cursor:'pointer', fontFamily:'Outfit,sans-serif' }}>
+                    style={{ background:'linear-gradient(135deg,#f59e0b,#f97316)', border:'none', color:'#0b1220', fontWeight:800, fontSize:12, padding:'4px 12px', borderRadius:7, cursor:'pointer', fontFamily:'Outfit,sans-serif' }}>
                     📋 Enviar plantilla
                   </button>
                 </div>
@@ -3477,7 +3477,7 @@ export default function App() {
                   más. Va acá arriba, pegado a la caja, porque es la respuesta a
                   un Ctrl+V que si no se queda mudo. */}
               {avisoAdjunto && (
-                <div style={{ marginBottom:8, padding:'7px 12px', background:'rgba(245,158,11,.08)', border:'1px solid rgba(245,158,11,.25)', borderRadius:8, fontSize:11, color:'#fbbf24', display:'flex', alignItems:'center', gap:8 }}>
+                <div style={{ marginBottom:8, padding:'7px 12px', background:'rgba(245,158,11,.08)', border:'1px solid rgba(245,158,11,.25)', borderRadius:8, fontSize:12, color:'#fbbf24', display:'flex', alignItems:'center', gap:8 }}>
                   <span style={{ flex:1 }}>{avisoAdjunto}</span>
                   <button onClick={() => avisarAdjunto('')} title="Cerrar"
                     style={{ background:'transparent', border:'none', color:'#a16207', fontSize:13, cursor:'pointer', lineHeight:1, flexShrink:0 }}>✕</button>
@@ -3505,13 +3505,13 @@ export default function App() {
                         )}
                         {!imgUploading && !imgResult && (
                           <button onClick={() => setImgFiles(prev => prev.filter((_,j) => j!==i))}
-                            style={{ position:'absolute', top:-4, right:-4, width:16, height:16, borderRadius:'50%', background:'#f87171', border:'none', color:'#fff', fontSize:9, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', lineHeight:1 }}>✕</button>
+                            style={{ position:'absolute', top:-4, right:-4, width:16, height:16, borderRadius:'50%', background:'#f87171', border:'none', color:'#fff', fontSize:11, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', lineHeight:1 }}>✕</button>
                         )}
                       </div>
                     ))}
                   </div>
                   <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                    <span style={{ fontSize:10, color:'#64748b' }}>
+                    <span style={{ fontSize:11, color:'#64748b' }}>
                       {imgUploading
                         ? `Enviando ${imgProgress}/${imgFiles.length}...`
                         : imgResult
@@ -3526,10 +3526,10 @@ export default function App() {
                     {!imgResult && (
                       <div style={{ display:'flex', gap:5 }}>
                         <button onClick={handleSendImage} disabled={imgUploading||!windowOpen}
-                          style={{ padding:'5px 10px', background:imgUploading?'#111c2a':'linear-gradient(135deg,#25d366,#128c7e)', border:'none', borderRadius:7, color:'#fff', fontSize:11, fontWeight:700, cursor:imgUploading?'default':'pointer', fontFamily:'inherit' }}>
+                          style={{ padding:'5px 10px', background:imgUploading?'#111c2a':'linear-gradient(135deg,#25d366,#128c7e)', border:'none', borderRadius:7, color:'#fff', fontSize:12, fontWeight:700, cursor:imgUploading?'default':'pointer', fontFamily:'inherit' }}>
                           {imgUploading?'⏳':'📤 Enviar'}
                         </button>
-                        <button onClick={cancelImage} style={{ padding:'5px 8px', background:'transparent', border:'1px solid #1e2d3d', borderRadius:7, color:'#475569', fontSize:11, cursor:'pointer', fontFamily:'inherit' }}>✕</button>
+                        <button onClick={cancelImage} style={{ padding:'5px 8px', background:'transparent', border:'1px solid #1e2d3d', borderRadius:7, color:'#475569', fontSize:12, cursor:'pointer', fontFamily:'inherit' }}>✕</button>
                       </div>
                     )}
                   </div>
@@ -3548,23 +3548,23 @@ export default function App() {
                 {/* Panel de botones interactivos */}
                 {showBtnPanel && (
                   <div style={{ position:'absolute', bottom:'100%', left:16, right:16, marginBottom:8, padding:'10px 12px', background:'#0d1828', border:'1px solid rgba(37,211,102,.2)', borderRadius:12, zIndex:50 }}>
-                    <div style={{ fontSize:10, color:'#25d366', fontWeight:700, marginBottom:7, letterSpacing:'.06em' }}>🔘 BOTONES INTERACTIVOS</div>
+                    <div style={{ fontSize:11, color:'#25d366', fontWeight:700, marginBottom:7, letterSpacing:'.06em' }}>🔘 BOTONES INTERACTIVOS</div>
                     {btnTexts.map((txt,i) => (
                       <div key={i} style={{ display:'flex', alignItems:'center', gap:6, marginBottom:5 }}>
-                        <span style={{ fontSize:10, color:'#334155', width:12, flexShrink:0 }}>{i+1}.</span>
+                        <span style={{ fontSize:11, color:'#334155', width:12, flexShrink:0 }}>{i+1}.</span>
                         <input value={txt} onChange={e => setBtnTexts(prev=>prev.map((v,j)=>j===i?e.target.value:v))}
                           placeholder={`Botón ${i+1} (máx 20 caracteres)`} maxLength={20}
-                          style={{ flex:1, background:'#111c2a', border:'1px solid #1e2d3d', borderRadius:7, padding:'6px 9px', color:'#e2e8f0', fontSize:11, outline:'none', fontFamily:'inherit' }}
+                          style={{ flex:1, background:'#111c2a', border:'1px solid #1e2d3d', borderRadius:7, padding:'6px 9px', color:'#e2e8f0', fontSize:12, outline:'none', fontFamily:'inherit' }}
                           onFocus={e=>e.target.style.borderColor='#25d366'} onBlur={e=>e.target.style.borderColor='#1e2d3d'} />
-                        {txt && <span style={{ fontSize:9, color:'#334155' }}>{txt.length}/20</span>}
+                        {txt && <span style={{ fontSize:11, color:'#334155' }}>{txt.length}/20</span>}
                       </div>
                     ))}
                     {btnTexts.some(t=>t.trim()) && !input.trim() ? (
-                      <div style={{ marginTop:5, padding:'5px 9px', background:'rgba(245,158,11,.14)', border:'1px solid rgba(245,158,11,.35)', borderRadius:7, fontSize:10, color:'#f59e0b', fontWeight:600 }}>
+                      <div style={{ marginTop:5, padding:'5px 9px', background:'rgba(245,158,11,.14)', border:'1px solid rgba(245,158,11,.35)', borderRadius:7, fontSize:11, color:'#f59e0b', fontWeight:600 }}>
                         ⚠️ Falta escribir el mensaje (va arriba de los botones) — luego dale a ➤
                       </div>
                     ) : (
-                      <div style={{ fontSize:9, color:'#2a3f55', marginTop:3 }}>Escribe el mensaje abajo y dale a enviar · Máx 3 botones</div>
+                      <div style={{ fontSize:11, color:'#2a3f55', marginTop:3 }}>Escribe el mensaje abajo y dale a enviar · Máx 3 botones</div>
                     )}
                   </div>
                 )}
@@ -3587,10 +3587,10 @@ export default function App() {
                       borderRadius:'0 8px 8px 0', padding:'5px 10px',
                     }}>
                       <div style={{ flex:1, minWidth:0 }}>
-                        <div style={{ fontSize:10, fontWeight:700, color:'#25d366' }}>
+                        <div style={{ fontSize:11, fontWeight:700, color:'#25d366' }}>
                           Respondiendo a {citando.direccion === 'SALIENTE' ? 'ti' : (activeConv?.nombre || citando.telefono)}
                         </div>
-                        <div style={{ fontSize:11, color:'#94a3b8', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                        <div style={{ fontSize:12, color:'#94a3b8', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                           {citando.mensaje || `[${citando.tipo || 'archivo'}]`}
                         </div>
                       </div>
@@ -3651,7 +3651,7 @@ export default function App() {
               <div style={{ display:'flex', gap:8, alignItems:'center', marginTop:8, flexWrap:'wrap' }}>
                 <button onClick={() => fileRef.current?.click()} style={{ width:42, height:42, flexShrink:0, background:imgFiles.length?'rgba(37,211,102,.12)':'#111c2a', border:`1px solid ${imgFiles.length?'rgba(37,211,102,.3)':'#1e2d3d'}`, borderRadius:11, cursor:'pointer', fontSize:17, display:'flex', alignItems:'center', justifyContent:'center', color:imgFiles.length?'#25d366':'#475569', transition:'all .15s', position:'relative' }} title="Adjuntar imagen o video — también puedes pegar con Ctrl+V o arrastrar la foto al chat">
                   📎
-                  {imgFiles.length > 0 && <span style={{ position:'absolute', top:-4, right:-4, width:16, height:16, borderRadius:'50%', background:'#25d366', color:'#080d14', fontSize:8, fontWeight:900, display:'flex', alignItems:'center', justifyContent:'center' }}>{imgFiles.length}</span>}
+                  {imgFiles.length > 0 && <span style={{ position:'absolute', top:-4, right:-4, width:16, height:16, borderRadius:'50%', background:'#25d366', color:'#080d14', fontSize:11, fontWeight:900, display:'flex', alignItems:'center', justifyContent:'center' }}>{imgFiles.length}</span>}
                 </button>
                 <button onClick={() => setShowCarrusel(true)} title="Enviar productos del catálogo (carrusel)" style={{ width:42, height:42, flexShrink:0, background:'#111c2a', border:'1px solid #1e2d3d', borderRadius:11, cursor:'pointer', fontSize:17, display:'flex', alignItems:'center', justifyContent:'center', transition:'all .15s' }}>🛍️</button>
                 <button onClick={() => setShowBtnPanel(p=>!p)} title="Botones interactivos" style={{ width:42, height:42, flexShrink:0, background:showBtnPanel?'rgba(37,211,102,.15)':'#111c2a', border:`1px solid ${showBtnPanel?'rgba(37,211,102,.4)':'#1e2d3d'}`, borderRadius:11, cursor:'pointer', fontSize:16, display:'flex', alignItems:'center', justifyContent:'center', color:showBtnPanel?'#25d366':'#475569', transition:'all .15s' }}>🔘</button>
@@ -3772,7 +3772,7 @@ export default function App() {
           }}>
             <div style={{ padding:'12px 14px', borderBottom:`1px solid ${'#1e2d3d'}` }}>
               <div style={{ fontSize:13, fontWeight:800, color:'#e2e8f0' }}>↪ Reenviar a otro chat</div>
-              <div style={{ fontSize:11, color:'#94a3b8', marginTop:3, wordBreak:'break-word' }}>{resumenDeReenvio(reenviando)}</div>
+              <div style={{ fontSize:12, color:'#94a3b8', marginTop:3, wordBreak:'break-word' }}>{resumenDeReenvio(reenviando)}</div>
             </div>
             <div style={{ padding:10, borderBottom:`1px solid ${'#1e2d3d'}` }}>
               <input autoFocus value={buscaReenvio} onChange={(e) => setBuscaReenvio(e.target.value)}
@@ -3795,7 +3795,7 @@ export default function App() {
                     cursor: d.puede && !reenviandoAhora ? 'pointer' : 'not-allowed', fontFamily:'inherit', fontSize:12, fontWeight:700,
                   }}>
                   <span>{d.nombre}</span>
-                  <span style={{ display:'block', fontSize:10, fontWeight:600, color:'#64748b', marginTop:2 }}>
+                  <span style={{ display:'block', fontSize:11, fontWeight:600, color:'#64748b', marginTop:2 }}>
                     {d.puede ? d.telefono : `${d.telefono} · ${d.motivo}`}
                   </span>
                 </button>

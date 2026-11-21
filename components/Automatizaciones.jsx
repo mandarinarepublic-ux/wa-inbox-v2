@@ -369,8 +369,8 @@ export default function Automatizaciones({ active }) {
                 }}>
                   <div>
                     <div style={{ fontWeight:700, fontSize:13 }}>{c.etiqueta}</div>
-                    <div style={{ fontSize:11, color:'#94a3b8' }}>{c.titulo}</div>
-                    <div style={{ fontSize:11, fontWeight:700, marginTop:2, color: on ? '#25d366' : '#ef4444' }}>
+                    <div style={{ fontSize:12, color:'#94a3b8' }}>{c.titulo}</div>
+                    <div style={{ fontSize:12, fontWeight:700, marginTop:2, color: on ? '#25d366' : '#ef4444' }}>
                       {on ? 'Respondiendo' : '⛔ DETENIDO — el bot no contesta en este número'}
                     </div>
                   </div>
@@ -386,7 +386,7 @@ export default function Automatizaciones({ active }) {
             }}>
               <div>
                 <div style={{ fontWeight:700, fontSize:13 }}>🆕 Chats nuevos con la IA prendida</div>
-                <div style={{ fontSize:11, color:'#94a3b8', marginTop:2 }}>
+                <div style={{ fontSize:12, color:'#94a3b8', marginTop:2 }}>
                   Quien escribe por primera vez queda con la IA prendida: la bienvenida contesta su
                   primer mensaje y MANDI sigue. Cuando tú contestas (inbox o celular), la IA de ese
                   chat se apaga sola. Los chats que ya existen no cambian.
@@ -430,7 +430,7 @@ export default function Automatizaciones({ active }) {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '8px 10px', borderRadius: 10, border: '1px solid #1e2d3d', marginBottom: 12 }}>
                 <div>
                   <div style={{ fontSize: 12, fontWeight: 700, color: '#e2e8f0' }}>📸 También comentarios de Instagram / Facebook</div>
-                  <div style={{ fontSize: 11, color: '#64748b' }}>Responde en PRIVADO (abre el chat). Nunca publica en el post. Los reclamos no se tocan.</div>
+                  <div style={{ fontSize: 12, color: '#64748b' }}>Responde en PRIVADO (abre el chat). Nunca publica en el post. Los reclamos no se tocan.</div>
                 </div>
                 <Switch on={!!rs.comentarios_activo} onClick={() => guardarInterruptor(
                   { respuesta_simple: { comentarios_activo: !rs.comentarios_activo } },
@@ -449,12 +449,12 @@ export default function Automatizaciones({ active }) {
                       {selectRapida(i)}
                       {i === 'tallas' && TALLAS_PRENDA.map(([clave, etq]) => (
                         <div key={clave} style={{ marginTop: 6 }}>
-                          <div style={{ fontSize: 11, color: '#94a3b8', margin: '4px 0' }}>{etq}</div>
+                          <div style={{ fontSize: 12, color: '#94a3b8', margin: '4px 0' }}>{etq}</div>
                           {selectRapida(clave)}
                         </div>
                       ))}
                       {!rs.respuestas?.[i] && (
-                        <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>Respaldo: {texto}</div>
+                        <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>Respaldo: {texto}</div>
                       )}
                     </>)}
                   </div>
@@ -542,23 +542,23 @@ export default function Automatizaciones({ active }) {
             {/* Horarios editables */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
               {[0, 1, 2].map(i => (
-                <label key={i} style={{ fontSize: 11, color: '#94a3b8' }}>
+                <label key={i} style={{ fontSize: 12, color: '#94a3b8' }}>
                   Toque {i + 1}: a las
                   <input type="number" min={1} max={23} value={(ra.horas || [3, 12, 20])[i] ?? ''} onChange={e => setHoraToque(i, e.target.value)} style={inputNum} />
                   h de su último mensaje
                 </label>
               ))}
-              <label style={{ fontSize: 11, color: '#94a3b8' }}>
+              <label style={{ fontSize: 12, color: '#94a3b8' }}>
                 Esperar al menos
                 <input type="number" min={1} max={12} value={ra.silencio_min_h ?? 3} onChange={e => setCampoReact('silencio_min_h', Number(e.target.value))} style={inputNum} />
                 h desde que escribió el vendedor
               </label>
-              <label style={{ fontSize: 11, color: '#94a3b8' }}>
+              <label style={{ fontSize: 12, color: '#94a3b8' }}>
                 Separar los toques
                 <input type="number" min={2} max={12} value={ra.entre_toques_h ?? 4} onChange={e => setCampoReact('entre_toques_h', Number(e.target.value))} style={inputNum} />
                 h como mínimo
               </label>
-              <label style={{ fontSize: 11, color: '#94a3b8' }}>
+              <label style={{ fontSize: 12, color: '#94a3b8' }}>
                 Solo entre las
                 <input type="number" min={6} max={12} value={ra.hora_desde ?? 8} onChange={e => setCampoReact('hora_desde', Number(e.target.value))} style={inputNum} />
                 y las
@@ -566,20 +566,20 @@ export default function Automatizaciones({ active }) {
                 h (Ecuador)
               </label>
             </div>
-            <div style={{ fontSize: 11, color: '#64748b', marginTop: 6 }}>Límites de seguridad: nunca antes de las 06:00 ni después de las 22:00, y nunca más de 3 toques por ventana. Deja un texto vacío para no mandar ese toque.</div>
+            <div style={{ fontSize: 12, color: '#64748b', marginTop: 6 }}>Límites de seguridad: nunca antes de las 06:00 ni después de las 22:00, y nunca más de 3 toques por ventana. Deja un texto vacío para no mandar ese toque.</div>
             {[['cotizando', '💬 Cotizando'], ['esperando_pago', '💳 Esperando pago']].map(([etapa, titulo]) => (
               <div key={etapa} style={{ marginTop: 12 }}>
                 <div style={{ fontSize: 12, fontWeight: 800, color: '#e2e8f0', marginBottom: 6 }}>{titulo}</div>
                 {(ra.horas || [3, 12, 20]).map((h, i) => (
                   <div key={i} style={{ marginBottom: 8 }}>
-                    <div style={{ fontSize: 11, color: '#64748b', marginBottom: 3 }}>Toque {i + 1} · a las {h} h</div>
+                    <div style={{ fontSize: 12, color: '#64748b', marginBottom: 3 }}>Toque {i + 1} · a las {h} h</div>
                     <textarea value={((ra.textos || {})[etapa] || [])[i] || ''} onChange={e => setTextoReact(etapa, i, e.target.value)}
                       rows={2} style={inputTxt} />
                   </div>
                 ))}
               </div>
             ))}
-            <div style={{ fontSize: 11, color: '#64748b', marginTop: 6 }}>Los horarios y textos se guardan con el botón Guardar de abajo.</div>
+            <div style={{ fontSize: 12, color: '#64748b', marginTop: 6 }}>Los horarios y textos se guardan con el botón Guardar de abajo.</div>
           </Card>
 
           {/* ── ANUNCIOS VISTOS (antes "Bienvenida por anuncio"; el editor de
@@ -610,7 +610,7 @@ export default function Automatizaciones({ active }) {
                   Interruptor general de los flujos publicados. Apagado, ningún flujo manda nada (no hace falta despublicarlos).
                 </div>
                 {!flujosOn && (
-                  <div style={{ fontSize: 11, fontWeight: 800, color: '#ef4444', marginTop: 3 }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: '#ef4444', marginTop: 3 }}>
                     ⛔ APAGADOS — ningún flujo publicado está mandando nada
                   </div>
                 )}
@@ -639,15 +639,15 @@ export default function Automatizaciones({ active }) {
                   {a.fijo
                     ? <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 13, fontWeight: 800, color: '#e2e8f0' }}>{a.etiqueta}</div>
-                        <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{a.titular}</div>
+                        <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{a.titular}</div>
                       </div>
                     : <div style={{ flex: 1, minWidth: 0 }}>
                         <AnuncioResumen a={a} />
                         <input defaultValue={a.etiqueta || ''} placeholder="Etiqueta propia (opcional, ej. DBZ chaquetas)" maxLength={120}
                           onBlur={e => e.target.value !== (a.etiqueta || '') && guardarEtiqueta(a.source_id, e.target.value)}
-                          style={{ ...selectStyle, width: '100%', fontSize: 11, color: '#e2e8f0', padding: '3px 6px', marginTop: 4 }} />
+                          style={{ ...selectStyle, width: '100%', fontSize: 12, color: '#e2e8f0', padding: '3px 6px', marginTop: 4 }} />
                       </div>}
-                  <div style={{ fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', flexShrink: 0, color: flujo ? '#25d366' : ORANGE }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap', flexShrink: 0, color: flujo ? '#25d366' : ORANGE }}>
                     {flujo ? `→ flujo: ${flujo.nombre}` : 'sin flujo'}
                   </div>
                 </div>
@@ -687,14 +687,14 @@ export default function Automatizaciones({ active }) {
           }}>
             🔌 Conectar o re-enganchar un número del celular
           </a>
-          <div style={{ fontSize: 11, color: '#64748b', marginTop: 8, lineHeight: 1.5 }}>
+          <div style={{ fontSize: 12, color: '#64748b', marginTop: 8, lineHeight: 1.5 }}>
             Abre el diálogo de Meta. Te manda un WhatsApp de <b>Facebook Business</b> al celular con un
             código: ahí tocas <b>Conectar a la Plataforma empresarial</b> y pegas el código.
             <b style={{ color: '#94a3b8' }}> Ten el teléfono a mano</b> antes de empezar.
           </div>
 
           <div style={{
-            fontSize: 11, color: '#64748b', letterSpacing: '.05em',
+            fontSize: 12, color: '#64748b', letterSpacing: '.05em',
             marginTop: 16, marginBottom: 6, textTransform: 'uppercase',
           }}>
             ¿Qué dice Meta de cada número? (solo lectura)
@@ -715,7 +715,7 @@ export default function Automatizaciones({ active }) {
               </a>
             ))}
           </div>
-          <div style={{ fontSize: 11, color: '#64748b', marginTop: 8, lineHeight: 1.5 }}>
+          <div style={{ fontSize: 12, color: '#64748b', marginTop: 8, lineHeight: 1.5 }}>
             Sano es <b style={{ color: '#25d366' }}>CLOUD_API · CONNECTED</b>. Si sale{' '}
             <b style={{ color: '#f97316' }}>ON_PREMISE</b>, <b style={{ color: '#f97316' }}>NOT_APPLICABLE</b>{' '}
             o el número ni aparece, el enganche está muerto y toca rehacerlo con el botón de arriba.

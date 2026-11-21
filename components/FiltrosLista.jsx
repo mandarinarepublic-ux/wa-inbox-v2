@@ -11,7 +11,9 @@ const P = { border: '#1a2d40', border2: '#1a2d40', cream: '#e2e8f0', creamDim: '
 function Chip({ activo, color, onClick, title, children, n }) {
   return (
     <button onClick={onClick} title={title} style={{
-      flex: 1, minWidth: 0, padding: '5px 2px', fontSize: 9, fontWeight: 700,
+      // A su ancho natural y bajando de línea (`Fila`): en columnas iguales la
+      // letra legible dejaba "Pendient…" y tapaba los contadores (20-nov-2026).
+      flex: '0 1 auto', minWidth: 0, padding: '5px 6px', fontSize: 11, fontWeight: 700,
       background: activo ? `${color}18` : 'transparent',
       border: `1px solid ${activo ? color + '55' : P.border}`,
       color: activo ? color : P.creamFaint,
@@ -19,12 +21,12 @@ function Chip({ activo, color, onClick, title, children, n }) {
       whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
     }}>
       {children}
-      {n > 0 && <span style={{ marginLeft: 3, background: activo ? color : P.border2, color: activo ? P.bg : P.creamDim, borderRadius: 10, padding: '0 4px', fontSize: 8, fontWeight: 800 }}>{n}</span>}
+      {n > 0 && <span style={{ marginLeft: 3, background: activo ? color : P.border2, color: activo ? P.bg : P.creamDim, borderRadius: 10, padding: '0 4px', fontSize: 11, fontWeight: 800 }}>{n}</span>}
     </button>
   )
 }
 
-const Fila = ({ children }) => <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>{children}</div>
+const Fila = ({ children }) => <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>{children}</div>
 
 const TONO_TEMP = { caliente: '#fb923c', tibio: '#fbbf24', frio: '#38bdf8', dormido: '#A09A90' }
 
@@ -44,7 +46,7 @@ export default function FiltrosLista({ filtro, conteos, onCambiar, etiquetas = [
         <Chip activo={filtro.bandeja === 'todas'} color="#38bdf8" n={n.bandeja.todas} onClick={() => onCambiar('bandeja', 'todas')} title="Pendientes y atendidos juntos (sin archivados)">📋 Todos</Chip>
       </Fila>
       <button className="filtros-toggle" onClick={() => setAbiertos(v => !v)} style={{
-        width: '100%', marginTop: 6, padding: '8px', fontSize: 11, fontWeight: 700,
+        width: '100%', marginTop: 6, padding: '8px', fontSize: 12, fontWeight: 700,
         background: activos ? 'rgba(251,191,36,.1)' : 'transparent',
         border: `1px solid ${activos ? 'rgba(251,191,36,.45)' : P.border}`,
         color: activos ? '#fbbf24' : P.creamDim, borderRadius: 7, cursor: 'pointer',
@@ -81,7 +83,7 @@ export default function FiltrosLista({ filtro, conteos, onCambiar, etiquetas = [
           const cuantos = n.etiqueta?.[e.id] || 0
           return (
             <button key={e.id} onClick={() => onCambiar('etiqueta', e.id)} title={`Solo los chats con «${e.nombre}»`} style={{
-              padding: '4px 7px', fontSize: 9, fontWeight: 700, maxWidth: 140,
+              padding: '4px 7px', fontSize: 11, fontWeight: 700, maxWidth: 140,
               background: activo ? `${e.color}22` : 'transparent',
               border: `1px solid ${activo ? e.color : e.color + '44'}`,
               color: activo ? e.color : P.creamDim,
@@ -94,7 +96,7 @@ export default function FiltrosLista({ filtro, conteos, onCambiar, etiquetas = [
         })}
         {onAdministrarEtiquetas && (
           <button onClick={onAdministrarEtiquetas} title="Crear o editar etiquetas" style={{
-            padding: '4px 7px', fontSize: 9, fontWeight: 700, background: 'transparent',
+            padding: '4px 7px', fontSize: 11, fontWeight: 700, background: 'transparent',
             border: `1px dashed ${P.border}`, color: P.creamFaint, borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit',
           }}>{etiquetas.length ? '⚙️' : '🔖 Etiquetas ⚙️'}</button>
         )}
