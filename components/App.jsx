@@ -2942,7 +2942,11 @@ export default function App() {
            arrastra la página (en Android disparaba "tirar para recargar" y se perdían
            borradores). Toques sin la demora del doble toque, y un destello suave en vez
            del azul de Android. */
-        body * { overscroll-behavior: contain; }
+        /* ☠️ Solo en el HILO del chat. Antes iba en body * y el scroll de la rueda se
+           trababa: tarjetas y burbujas (overflow:hidden) cuentan como zona de scroll y
+           no le pasaban el giro a la lista: había que poner el mouse "en un ladito"
+           (Rodrigo, 22-nov-2026). */
+        .msgs-scroll { overscroll-behavior-y: contain; }
         button, a, [role="button"], label { touch-action: manipulation; -webkit-tap-highlight-color: rgba(255,255,255,.08); }
         body { background:#080d14; font-family:'Outfit',sans-serif; overflow:hidden; }
         ::-webkit-scrollbar { width:4px; }
