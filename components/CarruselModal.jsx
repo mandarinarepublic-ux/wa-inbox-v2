@@ -82,6 +82,8 @@ export default function CarruselModal({ nombreCliente, onEnviar, onCerrar, venta
                 return (
                   <button key={p.retailerId} onClick={() => alternar(p)} title={p.nombre} style={{
                     position: 'relative', padding: 0, borderRadius: 10, overflow: 'hidden', cursor: 'pointer', textAlign: 'left',
+                    // ⚡ No se dibujan las tarjetas fuera de pantalla; «auto» recuerda el alto medido.
+                    contentVisibility: 'auto', containIntrinsicSize: 'auto 180px',
                     border: `2px solid ${on ? P.verde : P.borde}`, background: '#080d14', fontFamily: 'inherit',
                     opacity: !on && elegidos.length >= MAX_TARJETAS ? .4 : 1,
                   }}>
