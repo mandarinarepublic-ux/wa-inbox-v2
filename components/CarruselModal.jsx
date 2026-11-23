@@ -4,12 +4,14 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { fetchCatalogoCarrusel } from '@/lib/api-client'
 import { MIN_TARJETAS, MAX_TARJETAS, MAX_TEXTO } from '@/lib/carrusel'
+import { useCerrarConEsc } from '@/lib/cerrar-con-esc'
 
 const P = { bg: '#0d1520', borde: '#1e2d3d', texto: '#e2e8f0', tenue: '#94a3b8', muy: '#475569', verde: '#25d366' }
 
 // `modoElegir`: para guardar productos en una RESPUESTA RÁPIDA. Sin texto (el texto es
 // el de la respuesta) y `onEnviar(null, productos)` solo devuelve la selección.
 export default function CarruselModal({ nombreCliente, onEnviar, onCerrar, ventanaCerrada = false, modoElegir = false, inicial = [] }) {
+  useCerrarConEsc(onCerrar)   // ⎋ igual que tocar el fondo
   const [productos, setProductos] = useState(null)
   const [error, setError] = useState('')
   const [q, setQ] = useState('')

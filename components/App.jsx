@@ -49,6 +49,7 @@ import { fusionarHilo } from '@/lib/hilo-historico'
 import { ordenarBandeja } from '@/lib/orden-bandeja'
 import { decidirPegado, decidirAdjuntos, TOPE_FOTOS } from '@/lib/adjuntos'
 import { piezasDeReenvio, destinosParaReenviar, resumenDeReenvio } from '@/lib/reenvio'
+import { useCerrarConEsc } from '@/lib/cerrar-con-esc'
 
 // ☠️ FLUJOS SE CARGA APARTE Y SOLO AL ENTRAR. React Flow pesa ~150 kB gz: metido
 // en el bundle de siempre, lo pagaría CADA vendedor en CADA carga del inbox para
@@ -354,6 +355,8 @@ export default function App() {
   const [reenviando, setReenviando] = useState(null)
   const [buscaReenvio, setBuscaReenvio] = useState('')
   const [reenviandoAhora, setReenviandoAhora] = useState(false)
+  // ⎋ Esc cierra «Reenviar a otro chat», igual que tocar el fondo (lib/cerrar-con-esc.js).
+  useCerrarConEsc(() => setReenviando(null), !!reenviando)
   const [tplToast,     setTplToast]     = useState(null)
   const [imgFiles,     setImgFiles]     = useState([]) // array de { file, preview }
   const [imgUploading, setImgUploading] = useState(false)

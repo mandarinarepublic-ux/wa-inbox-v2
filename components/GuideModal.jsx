@@ -1,5 +1,7 @@
 'use client'
+import { useCerrarConEsc } from '@/lib/cerrar-con-esc'
 export default function GuideModal({ onClose }) {
+  useCerrarConEsc(onClose)   // ⎋ igual que tocar el fondo
   const sections = [
     {
       title: 'Escenario 1 — Recibir mensajes en Google Sheets',

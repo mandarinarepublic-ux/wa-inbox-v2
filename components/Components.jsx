@@ -12,6 +12,7 @@ import { leerCarrusel } from '@/lib/carrusel'
 import { urlDeDescarga, nombreDeDescarga } from '@/lib/descarga'
 import { restoProductoTocado } from '@/lib/producto-tocado'
 import TranscribirNota from '@/components/TranscribirNota'
+import { useCerrarConEsc } from '@/lib/cerrar-con-esc'
 
 // ── SPINNER ──────────────────────────────────────────────────────
 export function Spinner({ size = 24 }) {
@@ -398,11 +399,9 @@ export function QuickReplies({ onSelect }) {
  * puntería sobre el fondo o sobre una X sería fricción sin motivo.
  */
 function VisorFoto({ src, onCerrar }) {
-  useEffect(() => {
-    const alTeclear = (e) => { if (e.key === 'Escape') onCerrar() }
-    window.addEventListener('keydown', alTeclear)
-    return () => window.removeEventListener('keydown', alTeclear)
-  }, [onCerrar])
+  // ⎋ Por la pila común (lib/cerrar-con-esc.js): si la foto está encima de otra
+  // ventana, Esc cierra solo la foto.
+  useCerrarConEsc(onCerrar)
 
   return (
     <div

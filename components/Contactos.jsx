@@ -1,6 +1,7 @@
 'use client'
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { fetchDirectorio, fetchPlantillas, sendReply, sendTemplate } from '@/lib/api-client'
+import { useCerrarConEsc } from '@/lib/cerrar-con-esc'
 
 // ── Pestaña CONTACTOS ─────────────────────────────────────────────────────────
 // Directorio de todos los que te han escrito. Marca dentro/fuera de la ventana de
@@ -149,6 +150,7 @@ export default function Contactos({ active, onOpenChat }) {
 
 // ── Panel de acción por contacto (modal) ──────────────────────────────────────
 function PanelContacto({ contacto: c, onClose, onOpenChat, flash }) {
+  useCerrarConEsc(onClose)   // ⎋ igual que tocar el fondo
   const [texto,   setTexto]   = useState('')
   const [sending, setSending] = useState(false)
 
@@ -276,6 +278,7 @@ function PanelContacto({ contacto: c, onClose, onOpenChat, flash }) {
 
 // ── Modal de plantilla reutilizable (lo usa también el composer del CHAT) ──────
 export function PlantillaModal({ telefono, nombre, onClose, flash, onCarrusel }) {
+  useCerrarConEsc(onClose)   // ⎋ igual que tocar el fondo
   return (
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.6)', zIndex: 500 }} />

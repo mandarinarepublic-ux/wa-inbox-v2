@@ -1,8 +1,10 @@
 'use client'
 import { useState } from 'react'
 import { CFG } from '@/lib/config'
+import { useCerrarConEsc } from '@/lib/cerrar-con-esc'
 
 export default function SetupModal({ onClose }) {
+  useCerrarConEsc(onClose)   // ⎋ igual que tocar el fondo
   const [poll,  setPoll]  = useState(CFG.POLL_INTERVAL)
   const [saved, setSaved] = useState(false)
 
