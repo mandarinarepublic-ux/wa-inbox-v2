@@ -113,6 +113,22 @@ esperado, se revisa a mano. Después del deploy, mirar el resultado en pantalla.
   búsqueda. Probado en prod.
 - **Scroll arreglado** (`f4e4ca1`, 22-nov): probado en prod con la rueda real, sobre una fila de
   chats y sobre una tarjeta de respuesta rápida (bajan ~555 px).
+- **Tanda 3 en prod** (22-nov):
+  - **Errores con el siguiente paso** (`0d8fdf5`, `lib/error-con-paso.js`). Antes el aviso decía
+    «Error al enviar — intenta de nuevo» y el motivo de Meta se perdía. Ahora dice, por ejemplo,
+    «La ventana de 24 h está cerrada → manda una plantilla» y dura 9 s. `/api/saliente` solo
+    agrega `codigo` a su respuesta de ERROR: el envío no cambió. ☠️ Si el servidor no
+    contesta, el paso es «mira el chat antes de reenviar», NUNCA «vuelve a enviar», porque
+    pudo haber salido y le llegaría doble al cliente. Hay prueba que lo vigila. No se probó
+    en prod porque habría que forzar un envío fallido a un cliente real.
+  - **Esc cierra ventanas** (`3c713ff`, `lib/cerrar-con-esc.js`): reenviar, carrusel, etiquetas,
+    ficha de contacto, plantilla, guía, configuración y foto ampliada. Hay una pila común: con dos
+    ventanas abiertas, Esc cierra solo la de arriba. Probado en prod en los dos inbox.
+  - **Listas largas** (`d5876c9` + `80e8ecc`): `content-visibility: auto` en las filas de
+    Contactos y en las tarjetas del carrusel. Es solo CSS; se descartó virtualizar con
+    librería. ☠️ `contain-intrinsic-size` es el alto del CONTENIDO: con 61 px, cada fila
+    sin dibujar medía 84. Va 38 px. Medido en prod: las 400 filas miden 61.
+  - **«...» → «…»** (`f59461f`): solo el carácter, comprobado archivo por archivo.
 
 ## PENDIENTE
 - **IND: cargar `META_APP_SECRET`** (Rodrigo lo saca el 21-nov). Después: redesplegar, ver
@@ -122,14 +138,9 @@ esperado, se revisa a mano. Después del deploy, mirar el resultado en pantalla.
   - selector de etapa;
   - «‹ Chats».
 - **Probar con un cliente real:** Atendido → siguiente pendiente; el 🎉.
-- **web-design-guidelines, falta la tanda 3** (ofrecida, Rodrigo aún no la aprueba):
-  - **Tanda 3, higiene:**
-    - nombres y etiquetas;
-    - `prefers-reduced-motion` (no existe en el repo);
-    - «...» → «…»;
-    - errores con el siguiente paso;
-    - modales con Esc;
-    - listas largas virtualizadas (Contactos, carrusel).
+- **web-design-guidelines, tanda 3:** Rodrigo aprobó 1, 2, 3 y 6 (22-nov) y **descartó** «nombres
+  para lectores de pantalla» y `prefers-reduced-motion`: no volver a proponerlos. Lo hecho está
+  arriba, en «Tanda 3».
 - **Pauta de MANDARINA casi en $0 desde el 17-nov:** revisar si fue a propósito.
 
 ## CRM (MANDARINACRM) tocado en la sesión
