@@ -90,11 +90,29 @@ esperado, se revisa a mano. Después del deploy, mirar el resultado en pantalla.
   - El aviso «No se pudo enviar» queda pegado abajo de lo visible (sticky).
   - Social ya no baja solo cada 8 s.
   - «Enviar» de respuestas rápidas se ve deshabilitado con la ventana cerrada.
-  - `overscroll-behavior: contain` (en Android el «tirar para recargar» perdía borradores).
+  - `overscroll-behavior` (en Android el «tirar para recargar» perdía borradores).
+    ☠️ Iba en `body *` y **rompió la rueda del mouse**: sobre una fila o una tarjeta no bajaba,
+    había que poner el cursor en un costado. Desde `f4e4ca1` va SOLO en `.msgs-scroll` (el hilo).
+    No volver a ponerlo en un selector global.
   - `color-scheme: dark` y fondo desde el HTML (sin destello blanco).
   - Fecha «20 Nov».
   - Si estabas abajo, una foto que termina de cargar te vuelve a bajar.
 - **Fotos:** Rodrigo eligió no fijarles alto (opción 3).
+- **Tanda 2 en prod, rendimiento** (`5398a4c`, `1c23d78`). Medido por letra en una compu:
+  **121 ms → 18 ms** (IND: 11 ms).
+  - Filas de chats y burbujas con `memo(…, igualesParaMemo)` (final de `Components.jsx`).
+  - Las pestañas ocultas (Social, Contactos, Autos, Flujos, Guías) con `React.memo`.
+  - ☠️ Las funciones se comparan solo por presencia: por eso App les pasa envoltorios que
+    llaman por `ultimasRef.current` a la versión MÁS RECIENTE. Una fila que no se redibujó
+    nunca abre un chat con datos viejos. Una función nueva para filas o burbujas va por ahí.
+  - `RightPanel` NO se memorizó a propósito: sus envíos son asíncronos y podrían caer en
+    otro chat.
+  - El contador ⏱ de 24 h vive en `ContadorVentana`: ya no redibuja el panel cada segundo.
+- **Respuestas rápidas, buscador** (`281166e`, pedido de Rodrigo 22-nov): con texto en la caja
+  busca SIEMPRE en todos los grupos (se resalta «Todas»), y tocar cualquier grupo borra la
+  búsqueda. Probado en prod.
+- **Scroll arreglado** (`f4e4ca1`, 22-nov): probado en prod con la rueda real, sobre una fila de
+  chats y sobre una tarjeta de respuesta rápida (bajan ~555 px).
 
 ## PENDIENTE
 - **IND: cargar `META_APP_SECRET`** (Rodrigo lo saca el 21-nov). Después: redesplegar, ver
@@ -104,10 +122,7 @@ esperado, se revisa a mano. Después del deploy, mirar el resultado en pantalla.
   - selector de etapa;
   - «‹ Chats».
 - **Probar con un cliente real:** Atendido → siguiente pendiente; el 🎉.
-- **web-design-guidelines, tandas que faltan:**
-  - **Tanda 2, rendimiento en Android:**
-    - cada tecla redibuja toda la app (`App.jsx`, caja de texto controlada en la raíz);
-    - el contador de la ventana redibuja el panel derecho cada segundo, ×2 (`RightPanel.jsx`).
+- **web-design-guidelines, falta la tanda 3** (ofrecida, Rodrigo aún no la aprueba):
   - **Tanda 3, higiene:**
     - nombres y etiquetas;
     - `prefers-reduced-motion` (no existe en el repo);
