@@ -13,6 +13,7 @@ import { urlDeDescarga, nombreDeDescarga } from '@/lib/descarga'
 import { restoProductoTocado } from '@/lib/producto-tocado'
 import TranscribirNota from '@/components/TranscribirNota'
 import { useCerrarConEsc } from '@/lib/cerrar-con-esc'
+import { explicarError } from '@/lib/error-con-paso'
 
 // ── SPINNER ──────────────────────────────────────────────────────
 export function Spinner({ size = 24 }) {
@@ -1248,7 +1249,7 @@ export function Toast({ result }) {
     // debajo del último mensaje y, con el hilo subido, «No se pudo enviar» no se veía.
     <div role="status" aria-live="polite" style={{ display: 'flex', justifyContent: 'center', marginTop: 8, animation: 'up .2s ease', position: 'sticky', bottom: 8, zIndex: 5, pointerEvents: 'none' }}>
       <span style={{
-        fontSize: 12, padding: '5px 16px', borderRadius: 20,
+        fontSize: 12, padding: '5px 16px', borderRadius: 20, maxWidth: 'min(560px, 92%)', textAlign: 'center',
         background: result.ok ? '#0c2418' : '#2a0f12',   // sólido: va encima de los mensajes
         color: result.ok ? '#4ade80' : '#f87171',
         border: `1px solid ${result.ok ? 'rgba(34,197,94,.2)' : 'rgba(239,68,68,.2)'}`,
@@ -1259,7 +1260,7 @@ export function Toast({ result }) {
             ? result.demo
               ? '✓ Enviado (demo) — configura META_TOKEN para envío real'
               : '✓ Mensaje enviado por WhatsApp'
-            : '✗ Error al enviar — intenta de nuevo'}
+            : explicarError(result).texto}
       </span>
     </div>
   )

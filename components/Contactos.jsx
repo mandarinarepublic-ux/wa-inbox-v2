@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { fetchDirectorio, fetchPlantillas, sendReply, sendTemplate } from '@/lib/api-client'
 import { useCerrarConEsc } from '@/lib/cerrar-con-esc'
+import { explicarError } from '@/lib/error-con-paso'
 
 // ── Pestaña CONTACTOS ─────────────────────────────────────────────────────────
 // Directorio de todos los que te han escrito. Marca dentro/fuera de la ventana de
@@ -181,7 +182,7 @@ function PanelContacto({ contacto: c, onClose, onOpenChat, flash }) {
     const r = await sendReply(c.telefono, c.nombre || '', texto.trim(), '', canalSel)
     setSending(false)
     if (r?.ok) { flash('✅ Mensaje enviado'); onClose() }
-    else flash('❌ No se pudo enviar')
+    else flash(explicarError(r).texto)
   }
 
   return (
@@ -343,7 +344,7 @@ function SelectorPlantilla({ contacto: c, flash, onClose, onCarrusel }) {
     }, c.canal || '')
     setSending(false)
     if (r?.ok) { flash('✅ Plantilla enviada'); onClose() }
-    else flash('❌ ' + (r?.error || 'Meta rechazó el envío'))
+    else flash(explicarError(r, 'la plantilla').texto)
   }
 
   const inp = {

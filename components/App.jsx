@@ -50,6 +50,7 @@ import { ordenarBandeja } from '@/lib/orden-bandeja'
 import { decidirPegado, decidirAdjuntos, TOPE_FOTOS } from '@/lib/adjuntos'
 import { piezasDeReenvio, destinosParaReenviar, resumenDeReenvio } from '@/lib/reenvio'
 import { useCerrarConEsc } from '@/lib/cerrar-con-esc'
+import { explicarError } from '@/lib/error-con-paso'
 
 // ☠️ FLUJOS SE CARGA APARTE Y SOLO AL ENTRAR. React Flow pesa ~150 kB gz: metido
 // en el bundle de siempre, lo pagaría CADA vendedor en CADA carga del inbox para
@@ -2150,8 +2151,9 @@ export default function App() {
       // `result` null = la llamada ni respondió: también se avisa.
       setToast(result?.citaOmitida
         ? { ok: true, msg: '✓ Enviado, pero SIN la cita: WhatsApp ya no reconoce ese mensaje' }
-        : (result || { ok: false, error: 'No se pudo enviar' }))
-      setTimeout(() => setToast(null), 4000)
+        : (result || null) || { ok: false })
+      // Un error se queda más: ahora dice qué hacer y hay que alcanzar a leerlo.
+      setTimeout(() => setToast(null), result && result.ok !== false ? 4000 : 9000)
       setTimeout(load, 4000)
     })
   }
@@ -2171,7 +2173,7 @@ export default function App() {
       // Atendido SOLO si salió (ver handleSend).
       const r = await enviarTextoSuelto(telefono, nombre, t, canal).catch(() => null)
       if (r && r.ok !== false) changeStatus(telefono, estadoDestino, canal)
-      else { setToast(r || { ok: false, error: 'No se pudo enviar' }); setTimeout(() => setToast(null), 4000) }
+      else { setToast(r || { ok: false }); setTimeout(() => setToast(null), 9000) }
       setTimeout(load, 4000)
       // Lo usa el 📤 ENVIAR del link de pago para decir si salió.
       return r || { ok: false }
@@ -2215,8 +2217,8 @@ export default function App() {
     // WhatsApp), decirlo: antes moría en Meta y nadie se enteraba.
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
-      setToast({ ok: false, msg: `✗ ${data?.error || 'No se pudo enviar la foto'}` })
-      setTimeout(() => setToast(null), 6000)
+      setToast({ ok: false, msg: explicarError({ error: data?.error, codigo: data?.codigo }, 'la foto').texto })
+      setTimeout(() => setToast(null), 9000)
     }
     return res.ok
   }
@@ -2492,15 +2494,15 @@ export default function App() {
     for (const pieza of piezas) {
       const r = await reenviarPieza(destino.telefono, destino.nombre, pieza, destino.phoneId)
       if (r?.ok) salieron++
-      else if (!motivo) motivo = r?.error || 'Meta lo rechazó'
+      else if (!motivo) motivo = explicarError(r, 'el reenvío').texto.replace(/^✗ /, '')
     }
     setReenviandoAhora(false)
     setReenviando(null)
     setBuscaReenvio('')
     setToast(salieron === piezas.length
       ? { ok: true, msg: `↪ Reenviado a ${destino.nombre}` }
-      : { ok: false, msg: `No se pudo reenviar a ${destino.nombre}: ${motivo}` })
-    setTimeout(() => setToast(null), 3500)
+      : { ok: false, msg: `✗ A ${destino.nombre}: ${motivo}` })
+    setTimeout(() => setToast(null), salieron === piezas.length ? 3500 : 9000)
   }
 
   // ❤️ Reaccionar a un mensaje del cliente, como en WhatsApp (lib/reacciones.js).
@@ -2517,8 +2519,8 @@ export default function App() {
     const res = await sendReaction(conv.telefono, conv.nombre || '', msg.id, nuevo, canalDeEnvio())
     if (!res?.ok) {
       setReaccionLocal(r => ({ ...r, [msg.id]: antes }))
-      setToast({ ok: false, msg: `No se pudo reaccionar: ${res?.error || 'error al enviar'}` })
-      setTimeout(() => setToast(null), 4500)
+      setToast({ ok: false, msg: explicarError(res, 'la reacción').texto })
+      setTimeout(() => setToast(null), 9000)
     }
   }
 

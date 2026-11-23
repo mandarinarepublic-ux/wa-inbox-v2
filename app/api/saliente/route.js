@@ -490,7 +490,8 @@ export async function POST(req) {
       console.error('[/api/saliente] Meta rechazó el envío:', msg)
       // Un token vencido (190) se rechaza aquí mismo y nunca llega por el webhook.
       waitUntil(registrarBloqueo(data?.error?.code))
-      return NextResponse.json({ ok: false, error: msg }, { status: 502 })
+      // `codigo` viaja para que el inbox diga qué hacer (lib/error-con-paso.js).
+      return NextResponse.json({ ok: false, error: msg, codigo: data?.error?.code || null }, { status: 502 })
     }
 
     const wamid = data.messages[0].id

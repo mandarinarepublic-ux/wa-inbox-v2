@@ -5,6 +5,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { fetchCatalogoCarrusel } from '@/lib/api-client'
 import { MIN_TARJETAS, MAX_TARJETAS, MAX_TEXTO } from '@/lib/carrusel'
 import { useCerrarConEsc } from '@/lib/cerrar-con-esc'
+import { explicarError } from '@/lib/error-con-paso'
 
 const P = { bg: '#0d1520', borde: '#1e2d3d', texto: '#e2e8f0', tenue: '#94a3b8', muy: '#475569', verde: '#25d366' }
 
@@ -46,7 +47,7 @@ export default function CarruselModal({ nombreCliente, onEnviar, onCerrar, venta
     const r = await onEnviar(modoElegir ? null : texto.trim(), elegidos)
     setEnviando(false)
     if (r?.ok) onCerrar()
-    else setError(r?.error || 'No se pudo enviar')
+    else setError(explicarError(r, 'el carrusel').texto)
   }
 
   return (
