@@ -1036,7 +1036,7 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
             <div style={{ position:'sticky', top:0, zIndex:2, padding:'10px 12px 8px', marginBottom:6, background:'#07111d', borderBottom:'1px solid #111c2a' }}>
               <p style={{ fontSize:11, color:'#94a3b8', fontWeight:700, letterSpacing:'.08em', display:'flex', alignItems:'center', gap:5, margin:0 }}>
                 ⚡ RESPUESTAS RÁPIDAS
-                {!repliesLoaded && <span style={{ fontSize:11, color:'#94a3b8' }}>cargando...</span>}
+                {!repliesLoaded && <span style={{ fontSize:11, color:'#94a3b8' }}>cargando…</span>}
                 <span onClick={() => setRepliesLoaded(false)} title="Recargar" style={{ marginLeft:'auto', background:'transparent', border:'none', color:'#7c8ba1', fontSize:12, cursor:'pointer', padding:'0 2px', lineHeight:1 }}>🔄</span>
               </p>
               {/* 🔎 Buscador: filtra dentro del botón elegido; los conteos dicen dónde hay. */}
@@ -1084,7 +1084,7 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                 <div key={reply.id || idx}>
                   {editingId === reply.id ? (
                     <div style={{ background:'rgba(255,255,255,.03)', border:'1px solid #25d366', borderRadius:9, padding:'7px', marginBottom:2 }}>
-                      <textarea value={editText} onChange={e => setEditText(e.target.value)} rows={5} placeholder="Texto..."
+                      <textarea value={editText} onChange={e => setEditText(e.target.value)} rows={5} placeholder="Texto…"
                         style={{ width:'100%', background:'#111c2a', border:'1px solid #25d366', borderRadius:6, color:'#e2e8f0', fontSize:12, padding:'8px 10px', resize:'vertical', outline:'none', fontFamily:'inherit', marginBottom:5, whiteSpace:'pre-wrap', minHeight:100 }} />
                       <p style={{ fontSize:11, color:'#7c8ba1', marginBottom:3 }}>Adjuntos ({editImgUrls.length}/{MAX_IMGS}) — fotos y audios, en orden</p>
                       <MultiImgEditor urls={editImgUrls} onChange={setEditImgUrls} />
@@ -1175,7 +1175,7 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                 <p style={{ fontSize:11, color:'#ffffff', fontWeight:700, letterSpacing:'.06em', margin:0 }}>+ NUEVA RESPUESTA</p>
               </div>
               {nuevaOpen && <div style={{ padding:'0 7px 7px' }}>
-              <textarea value={newText} onChange={e => setNewText(e.target.value)} placeholder="Texto..." rows={2}
+              <textarea value={newText} onChange={e => setNewText(e.target.value)} placeholder="Texto…" rows={2}
                 style={{ width:'100%', background:'#111c2a', border:'1px solid #1e2d3d', borderRadius:6, color:'#ffffff', fontSize:12, padding:'5px 7px', resize:'none', outline:'none', fontFamily:'inherit', marginBottom:5, whiteSpace:'pre-wrap' }}
                 onFocus={e => e.target.style.borderColor='#25d366'} onBlur={e => e.target.style.borderColor='#1e2d3d'} />
               <p style={{ fontSize:11, color:'#7c8ba1', margin:'0 0 3px' }}>Adjuntos ({newImgUrls.length}/{MAX_IMGS}) — fotos y audios, en orden</p>
@@ -1440,7 +1440,7 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                     cursor: !montoLink || generandoLink ? 'default' : 'pointer',
                     opacity: !montoLink && !generandoLink ? .5 : 1,
                   }}>
-                  {generandoLink ? '⏳ Generando...' : 'Generar'}
+                  {generandoLink ? '⏳ Generando…' : 'Generar'}
                 </button>
               </div>
 

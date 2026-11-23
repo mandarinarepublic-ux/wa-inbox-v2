@@ -182,7 +182,7 @@ export default function Dashboard() {
 
         {err && <div style={{ background: '#2d0a0a', border: '1px solid #f8717140', color: C.red, borderRadius: 12, padding: 16, marginBottom: 20 }}>No se pudieron cargar los datos. <button onClick={load} style={{ color: C.red, background: 'none', border: 'none', textDecoration: 'underline', cursor: 'pointer' }}>Reintentar</button></div>}
         {avisoRango && <div style={{ color: C.amber, fontSize: 13, marginBottom: 16 }}>{avisoRango}</div>}
-        {!data && !err && !avisoRango && <div style={{ color: C.dim, padding: 40, textAlign: 'center' }}>Cargando métricas...</div>}
+        {!data && !err && !avisoRango && <div style={{ color: C.dim, padding: 40, textAlign: 'center' }}>Cargando métricas…</div>}
         {data?.ventasError && <div role="alert" style={{ background: '#2d1a05', border: '1px solid #f59e0b55', color: C.amber, borderRadius: 12, padding: 12, marginBottom: 16, fontSize: 13 }}>⚠️ No se pudieron leer los pedidos del CRM: las cifras de VENTAS de abajo no son reales. Las de chats sí. <button onClick={load} style={{ color: C.amber, background: 'none', border: 'none', textDecoration: 'underline', cursor: 'pointer', fontFamily: 'inherit' }}>Reintentar</button></div>}
 
         {D && (<>

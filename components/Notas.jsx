@@ -151,7 +151,7 @@ export default function Notas({ telefono, refrescar = 0, onVerPedido }) {
         onKeyDown={e => {
           if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); guardarNueva() }
         }}
-        placeholder="Ej: Falta que envíe la foto del pago..."
+        placeholder="Ej: Falta que envíe la foto del pago…"
         rows={3}
         style={sTextarea}
         onFocus={e => (e.target.style.borderColor = AMBAR)}
@@ -168,13 +168,13 @@ export default function Notas({ telefono, refrescar = 0, onVerPedido }) {
           cursor: !nueva.trim() || guardando ? 'default' : 'pointer',
           opacity: !nueva.trim() && !guardando ? .45 : 1,
         }}>
-        {guardando ? '⏳ Guardando...' : '＋ Agregar nota'}
+        {guardando ? '⏳ Guardando…' : '＋ Agregar nota'}
       </button>
 
       {error && <div style={{ fontSize: 11, color: '#f87171', marginTop: 5 }}>⚠️ {error}</div>}
 
       {cargando ? (
-        <div style={{ fontSize: 11, color: '#7c8ba1', marginTop: 8 }}>Cargando notas...</div>
+        <div style={{ fontSize: 11, color: '#7c8ba1', marginTop: 8 }}>Cargando notas…</div>
       ) : notas.length === 0 ? (
         <div style={{ fontSize: 11, color: '#7c8ba1', marginTop: 8 }}>Sin notas todavía.</div>
       ) : (

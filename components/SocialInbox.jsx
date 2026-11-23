@@ -148,7 +148,7 @@ function EmojiPicker({ onSelect, onClose }) {
       {/* Búsqueda */}
       <div style={{ padding:'8px 10px 6px', borderBottom:'1px solid #111c2a', display:'flex', gap:6, alignItems:'center' }}>
         <span style={{ fontSize:13, color:'#7c8ba1' }}>🔍</span>
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar emoji..."
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar emoji…"
           autoFocus
           style={{ flex:1, background:'transparent', border:'none', outline:'none', color:'#e2e8f0', fontSize:12, fontFamily:'Outfit,sans-serif' }} />
         <button onClick={onClose} style={{ background:'transparent', border:'none', color:'#7c8ba1', cursor:'pointer', fontSize:15, padding:0, lineHeight:1 }}>✕</button>
@@ -974,7 +974,7 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
               <div style={{ fontSize:13, fontWeight:800, color:'#e2e8f0' }}>Social Inbox</div>
               <div style={{ fontSize:11, color:'#25d366', display:'flex', alignItems:'center', gap:3 }}>
                 <span style={{ width:5, height:5, borderRadius:'50%', background:'#25d366', display:'inline-block' }} />
-                {loading ? 'Cargando...' : `${convs.length} conversaciones`}
+                {loading ? 'Cargando…' : `${convs.length} conversaciones`}
               </div>
             </div>
           </div>
@@ -1094,7 +1094,7 @@ export default function SocialInbox({ active: isVisible, onPendientes }) {
         {/* Lista */}
         <div style={{ flex:1, overflowY:'auto', minHeight:0 }}>
           {loading ? (
-            <div style={{ padding:28, textAlign:'center', color:'#7c8ba1', fontSize:12 }}>Cargando...</div>
+            <div style={{ padding:28, textAlign:'center', color:'#7c8ba1', fontSize:12 }}>Cargando…</div>
           ) : filtered.length === 0 ? (
             <div style={{ padding:28, textAlign:'center', color:'#7c8ba1', fontSize:12 }}>Sin conversaciones</div>
           ) : filtered.map(conv => (
