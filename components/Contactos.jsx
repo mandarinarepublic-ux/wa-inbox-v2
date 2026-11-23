@@ -104,9 +104,9 @@ export default function Contactos({ active, onOpenChat }) {
         {filtrados.map((c) => (
           <button key={c.telefono} onClick={() => setSel(c)} style={{
             width: '100%', display: 'flex', alignItems: 'center', gap: 11, padding: '11px 16px',
-            // ⚡ El navegador no dibuja las filas fuera de pantalla (hasta 400). 61 px = alto real
-            // de una fila (11+38+11+1 de borde); «auto» recuerda el alto ya medido.
-            contentVisibility: 'auto', containIntrinsicSize: 'auto 61px',
+            // ⚡ El navegador no dibuja las filas fuera de pantalla (hasta 400). 38 px = el alto del
+            // CONTENIDO (el avatar): el relleno y el borde se suman solos → 61 px por fila.
+            contentVisibility: 'auto', containIntrinsicSize: 'auto 38px',
             background: 'transparent', border: 'none', borderBottom: '1px solid #111c2a', cursor: 'pointer', textAlign: 'left',
           }}>
             <div style={{
