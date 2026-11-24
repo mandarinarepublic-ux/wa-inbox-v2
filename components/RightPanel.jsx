@@ -759,10 +759,17 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
   // SU envío cambia, y solo apaga el aviso si él lo había prendido — si no, el
   // panel que no está enviando lo borraría al montarse.
   const avisoHojaRef = useRef(false)
+  // El ✅ lo pone App al terminar el envío (y lo apaga cuando la foto ya se ve);
+  // acá solo se avisa el arranque, el ❌ (p. ej. el CRM no respondió y la hoja
+  // nunca llegó a App) y la cancelación por cambio de chat.
   useEffect(() => {
-    const enviando = hojaEnvio?.estado === 'enviando'
-    if (enviando) { avisoHojaRef.current = true; onEnviandoHoja?.({ tel: hojaEnvio.tel, id: hojaEnvio.id }) }
-    else if (avisoHojaRef.current) { avisoHojaRef.current = false; onEnviandoHoja?.(null) }
+    const estado = hojaEnvio?.estado
+    if (estado === 'enviando') { avisoHojaRef.current = true; onEnviandoHoja?.({ tel: hojaEnvio.tel, id: String(hojaEnvio.id), estado: 'enviando' }) }
+    else if (avisoHojaRef.current) {
+      avisoHojaRef.current = false
+      if (estado === 'error') onEnviandoHoja?.({ tel: hojaEnvio.tel, id: String(hojaEnvio.id), estado: 'error', msg: hojaEnvio.msg })
+      else if (estado !== 'ok') onEnviandoHoja?.(null)
+    }
   }, [hojaEnvio?.estado, hojaEnvio?.id])  // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cargar historial de pedidos al cambiar de contacto (una sola vez por teléfono).

@@ -382,9 +382,29 @@ export default function App() {
   // es el del asa del panel derecho.
   const [soltarAqui,   setSoltarAqui]   = useState(false)
   const [filtro,       setFiltro]       = useState(FILTRO_INICIAL)
-  // 📤 Enviar del historial en curso: { tel, id } o null. Lo avisa RightPanel y se
-  // pinta como burbuja verde titilando en el chat (la hoja tarda unos segundos).
+  // 📤 La hoja del pedido saliendo: { tel, id, estado:'enviando'|'ok'|'error', msg? }
+  // o null. Es el ÚNICO aviso de "se está enviando" en el chat, venga del 📤 del
+  // historial o del botón de adentro de VER PEDIDO (23-nov-2026: con dos burbujas
+  // titilando a la vez parecía que salían dos fotos). Y no se apaga hasta que la
+  // foto ya se ve en el hilo: un hueco entre "enviando" y la foto deja la
+  // impresión de que no salió.
   const [hojaEnviando, setHojaEnviando] = useState(null)
+  const hojaTimerRef = useRef(null)
+  useEffect(() => () => clearTimeout(hojaTimerRef.current), [])
+  /** Lo llaman el envío (`handleEnviarHojaPedido`) y RightPanel (`onEnviandoHoja`). */
+  const avisarHoja = (v) => {
+    clearTimeout(hojaTimerRef.current)
+    if (!v) {
+      // RightPanel apaga al cancelar (cambio de chat): solo si seguía "enviando".
+      // Un resultado ya pintado (✅ / ❌) se queda hasta su propio tiempo.
+      setHojaEnviando(h => (h?.estado === 'enviando' ? null : h))
+      return
+    }
+    setHojaEnviando(h => (v.estado === 'enviando' && h?.id === v.id && h?.tel === v.tel && h.estado !== 'enviando') ? h : v)
+    if (v.estado === 'error') {
+      hojaTimerRef.current = setTimeout(() => setHojaEnviando(h => (h?.id === v.id && h?.estado === 'error' ? null : h)), 12000)
+    }
+  }
   // Botón ⇅ de Pendientes: false = cola (el que más espera arriba, como siempre),
   // true = el que escribió último arriba. Se recuerda en ESTE navegador.
   const [pendNuevosArriba, setPendNuevosArriba] = useState(false)
@@ -2782,6 +2802,29 @@ export default function App() {
    * un fallo mudo deja al vendedor creyendo que el cliente ya tiene la hoja.
    */
   const handleEnviarHojaPedido = async (hoja) => {
+    // Teléfono y pedido se congelan ANTES del await: el vendedor puede cambiar de
+    // chat mientras la foto sube.
+    const tel = activeConv?.telefono || ''
+    const id = hoja?.pedidoId ? String(hoja.pedidoId) : ''
+    if (tel && id) avisarHoja({ tel, id, estado: 'enviando' })
+    const r = await enviarHojaPedidoAlChat(hoja)
+    // El aviso del chat (ver `avisarHoja`) muestra el resultado; el ✅ se queda
+    // hasta que la foto ya está pintada en el hilo.
+    if (tel && id) {
+      if (r?.ok) {
+        avisarHoja({ tel, id, estado: 'ok' })
+        hojaTimerRef.current = setTimeout(() => {
+          Promise.resolve(load()).catch(() => {}).finally(() =>
+            setHojaEnviando(h => (h?.id === id && h?.estado === 'ok' ? null : h)))
+        }, 3000)
+      } else {
+        avisarHoja({ tel, id, estado: 'error', msg: r?.error || 'No se pudo enviar la hoja' })
+      }
+    }
+    return r
+  }
+
+  const enviarHojaPedidoAlChat = async (hoja) => {
     if (!activeConv) return { ok: false, error: 'No hay un chat abierto' }
     if (canalSinResolver()) return { ok: false, error: 'no sé por cuál número mandarle esto — abre el chat desde MANDI o REPUBLIC' }
     if (!hoja?.imagen)  return { ok: false, error: 'No llegó la imagen de la hoja' }
@@ -2809,7 +2852,8 @@ export default function App() {
       const res = await subirYEnviarFoto(telefono, nombre, archivo, canal)
       if (res?.ok) {
         await changeStatus(telefono, estadoDestino, canal)
-        setTimeout(load, 4000)
+        // El `load` que pinta la foto lo hace `handleEnviarHojaPedido`, y recién
+        // ahí apaga el aviso.
         return { ok: true }
       }
       return { ok: false, error: res?.error || 'WhatsApp no aceptó la foto' }
@@ -2906,6 +2950,8 @@ export default function App() {
   const currentContact = activeConv ? contacts[activeConv.telefono] : null
   // Cuántos envíos hay saliendo o esperando turno en el chat abierto.
   const enFila = activeConv ? (colaLen[activeConv.telefono] || 0) : 0
+  // La hoja del pedido saliendo en ESTE chat (ver `avisarHoja`).
+  const hojaAqui = hojaEnviando && activeConv && hojaEnviando.tel === activeConv.telefono ? hojaEnviando : null
   const currentStatus  = currentContact?.estado || 'pendiente'
   // El estado de la FILA abierta (bandeja de ESE número), igual que en la lista.
   const currentStatusView = activeConv ? estadoFila(activeConv) : 'pendiente'
@@ -3564,7 +3610,10 @@ export default function App() {
                 )
               })
               })()}
-              {enFila > 0 && (
+              {/* UN solo aviso de envío en el chat. Mientras sale la hoja del
+                  pedido, el «Enviando…» genérico se esconde: con las dos burbujas
+                  titilando parecía que salían dos fotos (23-nov-2026). */}
+              {enFila > 0 && !hojaAqui && (
                 <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:4 }}>
                   <div style={{ background:'#0d4f3c', borderRadius:'18px 18px 4px 18px', padding:'9px 14px', border:'1px solid rgba(37,211,102,.1)' }}>
                     <span style={{ color:'#25d366', fontSize:12, animation:'blink 1s infinite' }}>
@@ -3573,14 +3622,18 @@ export default function App() {
                   </div>
                 </div>
               )}
-              {/* 📤 Enviar del historial: la hoja tarda unos segundos (el CRM la
-                  arma en un iframe escondido). Se avisa ACÁ, en el chat, que es
-                  donde se mira — no solo en la tarjeta del panel derecho. */}
-              {hojaEnviando && activeConv && hojaEnviando.tel === activeConv.telefono && (
-                <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:4 }}>
-                  <div style={{ background:'#0d4f3c', borderRadius:'18px 18px 4px 18px', padding:'9px 14px', border:'1px solid rgba(37,211,102,.35)' }}>
-                    <span style={{ color:'#25d366', fontSize:12, fontWeight:800, letterSpacing:'.04em', animation:'blink 1s infinite' }}>
-                      📤 ENVIANDO FOTO DEL PEDIDO {hojaEnviando.id}…
+              {/* La hoja del pedido: tarda unos segundos (el CRM la arma y después
+                  sube). Se avisa ACÁ, en el chat, que es donde se mira, y el ✅ se
+                  queda hasta que la foto ya aparece en el hilo. */}
+              {hojaAqui && (
+                <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:4 }} role="status" aria-live="polite">
+                  <div style={{ background: hojaAqui.estado === 'error' ? 'rgba(248,113,113,.12)' : '#0d4f3c', borderRadius:'18px 18px 4px 18px', padding:'9px 14px', border:`1px solid ${hojaAqui.estado === 'error' ? 'rgba(248,113,113,.45)' : 'rgba(37,211,102,.35)'}`, maxWidth:'85%' }}>
+                    <span style={{ color: hojaAqui.estado === 'error' ? '#f87171' : '#25d366', fontSize:12, fontWeight:800, letterSpacing:'.04em', animation: hojaAqui.estado === 'enviando' ? 'blink 1s infinite' : 'none' }}>
+                      {hojaAqui.estado === 'ok'
+                        ? `✅ FOTO DEL PEDIDO ${hojaAqui.id} ENVIADA`
+                        : hojaAqui.estado === 'error'
+                          ? `❌ NO se envió la foto del pedido ${hojaAqui.id}: ${hojaAqui.msg || 'error desconocido'}`
+                          : `📤 ENVIANDO FOTO DEL PEDIDO ${hojaAqui.id}…${enFila > 1 ? ` (+${enFila - 1} en fila)` : ''}`}
                     </span>
                   </div>
                 </div>
@@ -3852,7 +3905,7 @@ export default function App() {
                 onPedidoManual={alPedidoManualEscritorio}
                 onVerPedido={alVerPedidoEscritorio}
                 onEnviarHojaPedido={handleEnviarHojaPedido}
-                onEnviandoHoja={setHojaEnviando}
+                onEnviandoHoja={avisarHoja}
               />
             </div>
           </div>
@@ -3875,7 +3928,7 @@ export default function App() {
               onPedidoManual={alPedidoManualCajon}
               onVerPedido={alVerPedidoCajon}
               onEnviarHojaPedido={handleEnviarHojaPedido}
-              onEnviandoHoja={setHojaEnviando}
+              onEnviandoHoja={avisarHoja}
             />
           </div>
         )}
