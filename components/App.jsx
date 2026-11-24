@@ -351,6 +351,10 @@ export default function App() {
   // derecho (escritorio o cajón) abre el PEDIDO MANUAL con estos datos.
   // { telefono, datos: prefillPedido(...), n: marca de tiempo del clic }.
   const [prefillPedido, setPrefillPedido] = useState(null)
+  // 📌 Una foto del cliente elegida como PAGO o PRODUCTO en la burbuja:
+  // { telefono, destino, url, n }. RightPanel la mete en el PEDIDO MANUAL (lo
+  // abre con ella, o la suma al que ya está abierto).
+  const [fotoPedido, setFotoPedido] = useState(null)
   const [showTplModal, setShowTplModal] = useState(false) // plantilla desde el chat (fuera de 24h)
   // Reenviar: el mensaje elegido, el buscador de destino y el candado del envío.
   const [reenviando, setReenviando] = useState(null)
@@ -2967,6 +2971,10 @@ export default function App() {
       setPrefillPedido({ telefono: activeConv?.telefono, datos: prefillDeFormulario(datos), n: Date.now() })
       if (window.matchMedia?.('(max-width:767px)').matches) setShowRight(true)
     },
+    usarFotoEnPedido: (destino, url) => {
+      setFotoPedido({ telefono: activeConv?.telefono, destino, url, n: Date.now() })
+      if (window.matchMedia?.('(max-width:767px)').matches) setShowRight(true)
+    },
   }
 
   return (
@@ -3602,7 +3610,8 @@ export default function App() {
                       reaccionCliente={suyas.get(String(msg.id)) || ''}
                       onReaccionar={windowOpen && puedeReaccionar(msg) ? (emoji) => ultimasRef.current.reaccionar(msg, emoji) : null}
                       onIrACita={(id) => ultimasRef.current.irACita(id)}
-                      onCrearPedido={(datos) => ultimasRef.current.crearPedidoDesde(datos)} />
+                      onCrearPedido={(datos) => ultimasRef.current.crearPedidoDesde(datos)}
+                      onUsarFoto={(destino, url) => ultimasRef.current.usarFotoEnPedido(destino, url)} />
                   </div>
                 )
                     })}
@@ -3902,6 +3911,7 @@ export default function App() {
                 windowOpen={windowOpen}
                 ventanaPautaHasta={enPauta ? activeConv?.pautaVenceEn : null}
                 prefillPedido={prefillPedido}
+                fotoPedido={fotoPedido}
                 onPedidoManual={alPedidoManualEscritorio}
                 onVerPedido={alVerPedidoEscritorio}
                 onEnviarHojaPedido={handleEnviarHojaPedido}
@@ -3925,6 +3935,7 @@ export default function App() {
               windowOpen={windowOpen}
                 ventanaPautaHasta={enPauta ? activeConv?.pautaVenceEn : null}
                 prefillPedido={prefillPedido}
+                fotoPedido={fotoPedido}
               onPedidoManual={alPedidoManualCajon}
               onVerPedido={alVerPedidoCajon}
               onEnviarHojaPedido={handleEnviarHojaPedido}

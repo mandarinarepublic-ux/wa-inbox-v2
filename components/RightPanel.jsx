@@ -11,7 +11,7 @@ import CarruselModal from './CarruselModal'
 import PedidoManual from './PedidoManual'
 import VerPedido from './VerPedido'
 import EnviarHojaOculta from './EnviarHojaOculta'
-import { textoNotaPedido } from '@/lib/pedido-manual'
+import { textoNotaPedido, prefillDeFoto } from '@/lib/pedido-manual'
 import { parseDate } from '@/lib/utils'
 import { moverItem } from '@/lib/orden-lista'
 import { etiquetaTelefono } from '@/lib/cliente-sin-telefono'
@@ -467,7 +467,7 @@ function ContadorVentana({ activeConv }) {
   )
 }
 
-export default function RightPanel({ activeConv, onQuickReply, onSendText, onSendImage, onSendProducto, contactInfo, onUpdateContact, windowOpen, ventanaPautaHasta = null, prefillPedido = null, onPedidoManual, onVerPedido, onEnviarHojaPedido, onEnviandoHoja, pestanas = ['respuestas', 'ventas', 'tienda'] }) {
+export default function RightPanel({ activeConv, onQuickReply, onSendText, onSendImage, onSendProducto, contactInfo, onUpdateContact, windowOpen, ventanaPautaHasta = null, prefillPedido = null, fotoPedido = null, onPedidoManual, onVerPedido, onEnviarHojaPedido, onEnviandoHoja, pestanas = ['respuestas', 'ventas', 'tienda'] }) {
   const [tab, setTab]           = useState(pestanas[0] || 'respuestas')
   // El panel NO se desmonta al cambiar de conversación (SOCIAL reutiliza la misma
   // instancia entre chats): si `tab` quedó en una pestaña que la conversación nueva
@@ -734,6 +734,25 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
     setManualKey(p.n)
     setManualAbierto(true)
   }, [prefillPedido?.n])
+
+  // 📌 Una foto del cliente elegida como PAGO / PRODUCTO (lib/pedido-manual.js).
+  // Con el formulario abierto se SUMA por postMessage (no se pierde lo escrito);
+  // cerrado, se abre con la foto en la URL. Mismo tope de 8 s y mismo teléfono
+  // que el «Crear pedido» de arriba, por la misma razón (el cajón del celular
+  // se monta después del clic).
+  const [fotoManual, setFotoManual] = useState(null)
+  const manualAbiertoRef = useRef(false)
+  useEffect(() => { manualAbiertoRef.current = manualAbierto }, [manualAbierto])
+  useEffect(() => {
+    const f = fotoPedido
+    if (!f || f.telefono !== activeConv?.telefono || Date.now() - f.n > 8000) return
+    setVerPedidoId(null)
+    setTab('ventas')
+    if (manualAbiertoRef.current) { setFotoManual(f); return }
+    setPrefillManual(prefillDeFoto(f.destino, f.url))
+    setManualKey(f.n)
+    setManualAbierto(true)
+  }, [fotoPedido?.n])
 
   // Avisarle al padre cuando se abre o se cierra VER PEDIDO: con eso ensancha el
   // panel, que es lo ÚNICO que comparte con el formulario. NO toca el guard.
@@ -1239,6 +1258,7 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
                   telefono={activeConv.telefono}
                   nombre={contactName}
                   prefill={prefillManual}
+                  foto={fotoManual}
                   onCerrar={() => { setManualAbierto(false); setPrefillManual(null) }}
                   onCreado={(aviso) => {
                     // Deja la nota fechada con el link y marca la venta. El texto

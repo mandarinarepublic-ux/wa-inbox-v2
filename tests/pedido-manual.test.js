@@ -443,3 +443,31 @@ test('leerHojaFallida: solo del CRM y con la forma exacta', () => {
   assert.equal(leerHojaFallida({ ...ok, data: { tipo: 'hoja-pedido-error' } }), null)
   assert.equal(leerHojaFallida(null), null)
 })
+
+// ── 📌 Foto del chat como PAGO / PRODUCTO (23-nov-2026) ────────────────────
+import { esFotoParaPedido, mensajeFotoPedido, prefillDeFoto, urlPedidoManual as urlPM } from '../lib/pedido-manual.js'
+const FOTO_INBOX = 'https://piingkecjgoisnxccvaa.supabase.co/storage/v1/object/public/inbox-media/MANDI/abc.jpg'
+
+test('esFotoParaPedido: solo fotos públicas de nuestro bucket del inbox', () => {
+  assert.equal(esFotoParaPedido(FOTO_INBOX), true)
+  assert.equal(esFotoParaPedido(FOTO_INBOX.replace('https:', 'http:')), false)
+  assert.equal(esFotoParaPedido('https://lookaside.fbsbx.com/whatsapp_business/attachments/?mid=1'), false)
+  assert.equal(esFotoParaPedido('/api/media?id=123'), false)
+  assert.equal(esFotoParaPedido('https://piingkecjgoisnxccvaa.supabase.co.evil.com/storage/v1/object/public/inbox-media/x.jpg'), false)
+  assert.equal(esFotoParaPedido(''), false)
+})
+
+test('mensajeFotoPedido y prefillDeFoto: solo pago o producto con una foto válida', () => {
+  assert.deepEqual(mensajeFotoPedido('pago', FOTO_INBOX), { tipo: 'foto-pedido', destino: 'pago', url: FOTO_INBOX })
+  assert.equal(mensajeFotoPedido('cliente', FOTO_INBOX), null)
+  assert.equal(mensajeFotoPedido('pago', 'https://evil.com/x.jpg'), null)
+  assert.deepEqual(prefillDeFoto('pago', FOTO_INBOX), { fotoPago: FOTO_INBOX })
+  assert.deepEqual(prefillDeFoto('producto', FOTO_INBOX), { fotoFrente: FOTO_INBOX })
+  assert.deepEqual(prefillDeFoto('producto', 'https://evil.com/x.jpg'), {})
+})
+
+test('urlPedidoManual lleva la foto a la URL solo si es válida', () => {
+  const u = new URL(urlPM('593999989663', 'Ana', { fotoPago: FOTO_INBOX, fotoFrente: 'https://evil.com/x.jpg' }))
+  assert.equal(u.searchParams.get('fotoPago'), FOTO_INBOX)
+  assert.equal(u.searchParams.get('fotoFrente'), null)
+})

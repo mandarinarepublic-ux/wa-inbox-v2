@@ -1,6 +1,6 @@
 'use client'
 import React, { useEffect, useRef } from 'react'
-import { urlPedidoManual, leerAvisoPedido } from '@/lib/pedido-manual'
+import { urlPedidoManual, leerAvisoPedido, mensajeFotoPedido, ORIGEN_CRM } from '@/lib/pedido-manual'
 import MarcoCRM from './MarcoCRM'
 
 // El formulario de pedidos del CRM, dentro del panel derecho.
@@ -13,7 +13,7 @@ import MarcoCRM from './MarcoCRM'
 // ⚠️ La URL se congela al montar. Eso pasa dentro de `MarcoCRM` y depende de que
 // `RightPanel` desmonte esto al cambiar de teléfono: está explicado ahí con ☠️,
 // léelo antes de tocar cualquiera de los dos.
-export default function PedidoManual({ telefono, nombre, prefill = null, onCreado, onCerrar }) {
+export default function PedidoManual({ telefono, nombre, prefill = null, foto = null, onCreado, onCerrar }) {
   // `onCreado` cambia en cada render del padre; sin la ref, el efecto se
   // volvería a suscribir todo el tiempo y podríamos perder el aviso.
   const alCrear = useRef(onCreado)
@@ -36,6 +36,18 @@ export default function PedidoManual({ telefono, nombre, prefill = null, onCread
     window.addEventListener('message', alMensaje)
     return () => window.removeEventListener('message', alMensaje)
   }, [])
+
+  // 📌 Foto del chat con el formulario YA abierto: se le pasa al CRM para que la
+  // SUME (lib/fotoDesdeInbox.js del CRM). Solo al origen exacto del CRM, nunca
+  // '*'. La foto con la que se montó NO se reenvía: esa ya fue en la URL o es de
+  // un formulario anterior.
+  const fotoVistaRef = useRef(foto?.n)
+  useEffect(() => {
+    if (!foto || foto.n === fotoVistaRef.current) return
+    fotoVistaRef.current = foto.n
+    const m = mensajeFotoPedido(foto.destino, foto.url)
+    if (m) iframeRef.current?.contentWindow?.postMessage(m, ORIGEN_CRM)
+  }, [foto?.n])  // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <MarcoCRM

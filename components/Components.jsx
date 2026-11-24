@@ -14,6 +14,7 @@ import { restoProductoTocado } from '@/lib/producto-tocado'
 import TranscribirNota from '@/components/TranscribirNota'
 import { useCerrarConEsc } from '@/lib/cerrar-con-esc'
 import { explicarError } from '@/lib/error-con-paso'
+import { esFotoParaPedido } from '@/lib/pedido-manual'
 
 // ── SPINNER ──────────────────────────────────────────────────────
 export function Spinner({ size = 24 }) {
@@ -999,9 +1000,10 @@ export function AvisoInterno({ msg }) {
   )
 }
 
-function MessageBubbleBase({ msg, allMsgs, onResponder, onAbrirChat, onReenviar, reaccion = '', reaccionCliente = '', onReaccionar = null, onIrACita = null, onCrearPedido = null }) {
+function MessageBubbleBase({ msg, allMsgs, onResponder, onAbrirChat, onReenviar, reaccion = '', reaccionCliente = '', onReaccionar = null, onIrACita = null, onCrearPedido = null, onUsarFoto = null }) {
   const [accion, setAccion] = useState(false)
   const [hover, setHover] = useState(false)
+  const [usarFoto, setUsarFoto] = useState(false)
   // Después de los hooks: un return antes rompería el orden de los useState.
   if (msg.direccion === 'INTERNO') return <AvisoInterno msg={msg} />
   const isMe     = msg.direccion === 'SALIENTE'
@@ -1062,6 +1064,34 @@ function MessageBubbleBase({ msg, allMsgs, onResponder, onAbrirChat, onReenviar,
         color: '#fff', borderRadius: 14, padding: '4px 10px', fontSize: 12, fontWeight: 800,
         cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
       }}>🧾 Crear pedido</button>
+  ) : null
+
+  // 📌 Usar esta foto del cliente en el PEDIDO MANUAL: 💳 PAGO (comprobante del
+  // abono) o 👕 PRODUCTO (el pecho de un personalizado). Solo fotos que el CRM
+  // puede abrir tal cual (lib/pedido-manual.js → esFotoParaPedido). Visible
+  // siempre, no tenue: la idea es que cargar la foto cueste UN toque.
+  const esFoto = ['image', 'imagen'].includes(String(msg.tipo || '').toLowerCase())
+  const fotoParaPedido = !isMe && onUsarFoto && esFoto && esFotoParaPedido(msg.mediaUrl)
+  const estiloUsar = {
+    alignSelf: 'center', flexShrink: 0, margin: '0 2px',
+    border: '1px solid rgba(245,158,11,.45)', background: 'rgba(245,158,11,.12)', color: '#fbbf24',
+    borderRadius: 14, padding: '4px 9px', fontSize: 12, fontWeight: 800,
+    cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', minHeight: 30,
+  }
+  const elegirUso = (destino) => (e) => { e.stopPropagation(); setUsarFoto(false); onUsarFoto(destino, msg.mediaUrl) }
+  const botonUsarFoto = fotoParaPedido ? (
+    usarFoto ? (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, alignSelf: 'center', flexWrap: 'wrap' }} role="group" aria-label="Usar esta foto en el pedido como">
+        <button type="button" onClick={elegirUso('pago')} title="Cargar como comprobante del pago (abono)" style={estiloUsar}>💳 PAGO</button>
+        <button type="button" onClick={elegirUso('producto')} title="Cargar como foto del FRENTE (pecho) de un producto" style={estiloUsar}>👕 PRODUCTO</button>
+        <button type="button" onClick={(e) => { e.stopPropagation(); setUsarFoto(false) }} aria-label="Cancelar"
+          style={{ ...estiloUsar, border: 'none', background: 'transparent', color: '#94a3b8', padding: '4px 6px' }}>✕</button>
+      </span>
+    ) : (
+      <button type="button" onClick={(e) => { e.stopPropagation(); setUsarFoto(true) }}
+        title="Usar esta foto en el pedido (pago o producto)" aria-label="Usar esta foto en el pedido"
+        style={estiloUsar}>📌 Usar</button>
+    )
   ) : null
 
   return (
@@ -1234,6 +1264,7 @@ function MessageBubbleBase({ msg, allMsgs, onResponder, onAbrirChat, onReenviar,
       </div>
       {!isMe && botonReaccionar}
       {!isMe && botonCrearPedido}
+      {!isMe && botonUsarFoto}
       {!isMe && botonReenviar}
     </div>
   )
