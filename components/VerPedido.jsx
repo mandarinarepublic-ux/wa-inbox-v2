@@ -75,9 +75,13 @@ export default function VerPedido({ pedidoId, onCerrar, onEnviarHoja }) {
         // ⚠️ Sin `r` no se canta victoria. Un fallo mudo es peor que un error:
         // el vendedor sigue la conversación creyendo que el cliente ya tiene la
         // hoja en el celular.
+        // ⏱️ `incierto` = no se confirmó a tiempo (App, TOPE_ENVIO_HOJA_MS): NO es
+        // "no se envió", puede haber salido. Decir lo contrario haría reenviarla.
         setEnvio(r?.ok
           ? { estado: 'ok' }
-          : { estado: 'error', msg: r?.error || 'No se pudo enviar la hoja' })
+          : r?.incierto
+            ? { estado: 'duda', msg: r?.error || '' }
+            : { estado: 'error', msg: r?.error || 'No se pudo enviar la hoja' })
       } catch (err) {
         if (vivoRef.current) setEnvio({ estado: 'error', msg: err?.message || 'No se pudo enviar la hoja' })
       } finally {
@@ -100,6 +104,8 @@ export default function VerPedido({ pedidoId, onCerrar, onEnviarHoja }) {
           <span style={{ color: '#f59e0b', fontWeight: 700 }}>⏳ Enviando la hoja al cliente…</span>
         ) : envio?.estado === 'ok' ? (
           <span style={{ color: '#25d366', fontWeight: 700 }}>✅ Hoja enviada al chat.</span>
+        ) : envio?.estado === 'duda' ? (
+          <span style={{ color: '#fbbf24', fontWeight: 700 }}>⚠️ La foto {envio.msg}.</span>
         ) : envio?.estado === 'error' ? (
           <span style={{ color: '#f87171', fontWeight: 700 }}>❌ NO se envió: {envio.msg}. El cliente no la recibió.</span>
         ) : (

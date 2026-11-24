@@ -380,6 +380,9 @@ function PedidoCard({ p, onVer, onEnviar, envio, puedeEnviar }) {
       {envio?.estado === 'error' && (
         <div style={{ fontSize:11, color:'#f87171', fontWeight:700, marginTop:4 }}>❌ NO se envió: {envio.msg}. El cliente no la recibió.</div>
       )}
+      {envio?.estado === 'duda' && (
+        <div style={{ fontSize:11, color:'#fbbf24', fontWeight:700, marginTop:4 }}>⚠️ La foto {envio.msg}.</div>
+      )}
     </div>
   )
 }
@@ -787,7 +790,8 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
     else if (avisoHojaRef.current) {
       avisoHojaRef.current = false
       if (estado === 'error') onEnviandoHoja?.({ tel: hojaEnvio.tel, id: String(hojaEnvio.id), estado: 'error', msg: hojaEnvio.msg })
-      else if (estado !== 'ok') onEnviandoHoja?.(null)
+      // 'duda' (no se confirmó a tiempo) ya la pintó App, igual que el ✅.
+      else if (estado !== 'ok' && estado !== 'duda') onEnviandoHoja?.(null)
     }
   }, [hojaEnvio?.estado, hojaEnvio?.id])  // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -986,7 +990,7 @@ export default function RightPanel({ activeConv, onQuickReply, onSendText, onSen
             ? onEnviarHojaPedido(hoja)
             : { ok: false, error: 'cambiaste de chat antes de que saliera; no se envió' })}
           onListo={(r) => setHojaEnvio(h => (h && h.id === hojaEnvio.id
-            ? { ...h, estado: r?.ok ? 'ok' : 'error', msg: r?.error || '' } : h))} />
+            ? { ...h, estado: r?.ok ? 'ok' : r?.incierto ? 'duda' : 'error', msg: r?.error || '' } : h))} />
       )}
 
       {/* ── HEADER FIJO: INFO CONTACTO + VENTANA ── */}

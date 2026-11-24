@@ -43,7 +43,7 @@ export default function EnviarHojaOculta({ pedidoId, onEnviarHoja, onListo }) {
       terminadoRef.current = true   // candado ANTES del await: un segundo aviso no manda otra foto
       try {
         const r = await alEnviar.current?.(hoja)
-        alListo.current?.(r?.ok ? { ok: true } : { ok: false, error: r?.error || 'No se pudo enviar la hoja' })
+        alListo.current?.(r?.ok ? { ok: true } : { ok: false, incierto: !!r?.incierto, error: r?.error || 'No se pudo enviar la hoja' })
       } catch (err) {
         alListo.current?.({ ok: false, error: err?.message || 'No se pudo enviar la hoja' })
       }

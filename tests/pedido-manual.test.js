@@ -296,7 +296,8 @@ test('el peso del data URL sale sin decodificarlo', () => {
   assert.strictEqual(bytesDeDataUrl(''), 0)
   assert.strictEqual(bytesDeDataUrl(null), 0)
   assert.strictEqual(bytesDeDataUrl('sin coma'), 0)
-  assert.strictEqual(MAX_HOJA_BYTES, 5 * 1024 * 1024)
+  // 4 MB y no 5: Vercel corta el cuerpo en ~4,5 MB antes que Meta.
+  assert.strictEqual(MAX_HOJA_BYTES, 4 * 1024 * 1024)
 })
 
 // ── ¿Preguntar antes de cambiar de chat? ─────────────────────────────────────
