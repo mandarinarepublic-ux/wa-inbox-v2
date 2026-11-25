@@ -912,6 +912,81 @@ function PedidoCard({ pedido }) {
   )
 }
 
+// ── TARJETA DE CONTACTO COMPARTIDO ───────────────────────────────
+//
+// El cliente compartió uno o varios contactos. Antes se veía solo
+// "👤 Compartió un contacto (Jimena Ruiz)", sin el número. Ahora: nombre, TODOS
+// los teléfonos y correos, y por teléfono «💬 Abrir chat» (lo abre en este
+// inbox, o ofrece la plantilla si es un número nuevo) y «📋 Copiar». El arreglo
+// lo arma parseContactos (lib/wa-mensaje.js) y viaja en msg.contactos.
+// Sin `onAbrir` (la burbuja reusada en otro lado) no hay botón muerto: solo Copiar.
+function ContactosCard({ contactos, onAbrir }) {
+  const [copiado, setCopiado] = useState('')
+  const copiar = async (e, numero) => {
+    e.stopPropagation()
+    try {
+      await navigator.clipboard.writeText(numero)
+    } catch {
+      // Navegador sin permiso de portapapeles (http, iframe): plan B a la antigua.
+      const ta = document.createElement('textarea')
+      ta.value = numero; document.body.appendChild(ta); ta.select()
+      try { document.execCommand('copy') } catch { /* nada más que hacer */ }
+      ta.remove()
+    }
+    setCopiado(numero)
+    setTimeout(() => setCopiado(c => (c === numero ? '' : c)), 1800)
+  }
+  const btn = {
+    padding: '4px 10px', borderRadius: 14, fontSize: 12, fontWeight: 700,
+    background: 'rgba(37,211,102,.12)', border: '1px solid rgba(37,211,102,.45)', color: '#25d366',
+    cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 200 }}>
+      {contactos.map((c, i) => (
+        <div key={i} style={{
+          background: 'rgba(37,211,102,.07)', border: '1px solid rgba(37,211,102,.35)',
+          borderRadius: 12, padding: '9px 11px',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+            <span style={{ fontSize: 18, lineHeight: 1.2 }}>👤</span>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#e2e8f0', wordBreak: 'break-word', lineHeight: 1.35 }}>
+                {c.nombre || 'Contacto compartido'}
+              </div>
+              {c.telefonos.map((t, j) => (
+                <div key={j} style={{ marginTop: 6, paddingTop: j ? 6 : 0, borderTop: j ? '1px solid rgba(255,255,255,.08)' : 'none' }}>
+                  <div style={{ fontSize: 13, color: '#e2e8f0', fontVariantNumeric: 'tabular-nums', wordBreak: 'break-word' }}>
+                    📞 {t.numero || `+${t.waId}`}
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 5 }}>
+                    {onAbrir && t.chat && (
+                      <button style={btn} title="Abrir el chat con este número en el inbox"
+                        onClick={(e) => { e.stopPropagation(); onAbrir(t.chat, c.nombre) }}>💬 Abrir chat</button>
+                    )}
+                    <button style={btn} title="Copiar el número"
+                      onClick={(e) => copiar(e, t.numero || t.chat)}>
+                      {copiado === (t.numero || t.chat) ? '✅ Copiado' : '📋 Copiar'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {c.correos.map((m, j) => (
+                <div key={`m${j}`} style={{ fontSize: 12, color: '#94a3b8', marginTop: 6, wordBreak: 'break-all' }}>
+                  ✉️ <a href={`mailto:${m}`} onClick={e => e.stopPropagation()} style={{ color: '#94a3b8' }}>{m}</a>
+                </div>
+              ))}
+              {!c.telefonos.length && !c.correos.length && (
+                <div style={{ fontSize: 12, color: '#7c8ba1', marginTop: 2 }}>Sin número en este mensaje</div>
+              )}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ── TARJETA DE UBICACIÓN ──────────────────────────────────
 //
 // WhatsApp guarda la ubicación como texto ("📍 lat,lon nombre") y el chat mostraba
@@ -1000,7 +1075,7 @@ export function AvisoInterno({ msg }) {
   )
 }
 
-function MessageBubbleBase({ msg, allMsgs, onResponder, onAbrirChat, onReenviar, reaccion = '', reaccionCliente = '', onReaccionar = null, onIrACita = null, onCrearPedido = null, onUsarFoto = null }) {
+function MessageBubbleBase({ msg, allMsgs, onResponder, onAbrirChat, onReenviar, reaccion = '', reaccionCliente = '', onReaccionar = null, onIrACita = null, onCrearPedido = null, onUsarFoto = null, onAbrirContacto = null }) {
   const [accion, setAccion] = useState(false)
   const [hover, setHover] = useState(false)
   const [usarFoto, setUsarFoto] = useState(false)
@@ -1156,6 +1231,8 @@ function MessageBubbleBase({ msg, allMsgs, onResponder, onAbrirChat, onReenviar,
           <PedidoCard pedido={msg.pedido} />
         ) : msg.ubicacion ? (
           <UbicacionCard u={msg.ubicacion} />
+        ) : msg.contactos ? (
+          <ContactosCard contactos={msg.contactos} onAbrir={onAbrirContacto} />
         ) : hasText && (
           <p style={{
             margin: 0, fontSize: 14, color: '#e2e8f0',

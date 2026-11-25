@@ -356,6 +356,7 @@ export default function App() {
   // abre con ella, o la suma al que ya está abierto).
   const [fotoPedido, setFotoPedido] = useState(null)
   const [showTplModal, setShowTplModal] = useState(false) // plantilla desde el chat (fuera de 24h)
+  const [plantillaContacto, setPlantillaContacto] = useState(null) // {telefono, nombre}: contacto compartido sin chat
   // Reenviar: el mensaje elegido, el buscador de destino y el candado del envío.
   const [reenviando, setReenviando] = useState(null)
   const [buscaReenvio, setBuscaReenvio] = useState('')
@@ -1479,6 +1480,27 @@ export default function App() {
     // si ahí se acepta, el chat se abriría con la pestaña sin haberse movido.
     if (!cambiarLinea(canalDestino)) return
     openConv(destino)
+  }
+
+  // 👤 «Abrir chat» en un CONTACTO que compartió el cliente (ContactosCard).
+  // Reusa los caminos de siempre, no inventa otro:
+  //   1. el chat está en la lista de esta pestaña → openConv con SU número
+  //      (sin mover la pestaña, igual que un clic en la lista);
+  //   2. tenemos ficha de esa persona (otro número) → abrirChatDesdeContactos,
+  //      que lleva a su pestaña con el canal correcto;
+  //   3. número nuevo → no hay chat que abrir, y a un número que nunca escribió
+  //      solo se le puede mandar PLANTILLA: se abre el mismo modal de plantillas.
+  //      Sale por el número del chat abierto (CANAL_ACTIVO), que es por donde
+  //      nos compartieron el contacto.
+  const abrirContactoCompartido = (telefono, nombre = '') => {
+    const t9 = String(telefono).replace(/\D/g, '').slice(-9)
+    if (t9.length < 7) return
+    const mismo = (t) => String(t).replace(/\D/g, '').slice(-9) === t9
+    const conv = convs.find(c => mismo(c.telefono))
+    if (conv) { openConv(conv.telefono, conv.phoneId || ''); return }
+    const ficha = Object.keys(contacts).find(mismo)
+    if (ficha) { abrirChatDesdeContactos(ficha); return }
+    setPlantillaContacto({ telefono: String(telefono).replace(/\D/g, ''), nombre })
   }
 
   // ── Abrir un chat puntual desde un aviso push ────────────────────────────────
@@ -2981,7 +3003,7 @@ export default function App() {
   const displayName    = (tel) => contacts[tel]?.alias || convs.find(c=>c.telefono===tel)?.nombre || tel
 
   ultimasRef.current = {
-    openConv, responderA, irACita, reaccionar, setReenviando, abrirChatDesdeContactos,
+    openConv, responderA, irACita, reaccionar, setReenviando, abrirChatDesdeContactos, abrirContactoCompartido,
     crearPedidoDesde: (datos) => {
       setPrefillPedido({ telefono: activeConv?.telefono, datos: prefillDeFormulario(datos), n: Date.now() })
       if (window.matchMedia?.('(max-width:767px)').matches) setShowRight(true)
@@ -3626,7 +3648,8 @@ export default function App() {
                       onReaccionar={windowOpen && puedeReaccionar(msg) ? (emoji) => ultimasRef.current.reaccionar(msg, emoji) : null}
                       onIrACita={(id) => ultimasRef.current.irACita(id)}
                       onCrearPedido={(datos) => ultimasRef.current.crearPedidoDesde(datos)}
-                      onUsarFoto={(destino, url) => ultimasRef.current.usarFotoEnPedido(destino, url)} />
+                      onUsarFoto={(destino, url) => ultimasRef.current.usarFotoEnPedido(destino, url)}
+                      onAbrirContacto={(tel, nombre) => ultimasRef.current.abrirContactoCompartido(tel, nombre)} />
                   </div>
                 )
                     })}
@@ -4047,6 +4070,15 @@ export default function App() {
           onClose={() => setShowTplModal(false)}
           flash={(m) => { setTplToast(m); setTimeout(() => setTplToast(null), 3000) }}
           onCarrusel={() => setShowCarrusel(true)}
+        />
+      )}
+      {/* 👤 Contacto compartido con un número que todavía no tiene chat: plantilla */}
+      {plantillaContacto && (
+        <PlantillaModal
+          telefono={plantillaContacto.telefono}
+          nombre={plantillaContacto.nombre}
+          onClose={() => setPlantillaContacto(null)}
+          flash={(m) => { setTplToast(m); setTimeout(() => setTplToast(null), 3000) }}
         />
       )}
       {tplToast && (
