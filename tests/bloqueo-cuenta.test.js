@@ -133,3 +133,20 @@ test('token: un error de Meta no se confunde con token por vencer', () => conTok
   assert.equal(r.ok, false)
   assert.equal(avisos.length, 0)
 }))
+
+// 26-nov-2026: el aviso de 131042 trae el enlace de pago de la WABA, escapado para HTML.
+test('el aviso de pago pendiente trae el enlace a la facturación de WhatsApp', async () => {
+  const { registrarBloqueo, enlacePagoMeta } = await import('../lib/bloqueo-cuenta.js')
+  assert.match(enlacePagoMeta(131042, 'IND'), /asset_id=1043571971409840/)
+  assert.match(enlacePagoMeta(131042, 'MANDI'), /asset_id=1250794910496982/)
+  assert.equal(enlacePagoMeta(190, 'IND'), '')
+  let texto = ''
+  await registrarBloqueo(131042, {
+    db: { crearSiNoExiste: async () => true },
+    panel: async () => {},
+    avisar: async (t) => { texto = t; return { ok: true } },
+    ahora: () => new Date('2026-11-26T21:19:30Z'),
+  })
+  assert.match(texto, /<a href="https:\/\/business\.facebook\.com\/billing_hub/)
+  assert.doesNotMatch(texto, /&(?!amp;)/, 'un & suelto hace que Telegram rechace el aviso')
+})
