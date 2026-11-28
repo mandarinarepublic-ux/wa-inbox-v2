@@ -376,3 +376,27 @@ test('piezasDeNodos: sin pausas, ninguna pieza lleva el campo interno', () => {
   assert.ok(piezas.every(p => !('_esperaSeg' in p)))
   assert.equal(piezas[0].ContextoId, 'w1')
 })
+
+test('elegirFlujo: tarjeta de OTRO producto del catálogo no dispara el flujo del anuncio (28-nov)', () => {
+  const sk = { flujo_id: 'sk', nombre: 'FLUJO- SKELETOR', publicado: true, grafo_vivo: { ...lineal, nodos: [D({ tipo: 'anuncio', sourceIds: ['777'] }), ...lineal.nodos.slice(1)] } }
+  const f = [sk]
+  // genérico o el mismo producto → corre como siempre
+  assert.equal(elegirFlujo({ flujos: f, sourceId: '777', esNuevo: true, texto: '', textoCliente: '¡Hola! Quiero más información.' })?.flujo_id, 'sk')
+  assert.equal(elegirFlujo({ flujos: f, sourceId: '777', esNuevo: true, texto: '', textoCliente: 'Me interesa Hoodie Gym Bro Skeletor Sin Mangas Morado. (XL)' })?.flujo_id, 'sk')
+  assert.equal(elegirFlujo({ flujos: f, sourceId: '777', esNuevo: true, texto: '' })?.flujo_id, 'sk')
+  // otro producto del catálogo → nada (queda para una persona)
+  assert.equal(elegirFlujo({ flujos: f, sourceId: '777', esNuevo: true, texto: '', textoCliente: 'Me interesa Hoodie Spider-Man Marvel. (L)' }), null)
+  assert.equal(elegirFlujo({ flujos: f, sourceId: '777', esNuevo: true, texto: '', textoCliente: 'Me interesa Hoodie X-Men Cíclope Azul y Amarillo. (M)' }), null)
+  // escrito a mano (sin punto) no es tarjeta → corre
+  assert.equal(elegirFlujo({ flujos: f, sourceId: '777', esNuevo: true, texto: '', textoCliente: 'Me interesa la chompa del anuncio' })?.flujo_id, 'sk')
+})
+
+test('clavesDeProducto / productoTocadoCalza: nombres con espacios, números y productos a mano', async () => {
+  const { clavesDeProducto, productoTocadoCalza } = await import('../lib/flujo.js')
+  assert.deepEqual(clavesDeProducto({ nombre: 'FLUJO- DRAGON BALL' }), ['dragonball'])
+  assert.deepEqual(clavesDeProducto({ nombre: 'PRUEBA - DRAGON BALL (palabra PRUEBADBZ)' }), ['dragonball'])
+  assert.equal(productoTocadoCalza(clavesDeProducto({ nombre: 'FLUJO- BEN10' }), 'Me interesa Hoodie Ben 10 Omnitrix. (M)'), true)
+  assert.equal(productoTocadoCalza(clavesDeProducto({ nombre: 'DRAGON BALL' }), 'Me interesa Chaqueta Dragon Ball Z Roja Ecuador | Envío Gratis 🐉. (Azul, 2XL)'), true)
+  assert.equal(productoTocadoCalza(clavesDeProducto({ nombre: 'DRAGON BALL' }), 'Me interesa Hoodie Tortugas Ninja - Casey Jones.'), false)
+  assert.equal(productoTocadoCalza(clavesDeProducto({ nombre: 'X', productos: ['Cíclope', 'Skeletor'] }), 'Me interesa Hoodie X-Men Cíclope Azul y Amarillo. (M)'), true)
+})

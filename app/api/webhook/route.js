@@ -4,7 +4,7 @@ import { waitUntil } from '@vercel/functions'
 import { registrarContactoEntrante, getContactos, updateEstado, updateModoIA, marcarPush, marcarReceta, registrarAnuncioVisto, reclamarAvisoAnuncio, liberarAvisoAnuncio, updateEtapa, updateDeuda } from '@/lib/contactos'
 import { identificadorEntrante, perfilesDeContactos } from '@/lib/cliente-sin-telefono'
 import { decidirReceta, piezasDeReceta, textoAvisoAnuncioNuevo, esc } from '@/lib/recetas'
-import { elegirFlujo, caminoLineal, decidirEntranteEnFlujo, elegirFlujoPorBoton, tituloBotonTocado, nodoDisparador } from '@/lib/flujo'
+import { elegirFlujo, caminoLineal, decidirEntranteEnFlujo, elegirFlujoPorBoton, tituloBotonTocado, nodoDisparador, clavesDeProducto, productoTocadoCalza } from '@/lib/flujo'
 import { correrTanda } from '@/lib/flujo-motor'
 import { mandarEscribiendo } from '@/lib/escribiendo'
 import { getEstadoFlujo, guardarEstadoFlujo, borrarEstadoFlujo, registrarPasos } from '@/lib/flujos'
@@ -394,6 +394,9 @@ async function procesar(nuevos, origin) {
       botActivo: modoIAde(m.telefono, m.phoneId),
     })
     if (!receta) return false
+    // Mismo cuidado que los flujos: quien tocó OTRO producto del catálogo del
+    // anuncio no recibe la receta de este (ver productoTocadoCalza en lib/flujo.js).
+    if (!productoTocadoCalza(clavesDeProducto({ nombre: receta.nombre }), m.raw?.type === 'text' ? m.contenido : '')) return false
     const piezas = piezasDeReceta({
       receta, respuestas: await respuestasRapidas(),
       contacto: { telefono: m.telefono, nombre: m.nombre, alias: contacto?.alias || '', phoneId: m.phoneId },
@@ -588,7 +591,10 @@ async function procesar(nuevos, origin) {
     // siguen funcionando igual para fotos, audios, ubicaciones y botones tocados.
     // Lo único que se silencia es la palabra clave.
     const textoPalabra = (m.raw?.type === 'text' && !humanoAtendiendo(m.telefono)) ? m.contenido : ''
-    const flujo = elegirFlujo({ flujos, sourceId, esNuevo, texto: textoPalabra })
+    // La tarjeta "Me interesa <producto>." se mira SIEMPRE (aunque haya humano): no
+    // dispara nada, solo impide que un flujo de anuncio mande OTRO producto.
+    const textoCliente = m.raw?.type === 'text' ? m.contenido : ''
+    const flujo = elegirFlujo({ flujos, sourceId, esNuevo, texto: textoPalabra, textoCliente })
     if (!flujo) return false
     if (modoIAde(m.telefono, m.phoneId)) return false
     const t = tail9(m.telefono)
