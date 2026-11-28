@@ -164,7 +164,24 @@ function FilaChips({ chips, delante = null }) {
     </div>
   )
 }
-function ContactRowBase({ conv, isActive, onClick, search = '', estado, modoIA, iaPrendida = false, chips = [], msgSnippet = null, colorCanal = '', etiquetaCanal = '' }) {
+// 🎯 Cajita de probabilidad de compra (lib/puntaje.js). Gris 0–9, amarillo 10–49,
+// verde 50–99, ⭐ 100 % dorado = ya compró. El "por qué" va en el tooltip.
+function CajitaPuntaje({ puntaje }) {
+  if (!puntaje) return null
+  const { color, texto, titulo, estrella } = puntaje
+  return (
+    <span title={titulo} aria-label={titulo} style={{
+      fontSize: 11, fontWeight: 800, whiteSpace: 'nowrap', flexShrink: 0,
+      fontVariantNumeric: 'tabular-nums',
+      color: estrella ? '#1a1300' : color,
+      background: estrella ? color : `${color}1f`,
+      border: `1px solid ${color}${estrella ? '' : '66'}`,
+      borderRadius: 6, padding: '1px 6px', lineHeight: '16px',
+    }}>{texto}</span>
+  )
+}
+
+function ContactRowBase({ conv, isActive, onClick, search = '', estado, modoIA, iaPrendida = false, chips = [], msgSnippet = null, colorCanal = '', etiquetaCanal = '', puntaje = null }) {
   const [hovered, setHovered] = useState(false)
   // 🤖 Pendiente con la IA PRENDIDA → toda la fila en ámbar (el color de la pastilla
   // IA), para ver de un vistazo qué chats está contestando la IA (pedido de Rodrigo,
@@ -213,8 +230,11 @@ function ContactRowBase({ conv, isActive, onClick, search = '', estado, modoIA, 
             <span style={{ fontWeight: 700, fontSize: 14, color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
               {highlight(conv.nombre, search)}
             </span>
-            <span style={{ fontSize: 12, color: '#94a3b8', whiteSpace: 'nowrap', flexShrink: 0 }}>
-              {fmtTime(conv.last?.timestamp)}
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+              <CajitaPuntaje puntaje={puntaje} />
+              <span style={{ fontSize: 12, color: '#94a3b8', whiteSpace: 'nowrap' }}>
+                {fmtTime(conv.last?.timestamp)}
+              </span>
             </span>
           </div>
           <FilaChips chips={chips} delante={<>
@@ -1402,6 +1422,7 @@ function igualesParaMemo(a, b) {
     if (x === y) continue
     if (k === 'conv' && mismoContenido(x, y)) continue          // App arma {...conv, nombre} en cada render
     if (k === 'chips' && JSON.stringify(x) === JSON.stringify(y)) continue
+    if (k === 'puntaje' && JSON.stringify(x) === JSON.stringify(y)) continue   // objeto nuevo en cada render
     return false
   }
   return true

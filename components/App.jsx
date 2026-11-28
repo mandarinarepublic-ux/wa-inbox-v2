@@ -47,6 +47,7 @@ import { claveRespuesta, decidirRespuestaRapida, haceTexto } from '@/lib/respues
 import { pestanaGuardada } from '@/lib/pestana'
 import { fusionarHilo } from '@/lib/hilo-historico'
 import { ordenarBandeja } from '@/lib/orden-bandeja'
+import { puntajeChat, valorOrden } from '@/lib/puntaje'
 import { decidirPegado, decidirAdjuntos, TOPE_FOTOS } from '@/lib/adjuntos'
 import { piezasDeReenvio, destinosParaReenviar, resumenDeReenvio } from '@/lib/reenvio'
 import { useCerrarConEsc } from '@/lib/cerrar-con-esc'
@@ -410,16 +411,26 @@ export default function App() {
       hojaTimerRef.current = setTimeout(() => setHojaEnviando(h => (h?.id === v.id && h?.estado === v.estado ? null : h)), v.estado === 'duda' ? 20000 : 12000)
     }
   }
-  // Botón ⇅ de Pendientes: false = cola (el que más espera arriba, como siempre),
-  // true = el que escribió último arriba. Se recuerda en ESTE navegador.
-  const [pendNuevosArriba, setPendNuevosArriba] = useState(false)
+  // Botón ⇅ de Pendientes, tres posiciones que se recorren con cada clic:
+  //   'antiguos' = cola (el que más espera arriba, como siempre)
+  //   'nuevos'   = el que escribió último arriba
+  //   'puntaje'  = 🎯 probabilidad de compra (lib/puntaje.js): ⭐ y verdes arriba
+  // Se recuerda en ESTE navegador. La clave vieja (`mandi_pend_nuevos_arriba`)
+  // se sigue leyendo para no cambiarle el orden a nadie al desplegar.
+  const [ordenPend, setOrdenPend] = useState('antiguos')
   useEffect(() => {
-    try { setPendNuevosArriba(localStorage.getItem('mandi_pend_nuevos_arriba') === '1') } catch { /* modo privado */ }
+    try {
+      const v = localStorage.getItem('mandi_pend_orden')
+      if (v === 'antiguos' || v === 'nuevos' || v === 'puntaje') setOrdenPend(v)
+      else if (localStorage.getItem('mandi_pend_nuevos_arriba') === '1') setOrdenPend('nuevos')
+    } catch { /* modo privado */ }
   }, [])
-  const alternarOrdenPend = () => setPendNuevosArriba(v => {
-    try { localStorage.setItem('mandi_pend_nuevos_arriba', v ? '0' : '1') } catch { /* modo privado */ }
-    return !v
+  const alternarOrdenPend = () => setOrdenPend(v => {
+    const sig = v === 'antiguos' ? 'nuevos' : v === 'nuevos' ? 'puntaje' : 'antiguos'
+    try { localStorage.setItem('mandi_pend_orden', sig) } catch { /* modo privado */ }
+    return sig
   })
+  const pendNuevosArriba = ordenPend === 'nuevos'
   const [searchMode,   setSearchMode]   = useState('contacto') // 'contacto' | 'mensaje' | 'pedido'
   // Búsqueda por ID de pedido (lib/buscar-pedido.js): { [t9]: { pedido_id, estado_pedido, cliente } }
   const [pedidoHits,   setPedidoHits]   = useState(null)
@@ -1798,6 +1809,9 @@ export default function App() {
       etiquetas: etiquetasChat[tel] || [],
     }
   }
+  // 🎯 Probabilidad de compra de la fila (lib/puntaje.js). El ⭐ sale del pedido
+  // que ya está en `pedidosChat`, así que un pedido recién creado se ve al instante.
+  const puntajeDeConv = (conv) => puntajeChat(contacts[conv.telefono], pedidosChat[tail9(conv.telefono)] || null, ahora)
 
   // Ventana de 24h: ms transcurridos desde el último mensaje del cliente.
   //
@@ -1896,11 +1910,14 @@ export default function App() {
     const lista = isSearching ? searched : vistas.filter(v => pasaFiltro(v, filtro)).map(v => v._conv)
     return {
       filtered: ordenarBandeja(lista, isSearching ? '' : (filtro.bandeja === 'pendiente' ? 'pendiente' : ''),
-        (tel) => contacts[tel]?.ultimoEntranteAt || null, { nuevosArriba: pendNuevosArriba }),
+        (tel) => contacts[tel]?.ultimoEntranteAt || null, {
+          nuevosArriba: pendNuevosArriba,
+          puntajeDe: ordenPend === 'puntaje' ? (c) => valorOrden(puntajeDeConv(c)) : null,
+        }),
       counts: conteos(vistas, filtro),
       totalPendientes: vistas.filter(v => v.estado === 'pendiente').length,
     }
-  }, [convs, search, searchMode, msgHits, pedidoHits, contacts, pedidosChat, ahora, filtro, pendNuevosArriba, etiquetasChat])
+  }, [convs, search, searchMode, msgHits, pedidoHits, contacts, pedidosChat, ahora, filtro, ordenPend, etiquetasChat])
   /* eslint-enable react-hooks/exhaustive-deps */
 
   // ⌨️ J / K: siguiente / anterior chat de la lista, sin el mouse (paso 7 de la
@@ -3326,7 +3343,7 @@ export default function App() {
                   background:'transparent', border:'1px solid #1a2d40', color:'#94a3b8',
                   borderRadius:7, cursor:'pointer', fontFamily:'inherit',
                 }}>
-                ⇅ {pendNuevosArriba ? 'Más nuevos arriba' : 'Más antiguos arriba'}
+                ⇅ {ordenPend === 'puntaje' ? '🎯 Más probables de comprar arriba' : pendNuevosArriba ? 'Más nuevos arriba' : 'Más antiguos arriba'}
               </button>
             )}
           </div>
@@ -3380,6 +3397,7 @@ export default function App() {
                   modoIA={getModoIA(conv.telefono)}
                   iaPrendida={iaPrendidaDe(conv.telefono)}
                   chips={[...chipsDeChat(datosGestion(conv), ahora), ...chipsEtiquetas(conv.telefono)]}
+                  puntaje={puntajeDeConv(conv)}
                   msgSnippet={searchingMsgs ? matchSnippet(conv) : searchingPedido ? snippetPedido(conv) : null}
                   // El color y la etiqueta salen del canal DE LA FILA, que ahora
                   // es un hecho y no una deducción: la lista viene de
